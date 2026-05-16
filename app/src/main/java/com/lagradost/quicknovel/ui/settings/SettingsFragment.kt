@@ -255,6 +255,30 @@ class SettingsFragment : PreferenceFragmentCompat() {
             return@setOnPreferenceClickListener true
         }
 
+        getPref(R.string.download_delay_key)?.setOnPreferenceClickListener {
+            val prefNames = resources.getStringArray(R.array.download_delay_names)
+            val prefValues = resources.getStringArray(R.array.download_delay_values)
+
+            val current =
+                settingsManager.getString(getString(R.string.download_delay_key), prefValues.first())
+
+            activity?.showBottomDialog(
+                prefNames.toList(),
+                prefValues.indexOf(current),
+                getString(R.string.download_delay),
+                true,
+                {}) {
+                try {
+                    settingsManager.edit {
+                        putString(getString(R.string.download_delay_key), prefValues[it])
+                    }
+                } catch (e: Exception) {
+                    logError(e)
+                }
+            }
+            return@setOnPreferenceClickListener true
+        }
+
         getPref(R.string.backup_key)?.setOnPreferenceClickListener {
             activity?.backup()
             return@setOnPreferenceClickListener true

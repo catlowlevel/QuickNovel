@@ -246,6 +246,9 @@
     <string name="more_info">More Info</string>
     <string name="download_path_key">download_path_key</string>
     <string name="download_path_pref">Download path</string>
+    <string name="download_delay_key" translatable="false">download_delay_key</string>
+    <string name="download_delay">Download delay</string>
+    <string name="download_delay_summary">Delay between each chapter download in milliseconds</string>
     <string name="bionic_reading">Bionic Reading</string>
     <string name="selectable_text">Selectable text</string>
     <string name="sleep_timer">Sleep</string>

@@ -663,14 +663,23 @@ object BookDownloader2Helper {
                 if (!page.isNullOrBlank()) {
                     rFile.createNewFile() // only create the file when actually needed
                     rFile.writeText("${data.name}\n${page}")
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
+                    
+                    val delayTime = context?.let { ctx ->
+                        PreferenceManager.getDefaultSharedPreferences(ctx).getString(ctx.getString(R.string.download_delay_key), "0")?.toLongOrNull()
+                    } ?: 0L
+                    val totalDelay = maxOf(api.rateLimitTime, delayTime)
+                    if (totalDelay > 0) {
+                        delay(totalDelay)
                     }
                     return@withContext true
                 } else {
                     delay(5000) // ERROR
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
+                    val delayTime = context?.let { ctx ->
+                        PreferenceManager.getDefaultSharedPreferences(ctx).getString(ctx.getString(R.string.download_delay_key), "0")?.toLongOrNull()
+                    } ?: 0L
+                    val totalDelay = maxOf(api.rateLimitTime, delayTime)
+                    if (totalDelay > 0) {
+                        delay(totalDelay)
                     }
                 }
             }

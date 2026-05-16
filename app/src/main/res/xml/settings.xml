@@ -39,6 +39,11 @@
                 android:icon="@drawable/ic_baseline_language_24"
                 android:key="@string/locale_key"
                 android:title="@string/locale_settings" />
+        <Preference
+                android:icon="@drawable/ic_baseline_history_24"
+                android:key="@string/download_delay_key"
+                android:title="@string/download_delay"
+                android:summary="@string/download_delay_summary" />
     </PreferenceCategory>
 
 
