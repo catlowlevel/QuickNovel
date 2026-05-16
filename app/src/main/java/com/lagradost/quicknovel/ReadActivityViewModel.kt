@@ -631,8 +631,10 @@ class ReadActivityViewModel : ViewModel() {
             }
     }
 
+    var visibleIndices: List<Int> = emptyList()
     fun onScroll(visibility: ScrollVisibilityIndex?) {
         if (visibility == null) return
+        visibleIndices = visibility.visibleIndices
         // dynamically increase padding in case of very small chapters with a maximum of 10 chapters
         val first = visibility.firstInMemory.index
         val last = visibility.lastInMemory.index
@@ -1344,7 +1346,11 @@ class ReadActivityViewModel : ViewModel() {
             _currentTTSStatus = value
         }
 
-    fun stopTTS() {
+    fun stopTTS(reset: Boolean = false) {
+        if (reset) {
+            removeKey(EPUB_TTS_SENTENCE_INDEX, book.title())
+            removeKey(EPUB_TTS_CHAPTER_INDEX, book.title())
+        }
         currentTTSStatus = TTSHelper.TTSStatus.IsStopped
     }
 
@@ -1421,8 +1427,17 @@ class ReadActivityViewModel : ViewModel() {
                 var ttsInnerIndex = 0 // this inner index is different from what is set
                 var index = dIndex.index
 
+                val savedChapter = getKey<Int>(EPUB_TTS_CHAPTER_INDEX, book.title())
+                val savedSentence = getKey<Int>(EPUB_TTS_SENTENCE_INDEX, book.title())
+
+                // If the saved chapter is currently visible on screen, we prefer to resume it
+                // instead of starting from the top-most visible chapter.
+                if (savedChapter != null && visibleIndices.contains(savedChapter)) {
+                    index = savedChapter
+                }
+
                 let {
-                    val startChar = dIndex.char
+                    val startChar = if (index == dIndex.index) dIndex.char else 0
 
                     val lines = chapterMutex.withLock {
                         chapterData[index].letInner {
@@ -1435,11 +1450,20 @@ class ReadActivityViewModel : ViewModel() {
                     }
 
                     val idx = lines.indexOfFirst { it.startChar >= startChar }
-                    if (idx != -1) {
-                        ttsInnerIndex = idx
+
+                    if (savedChapter == index && savedSentence != null && savedSentence < lines.size && idx != -1) {
+                        ttsInnerIndex = savedSentence
                     } else {
-                        // In case we are at the very last thing, then goto the next chapter
-                        index++
+                        // If we are starting fresh or in a new chapter, clear the old progress
+                        removeKey(EPUB_TTS_SENTENCE_INDEX, book.title())
+                        removeKey(EPUB_TTS_CHAPTER_INDEX, book.title())
+
+                        if (idx != -1) {
+                            ttsInnerIndex = idx
+                        } else {
+                            // In case we are at the very last thing, then goto the next chapter
+                            index++
+                        }
                     }
                 }
 
@@ -1513,13 +1537,8 @@ class ReadActivityViewModel : ViewModel() {
                         val line = lines[ttsInnerIndex]
                         val nextLine = lines.getOrNull(ttsInnerIndex + 1)
 
-                        // set keys
-                        /*setKey(
-                            EPUB_CURRENT_POSITION_SCROLL_CHAR,
-                            book.title(),
-                            line.startChar
-                        )
-                        setKey(EPUB_CURRENT_POSITION, book.title(), line.index)*/
+                        setKey(EPUB_TTS_SENTENCE_INDEX, book.title(), ttsInnerIndex)
+                        setKey(EPUB_TTS_CHAPTER_INDEX, book.title(), index)
 
                         // if we are outside the app, then we post new desired location
                         // as otherwise the scroll overrides it

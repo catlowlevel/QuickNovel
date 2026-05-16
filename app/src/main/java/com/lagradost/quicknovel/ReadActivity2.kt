@@ -381,6 +381,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 lastHalfVisible = lines.firstOrNull {
                     it.bottom >= bottomY
                 },
+                visibleIndices = lines.map { it.index }.distinct()
             )
         )
     }
@@ -827,6 +828,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         binding.ttsActionStop.setOnClickListener {
             viewModel.stopTTS()
+        }
+
+        binding.ttsActionStop.setOnLongClickListener {
+            viewModel.stopTTS(reset = true)
+            showToast(R.string.tts_reset_progress)
+            true
         }
 
         binding.readActionTts.setOnClickListener {
