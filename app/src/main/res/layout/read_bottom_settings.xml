@@ -173,6 +173,16 @@
                     app:icon="@drawable/nights_stay_24px" />
             </LinearLayout>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/read_tts_overrides"
+                style="@style/BlackButton"
+                android:layout_width="match_parent"
+                android:layout_marginStart="0dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="0dp"
+                android:text="@string/tts_overrides"
+                app:icon="@drawable/ic_baseline_edit_24" />
+
             <TextView
                 android:id="@+id/read_settings_tts_speed_text"
                 android:layout_width="wrap_content"

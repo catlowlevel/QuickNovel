@@ -302,4 +302,14 @@
     <string name="more_spacing">More Spacing</string>
     <string name="less_spacing">Less Spacing</string>
     <string name="unable_to_inflate">UI was unable to be created correctly, this is a MAJOR BUG and should be reported immediately %s</string>
+
+    <string name="tts_overrides">TTS Word Overrides</string>
+    <string name="add_override">Add Override</string>
+    <string name="test_overrides">Test Overrides</string>
+    <string name="test_text_placeholder">Text to test…</string>
+    <string name="test_audio">Listen</string>
+    <string name="original_text">Original word/pattern</string>
+    <string name="replacement_text">Replacement</string>
+    <string name="use_regex">Use Regex</string>
+    <string name="case_sensitive">Case Sensitive</string>
 </resources>

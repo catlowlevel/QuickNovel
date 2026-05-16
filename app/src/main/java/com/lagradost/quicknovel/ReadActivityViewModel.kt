@@ -1328,7 +1328,9 @@ class ReadActivityViewModel : ViewModel() {
 
     private fun initTTSSession(context: Context) {
         runOnMainThread {
-            ttsSession = TTSSession(context, ::parseAction)
+            ttsSession = TTSSession(context, ::parseAction).apply {
+                overrides = ttsOverrides.toList()
+            }
         }
     }
 
@@ -1423,6 +1425,7 @@ class ReadActivityViewModel : ViewModel() {
                 ttsSession.register()
                 ttsSession.setSpeed(ttsSpeed)
                 ttsSession.setPitch(ttsPitch)
+                ttsSession.overrides = ttsOverrides.toList()
 
                 var ttsInnerIndex = 0 // this inner index is different from what is set
                 var index = dIndex.index
@@ -1814,6 +1817,13 @@ class ReadActivityViewModel : ViewModel() {
         set(value) {
             ttsSession?.setPitch(value)
             ttsPitchKey = value
+        }
+
+    var ttsOverrides: Array<TTSOverride>
+        get() = getKey(EPUB_TTS_OVERRIDES) ?: emptyArray()
+        set(value) {
+            setKey(EPUB_TTS_OVERRIDES, value)
+            ttsSession?.overrides = value.toList()
         }
 
 

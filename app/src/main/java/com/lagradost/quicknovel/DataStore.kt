@@ -37,6 +37,7 @@ const val RESULT_CHAPTER_FILTER_BOOKMARKED: String = "result_chapter_filter_book
 const val RESULT_CHAPTER_FILTER_READ: String = "result_chapter_filter_read"
 const val RESULT_CHAPTER_FILTER_UNREAD: String = "result_chapter_filter_unread"
 const val EPUB_TTS_SET_PITCH: String = "reader_epub_tts_pitch"
+const val EPUB_TTS_OVERRIDES: String = "reader_epub_tts_overrides"
 const val EPUB_BG_COLOR: String = "reader_epub_bg_color"
 const val EPUB_TEXT_COLOR: String = "reader_epub_text_color"
 const val EPUB_TEXT_VERTICAL_PADDING: String = "reader_epub_vertical_padding"

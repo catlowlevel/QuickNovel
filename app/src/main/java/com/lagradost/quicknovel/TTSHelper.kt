@@ -63,6 +63,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
 
     private var speed: Float = 1.0f
     private var pitch: Float = 1.0f
+    var overrides: List<TTSOverride>? = null
 
     fun isValidTTS(): Boolean {
         return tts != null
@@ -125,14 +126,24 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
             queue.second
         } else {
             TTSQueueId++
-            tts.speak(line.speakOutMsg, TextToSpeech.QUEUE_FLUSH, null, TTSQueueId.toString())
+            tts.speak(
+                TTSHelper.applyOverrides(line.speakOutMsg, overrides),
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                TTSQueueId.toString()
+            )
             TTSQueueId
         }
 
         if (next != null) {
             TTSQueueId++
             TTSQueue = next to TTSQueueId
-            tts.speak(next.speakOutMsg, TextToSpeech.QUEUE_ADD, null, TTSQueueId.toString())
+            tts.speak(
+                TTSHelper.applyOverrides(next.speakOutMsg, overrides),
+                TextToSpeech.QUEUE_ADD,
+                null,
+                TTSQueueId.toString()
+            )
         }
         return ret
     }
@@ -407,7 +418,39 @@ data class ChapterOverscrollSpanned(
     }
 }
 
+data class TTSOverride(
+    var original: String,
+    var replacement: String,
+    var enabled: Boolean = true,
+    var useRegex: Boolean = false,
+    var caseSensitive: Boolean = false
+)
+
 object TTSHelper {
+    fun applyOverrides(text: String, overrides: List<TTSOverride>?): String {
+        if (overrides.isNullOrEmpty()) return text
+        var msg = text
+        for (override in overrides) {
+            if (!override.enabled || override.original.isEmpty()) continue
+            try {
+                if (override.useRegex) {
+                    val options =
+                        if (override.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+                    msg = msg.replace(override.original.toRegex(options), override.replacement)
+                } else {
+                    msg = msg.replace(
+                        override.original,
+                        override.replacement,
+                        ignoreCase = !override.caseSensitive
+                    )
+                }
+            } catch (e: Exception) {
+                // Ignore invalid regex
+            }
+        }
+        return msg
+    }
+
     data class TTSLine(
         val speakOutMsg: String,
         val startChar: Int,

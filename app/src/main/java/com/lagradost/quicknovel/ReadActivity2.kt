@@ -13,10 +13,13 @@ import android.graphics.Color
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import android.view.KeyEvent
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
@@ -35,6 +38,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -48,6 +52,8 @@ import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
+import com.lagradost.quicknovel.databinding.TtsOverrideItemBinding
+import com.lagradost.quicknovel.databinding.TtsOverridesDialogBinding
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
@@ -1503,6 +1509,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
+            binding.readTtsOverrides.setOnClickListener {
+                showTTSOverridesDialog()
+            }
+
             binding.apply {
                 hardResetStream.isVisible = viewModel.canReload()
                 hardResetStream.setOnClickListener {
@@ -1631,5 +1641,98 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             bottomSheetDialog.show()
         }
+    }
+
+    private class TTSOverrideAdapter(val overrides: MutableList<TTSOverride>) :
+        RecyclerView.Adapter<TTSOverrideAdapter.ViewHolder>() {
+
+        class ViewHolder(val binding: TtsOverrideItemBinding) : RecyclerView.ViewHolder(binding.root)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            return ViewHolder(
+                TtsOverrideItemBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+            )
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val item = overrides[position]
+            holder.binding.apply {
+                overrideEnabled.isChecked = item.enabled
+                overrideOriginal.setText(item.original)
+                overrideReplacement.setText(item.replacement)
+                overrideRegex.isChecked = item.useRegex
+                overrideCaseSensitive.isChecked = item.caseSensitive
+
+                overrideEnabled.setOnCheckedChangeListener { _, isChecked -> item.enabled = isChecked }
+                overrideOriginal.addTextChangedListener { item.original = it.toString() }
+                overrideReplacement.addTextChangedListener { item.replacement = it.toString() }
+                overrideRegex.setOnCheckedChangeListener { _, isChecked ->
+                    item.useRegex = isChecked
+                }
+                overrideCaseSensitive.setOnCheckedChangeListener { _, isChecked ->
+                    item.caseSensitive = isChecked
+                }
+                overrideDelete.setOnClickListener {
+                    val pos = holder.bindingAdapterPosition
+                    if (pos != RecyclerView.NO_POSITION) {
+                        overrides.removeAt(pos)
+                        notifyItemRemoved(pos)
+                    }
+                }
+            }
+        }
+
+        override fun getItemCount() = overrides.size
+    }
+
+    private fun showTTSOverridesDialog() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val dialogBinding = TtsOverridesDialogBinding.inflate(layoutInflater)
+        bottomSheetDialog.setContentView(dialogBinding.root)
+
+        val overrides = viewModel.ttsOverrides.toMutableList()
+        val adapter = TTSOverrideAdapter(overrides)
+        dialogBinding.ttsOverridesList.adapter = adapter
+        dialogBinding.ttsOverridesList.layoutManager = LinearLayoutManager(this)
+
+        dialogBinding.ttsOverridesAdd.setOnClickListener {
+            overrides.add(TTSOverride("", ""))
+            adapter.notifyItemInserted(overrides.size - 1)
+        }
+
+        dialogBinding.ttsOverridesSave.setOnClickListener {
+            viewModel.ttsOverrides = overrides.toTypedArray()
+            bottomSheetDialog.dismiss()
+        }
+
+        val updateTest = {
+            val input = dialogBinding.ttsOverridesTestInput.text.toString()
+            val result = TTSHelper.applyOverrides(input, overrides)
+            dialogBinding.ttsOverridesTestResult.text = result
+        }
+
+        dialogBinding.ttsOverridesTestInput.addTextChangedListener {
+            updateTest()
+        }
+
+        dialogBinding.ttsOverridesTestAudio.setOnClickListener {
+            val text = dialogBinding.ttsOverridesTestResult.text.toString()
+            if (text.isNotEmpty()) {
+                ioSafe {
+                    viewModel.ttsSession?.requireTTS()?.speak(
+                        text,
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "test"
+                    )
+                }
+            }
+        }
+
+        bottomSheetDialog.show()
     }
 }
