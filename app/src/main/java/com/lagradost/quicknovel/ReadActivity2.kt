@@ -456,7 +456,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }*/
 
         // update the lock area
-        if (line == null || !viewModel.ttsLock) {
+        if (line == null || (!viewModel.ttsLock && !viewModel.ttsAutoCenter)) {
             lockTop = null
             lockBottom = null
             return
@@ -502,22 +502,36 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             return
         }
 
-        val topScroll = top.top - getTopY()
-        lockTop = currentScroll + topScroll
-        val bottomScroll =
-            bottom.bottom - getBottomY()
-        lockBottom = currentScroll + bottomScroll
+        if (viewModel.ttsLock) {
+            lockTop = currentScroll + (top.top - getTopY())
+            lockBottom = currentScroll + (bottom.bottom - getBottomY())
+        } else {
+            lockTop = null
+            lockBottom = null
+        }
 
         // binding.tmpTtsStart.fixLine(top.top)
         //binding.tmpTtsEnd.fixLine(bottom.bottom)
 
-        // we have reached the end, scroll to the top
-        if (bottomScroll > 0) {
-            binding.realText.scrollBy(0, topScroll)
-        }
-        // we have scrolled up while being on top
-        else if (topScroll < 0) {
-            binding.realText.scrollBy(0, topScroll)
+        if (viewModel.ttsAutoCenter) {
+            val center = (getTopY() + getBottomY()) / 2
+            val sentenceCenter = (top.top + bottom.bottom) / 2
+            val delta = sentenceCenter - center
+            if (delta.absoluteValue > 2 && binding.realText.canScrollVertically(delta)) {
+                binding.realText.smoothScrollBy(0, delta)
+            }
+        } else {
+            val topScroll = top.top - getTopY()
+            val bottomScroll = bottom.bottom - getBottomY()
+
+            // we have reached the end, scroll to the top
+            if (bottomScroll > 0) {
+                binding.realText.scrollBy(0, topScroll)
+            }
+            // we have scrolled up while being on top
+            else if (topScroll < 0) {
+                binding.realText.scrollBy(0, topScroll)
+            }
         }
     }
 
@@ -1513,6 +1527,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsLockTts.isChecked = viewModel.ttsLock
                 readSettingsLockTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.ttsLock = isChecked
+                }
+
+                readSettingsTtsAutoCenter.isChecked = viewModel.ttsAutoCenter
+                readSettingsTtsAutoCenter.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.ttsAutoCenter = isChecked
                 }
 
                 readSettingsShowTime.isChecked = viewModel.showTime

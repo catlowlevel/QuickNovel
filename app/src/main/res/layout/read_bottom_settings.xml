@@ -56,6 +56,11 @@
                 android:text="@string/lock_tts" />
 
             <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/read_settings_tts_auto_center"
+                style="@style/WhiteCheckmark"
+                android:text="@string/tts_auto_center" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
                 android:id="@+id/read_settings_show_time"
                 style="@style/WhiteCheckmark"
                 android:text="@string/show_time" />

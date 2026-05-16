@@ -129,6 +129,7 @@
     <string name="scroll_with_volume_keys">Scroll with volume keys</string>
     <string name="general_settings">General</string>
     <string name="lock_tts">Lock TTS scroll area</string>
+    <string name="tts_auto_center">Center TTS</string>
     <string name="reading_color">Reading Color</string>
     <string name="read_color">Reader Theme</string>
     <string name="show_battery">Show Battery</string>
