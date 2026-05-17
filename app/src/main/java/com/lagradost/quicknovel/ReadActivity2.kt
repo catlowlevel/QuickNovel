@@ -44,6 +44,7 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
@@ -449,6 +450,27 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     var lockBottom: Int? = null
     var currentScroll: Int = 0
 
+    private fun smoothScrollToAndCenter(position: Int) {
+        val rvLocation = IntArray(2)
+        binding.realText.getLocationInWindow(rvLocation)
+        val rvTop = rvLocation[1]
+        val targetCenter = (getTopY() + getBottomY()) / 2 - rvTop
+
+        val smoothScroller = object : LinearSmoothScroller(this) {
+            override fun calculateDtToFit(
+                viewStart: Int,
+                viewEnd: Int,
+                boxStart: Int,
+                boxEnd: Int,
+                snapPreference: Int
+            ): Int {
+                return targetCenter - (viewStart + (viewEnd - viewStart) / 2)
+            }
+        }
+        smoothScroller.targetPosition = position
+        textLayoutManager.startSmoothScroll(smoothScroller)
+    }
+
     private fun updateTTSLine(line: TTSHelper.TTSLine?, depth: Int = 0) {
         // update the visual component
         /*println("LINE: ${line?.speakOutMsg} =>")
@@ -503,11 +525,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 return
             }
 
-            if (depth < 3) {
-                textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
-                textLayoutManager.postOnAnimation {
-                    updateTTSLine(line, depth = depth + 1)
-                }
+            if (depth == 0) {
+                smoothScrollToAndCenter(adapterPosition)
             }
 
             return
@@ -526,8 +545,27 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         if (viewModel.ttsAutoCenter) {
             val center = (getTopY() + getBottomY()) / 2
-            val sentenceCenter = (top.top + bottom.bottom) / 2
-            val delta = sentenceCenter - center
+            val innerIndex = top.innerIndex
+            val paragraphLines = lines.filter { it.index == top.index && it.innerIndex == innerIndex }
+
+            val paragraphTop = paragraphLines.firstOrNull()?.top ?: top.top
+            val paragraphBottom = paragraphLines.lastOrNull()?.bottom ?: bottom.bottom
+            val paragraphCenter = (paragraphTop + paragraphBottom) / 2
+            var delta = paragraphCenter - center
+
+            // Safety: Ensure current sentence is visible
+            if (bottom.bottom - top.top > getBottomY() - getTopY()) {
+                // Sentence larger than screen, center it
+                delta = (top.top + bottom.bottom) / 2 - center
+            } else {
+                if (top.top - delta < getTopY()) {
+                    delta = top.top - getTopY()
+                }
+                if (bottom.bottom - delta > getBottomY()) {
+                    delta = bottom.bottom - getBottomY()
+                }
+            }
+
             if (delta.absoluteValue > 2 && binding.realText.canScrollVertically(delta)) {
                 binding.realText.smoothScrollBy(0, delta)
             }
