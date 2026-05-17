@@ -510,5 +510,64 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
         </com.google.android.material.appbar.AppBarLayout>
+
+        <androidx.cardview.widget.CardView
+                android:id="@+id/reader_tts_floating_control"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:cardBackgroundColor="?attr/primaryGrayBackground"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="10dp"
+                tools:visibility="visible">
+
+            <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="2dp">
+
+                <ImageView
+                        android:id="@+id/tts_floating_drag_handle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:padding="8dp"
+                        app:srcCompat="@drawable/ic_baseline_menu_24"
+                        app:tint="?attr/white"
+                        android:alpha="0.5"/>
+
+                <ImageButton
+                        android:id="@+id/tts_floating_back"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/ripple_regular"
+                        android:contentDescription="@string/read_action_tts"
+                        android:padding="8dp"
+                        app:srcCompat="@drawable/ic_baseline_fast_rewind_24"
+                        app:tint="?attr/white" />
+
+                <ImageButton
+                        android:id="@+id/tts_floating_pause_play"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/ripple_regular"
+                        android:contentDescription="@string/read_action_chapters"
+                        android:padding="8dp"
+                        app:srcCompat="@drawable/ic_baseline_pause_24"
+                        app:tint="?attr/white" />
+
+                <ImageButton
+                        android:id="@+id/tts_floating_forward"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/ripple_regular"
+                        android:contentDescription="@string/read_action_settings"
+                        android:padding="8dp"
+                        app:srcCompat="@drawable/ic_baseline_fast_forward_24"
+                        app:tint="?attr/white" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
     </FrameLayout>
 </FrameLayout>

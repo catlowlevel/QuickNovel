@@ -1882,6 +1882,17 @@ class ReadActivityViewModel : ViewModel() {
         EPUB_BG_COLOR, "#292832".toColorInt(), Int::class, backgroundColorLive
     )
 
+    val floatingTTSSettingsLive: MutableLiveData<Boolean> = MutableLiveData(null)
+    var floatingTTSSettings by PreferenceDelegateLiveView(
+        EPUB_FLOATING_TTS,
+        false,
+        Boolean::class,
+        floatingTTSSettingsLive
+    )
+
+    var floatingTTSX by PreferenceDelegate(EPUB_FLOATING_TTS_X, -1f, Float::class)
+    var floatingTTSY by PreferenceDelegate(EPUB_FLOATING_TTS_Y, -1f, Float::class)
+
     val showBatteryLive: MutableLiveData<Boolean> = MutableLiveData(null)
     var showBattery by PreferenceDelegateLiveView(
         EPUB_HAS_BATTERY, true, Boolean::class, showBatteryLive

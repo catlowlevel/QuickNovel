@@ -10,6 +10,7 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Color
+import android.graphics.Rect
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.Gravity
 import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
@@ -862,10 +864,98 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             true
         }
 
+        binding.readActionTts.setOnLongClickListener {
+            if (viewModel.ttsStatus.value != TTSHelper.TTSStatus.IsStopped) {
+                viewModel.stopTTS(reset = true)
+                showToast(R.string.tts_reset_progress)
+                true
+            } else {
+                false
+            }
+        }
+
         binding.readActionTts.setOnClickListener {
             //scrollToDesired()
-            viewModel.startTTS()
+            if (viewModel.ttsStatus.value != TTSHelper.TTSStatus.IsStopped) {
+                viewModel.stopTTS()
+            } else {
+                viewModel.startTTS()
+            }
         }
+
+        fun setupDraggable(view: View, handle: View) {
+            var initialX = 0f
+            var initialY = 0f
+            var initialTouchX = 0f
+            var initialTouchY = 0f
+
+            handle.setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = view.translationX
+                        initialY = view.translationY
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - initialTouchX
+                        val dy = event.rawY - initialTouchY
+                        view.translationX = initialX + dx
+                        view.translationY = initialY + dy
+                        true
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        viewModel.floatingTTSX = view.translationX
+                        viewModel.floatingTTSY = view.translationY
+                        true
+                    }
+
+                    else -> false
+                }
+            }
+        }
+
+        fun setupHold(view: View, action: () -> Unit) {
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            val runnable = object : Runnable {
+                override fun run() {
+                    action()
+                    handler.postDelayed(this, 100)
+                }
+            }
+
+            view.setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        handler.postDelayed(runnable, 400)
+                        false
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        handler.removeCallbacks(runnable)
+                        false
+                    }
+
+                    else -> false
+                }
+            }
+        }
+
+        val storedX = viewModel.floatingTTSX
+        val storedY = viewModel.floatingTTSY
+        if (storedX != -1f && storedY != -1f) {
+            binding.readerTtsFloatingControl.translationX = storedX
+            binding.readerTtsFloatingControl.translationY = storedY
+        }
+
+        setupDraggable(binding.readerTtsFloatingControl, binding.readerTtsFloatingControl)
+        setupDraggable(binding.readerTtsFloatingControl, binding.ttsFloatingDragHandle)
+
+        setupHold(binding.ttsFloatingBack) { viewModel.backwardsTTS() }
+        setupHold(binding.ttsFloatingForward) { viewModel.forwardsTTS() }
 
         binding.ttsActionForward.setOnClickListener {
             viewModel.forwardsTTS()
@@ -873,6 +963,38 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         binding.ttsActionBack.setOnClickListener {
             viewModel.backwardsTTS()
+        }
+
+        binding.ttsFloatingPausePlay.setOnClickListener {
+            viewModel.pausePlayTTS()
+        }
+
+        binding.ttsFloatingForward.setOnClickListener {
+            viewModel.forwardsTTS()
+        }
+
+        binding.ttsFloatingBack.setOnClickListener {
+            viewModel.backwardsTTS()
+        }
+
+        observe(viewModel.floatingTTSSettingsLive) { _ ->
+            viewModel.ttsStatus.value?.let { status ->
+                val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
+                val useFloating = viewModel.floatingTTSSettings
+                if (useFloating) {
+                    binding.readerBottomView.isGone = false
+                    binding.readerBottomViewTts.isGone = true
+                    binding.readerTtsFloatingControl.isVisible = isTTSRunning
+                    binding.readActionTts.setImageResource(
+                        if (isTTSRunning) R.drawable.ic_baseline_stop_24 else R.drawable.ic_baseline_volume_up_24
+                    )
+                } else {
+                    binding.readerBottomView.isGone = isTTSRunning
+                    binding.readerBottomViewTts.isVisible = isTTSRunning
+                    binding.readerTtsFloatingControl.isGone = true
+                    binding.readActionTts.setImageResource(R.drawable.ic_baseline_volume_up_24)
+                }
+            }
         }
 
         observe(viewModel.orientationLive) { position ->
@@ -987,9 +1109,29 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 binding.readToolbar.menu.clear()
             }*/
 
-            binding.readerBottomView.isGone = isTTSRunning
-            binding.readerBottomViewTts.isVisible = isTTSRunning
+            val useFloating = viewModel.floatingTTSSettings
+            if (useFloating) {
+                binding.readerBottomView.isGone = false
+                binding.readerBottomViewTts.isGone = true
+                binding.readerTtsFloatingControl.isVisible = isTTSRunning
+                binding.readActionTts.setImageResource(
+                    if (isTTSRunning) R.drawable.ic_baseline_stop_24 else R.drawable.ic_baseline_volume_up_24
+                )
+            } else {
+                binding.readerBottomView.isGone = isTTSRunning
+                binding.readerBottomViewTts.isVisible = isTTSRunning
+                binding.readerTtsFloatingControl.isGone = true
+                binding.readActionTts.setImageResource(R.drawable.ic_baseline_volume_up_24)
+            }
+
             binding.ttsActionPausePlay.setImageResource(
+                when (status) {
+                    TTSHelper.TTSStatus.IsPaused -> R.drawable.ic_baseline_play_arrow_24
+                    TTSHelper.TTSStatus.IsRunning -> R.drawable.ic_baseline_pause_24
+                    TTSHelper.TTSStatus.IsStopped -> R.drawable.ic_baseline_play_arrow_24
+                }
+            )
+            binding.ttsFloatingPausePlay.setImageResource(
                 when (status) {
                     TTSHelper.TTSStatus.IsPaused -> R.drawable.ic_baseline_play_arrow_24
                     TTSHelper.TTSStatus.IsRunning -> R.drawable.ic_baseline_pause_24
@@ -1603,12 +1745,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.ttsLock = isChecked
                 }
 
-                readSettingsTtsAutoCenter.isChecked = viewModel.ttsAutoCenter
-                readSettingsTtsAutoCenter.setOnCheckedChangeListener { _, isChecked ->
+                binding.readSettingsTtsAutoCenter.isChecked = viewModel.ttsAutoCenter
+                binding.readSettingsTtsAutoCenter.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.ttsAutoCenter = isChecked
                 }
 
-                readSettingsShowTime.isChecked = viewModel.showTime
+                binding.readSettingsFloatingTts.isChecked = viewModel.floatingTTSSettings
+                binding.readSettingsFloatingTts.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.floatingTTSSettings = isChecked
+                }
+
+                binding.readSettingsShowTime.isChecked = viewModel.showTime
                 readSettingsShowTime.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.showTime = isChecked
                 }

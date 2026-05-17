@@ -61,6 +61,11 @@
                 android:text="@string/tts_auto_center" />
 
             <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/read_settings_floating_tts"
+                style="@style/WhiteCheckmark"
+                android:text="@string/floating_tts_control" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
                 android:id="@+id/read_settings_show_time"
                 style="@style/WhiteCheckmark"
                 android:text="@string/show_time" />

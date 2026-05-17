@@ -89,6 +89,7 @@
 
     <string name="read_action_tts">Text To Speech</string>
     <string name="read_action_screen_rotation">Screen Rotation</string>
+    <string name="floating_tts_control">Floating TTS Control</string>
 
     <string name="grid_view">Grid</string>
     <string name="list_view">List</string>
