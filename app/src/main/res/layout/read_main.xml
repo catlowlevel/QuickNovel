@@ -244,6 +244,13 @@
 
                 android:layout_height="25dp">
 
+            <View
+                    android:id="@+id/read_overlay_progress"
+                    android:visibility="gone"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:background="@color/colorPrimary" />
+
             <TextClock
                     tools:text="20:35"
                     android:textStyle="bold"

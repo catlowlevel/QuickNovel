@@ -337,7 +337,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val (_, bottomY) = outLocation
         return bottomY - max(
             binding.realText.paddingBottom,
-            if (viewModel.showTime || viewModel.showBattery) binding.readOverlay.height else 0
+            if (viewModel.showTime || viewModel.showBattery || viewModel.ttsStatus.value != TTSHelper.TTSStatus.IsStopped) binding.readOverlay.height else 0
         )
     }
 
@@ -572,6 +572,25 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
+    private fun updateOverlayVisibility() {
+        val isTTSRunning = viewModel.ttsStatus.value != TTSHelper.TTSStatus.IsStopped
+        val show = viewModel.showTime || viewModel.showBattery || isTTSRunning
+        binding.readOverlay.isVisible = show
+        binding.readBattery.isVisible = viewModel.showBattery
+        binding.readTimeClock.isVisible = viewModel.showTime
+    }
+
+    private fun updateOverlayProgressColor() {
+        val primaryColor = colorFromAttribute(R.attr.colorPrimary)
+        val tintColor = Color.argb(
+            60,
+            Color.red(primaryColor),
+            Color.green(primaryColor),
+            Color.blue(primaryColor)
+        )
+        binding.readOverlayProgress.setBackgroundColor(tintColor)
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     private fun updateTextAdapterConfig() {
         // this did not work so I just rebind everything, it does not happend often so idc
@@ -769,6 +788,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.backgroundColorLive) { color ->
             binding.root.setBackgroundColor(color)
             binding.readOverlay.setBackgroundColor(color)
+            updateOverlayProgressColor()
             if (textAdapter.changeBackgroundColor(color)) {
                 updateTextAdapterConfig()
             }
@@ -792,14 +812,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-        observe(viewModel.showBatteryLive) { show ->
-            binding.readBattery.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showTime
+        observe(viewModel.showBatteryLive) { _ ->
+            updateOverlayVisibility()
         }
 
-        observe(viewModel.showTimeLive) { show ->
-            binding.readTimeClock.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showBattery
+        observe(viewModel.showTimeLive) { _ ->
+            updateOverlayVisibility()
         }
 
         observe(viewModel.screenAwakeLive) { awake ->
@@ -961,6 +979,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.ttsStatus) { status ->
             val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
+            updateOverlayVisibility()
 
             /*if (isTTSRunning) {
                 binding.readToolbar.inflateMenu(R.menu.sleep_timer)
@@ -977,6 +996,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     TTSHelper.TTSStatus.IsStopped -> R.drawable.ic_baseline_play_arrow_24
                 }
             )
+        }
+
+        observeNullable(viewModel.ttsProgress) { progress ->
+            binding.readOverlayProgress.isVisible = progress != null
+            if (progress != null) {
+                val params = binding.readOverlayProgress.layoutParams
+                params.width = (binding.readOverlay.width * progress).toInt()
+                binding.readOverlayProgress.layoutParams = params
+            }
         }
 
         binding.apply {

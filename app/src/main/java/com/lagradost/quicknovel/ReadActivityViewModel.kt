@@ -509,6 +509,9 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<TTSHelper.TTSStatus>(TTSHelper.TTSStatus.IsStopped)
     val ttsStatus: LiveData<TTSHelper.TTSStatus> = _ttsStatus
 
+    private val _ttsProgress: MutableLiveData<Float?> = MutableLiveData(null)
+    val ttsProgress: LiveData<Float?> = _ttsProgress
+
     private val _ttsLine: MutableLiveData<TTSHelper.TTSLine?> =
         MutableLiveData<TTSHelper.TTSLine?>(null)
     val ttsLine: LiveData<TTSHelper.TTSLine?> = _ttsLine
@@ -1346,6 +1349,9 @@ class ReadActivityViewModel : ViewModel() {
 
             _ttsStatus.postValue(value)
             _currentTTSStatus = value
+            if (value == TTSHelper.TTSStatus.IsStopped) {
+                _ttsProgress.postValue(null)
+            }
         }
 
     fun stopTTS(reset: Boolean = false) {
@@ -1561,6 +1567,7 @@ class ReadActivityViewModel : ViewModel() {
 
                         // post visual
                         _ttsLine.postValue(line)
+                        _ttsProgress.postValue(ttsInnerIndex.toFloat() / lines.size.toFloat())
 
                         // wait for next line
                         val waitFor = ttsSession.speak(
