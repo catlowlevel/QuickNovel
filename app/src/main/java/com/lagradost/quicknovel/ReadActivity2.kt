@@ -26,9 +26,11 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.core.animation.doOnEnd
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -887,34 +889,61 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.chaptersTitles) { titles ->
             binding.readActionChapters.setOnClickListener {
                 val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
-                //builderSingle.setIcon(R.drawable.ic_launcher)
                 val currentChapter = viewModel.desiredIndex?.index
-                // cant be too safe here
                 val validChapter =
                     currentChapter != null && currentChapter >= 0 && currentChapter < titles.size
                 if (validChapter) {
-                    builderSingle.setTitle(titles[currentChapter].asString(this)) //  "Select Chapter"
+                    builderSingle.setTitle(titles[currentChapter].asString(this))
                 } else {
                     builderSingle.setTitle(R.string.select_chapter)
                 }
 
-                val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
+                val layout = layoutInflater.inflate(R.layout.dialog_chapter_search, null)
+                builderSingle.setView(layout)
 
-                arrayAdapter.addAll(titles.map { it.asString(this) })
+                val listView = layout.findViewById<ListView>(R.id.chapter_list)
+                val searchView = layout.findViewById<SearchView>(R.id.chapter_search)
+
+                data class IndexedChapter(val name: String, val index: Int) {
+                    override fun toString(): String = name
+                }
+
+                val arrayAdapter = ArrayAdapter<IndexedChapter>(this, R.layout.chapter_select_dialog)
+                arrayAdapter.addAll(titles.mapIndexed { index, uiText ->
+                    IndexedChapter(uiText.asString(this), index)
+                })
+
+                listView.adapter = arrayAdapter
 
                 builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
 
-                builderSingle.setAdapter(arrayAdapter) { _, which ->
-                    viewModel.seekToChapter(which)
+                val dialog = builderSingle.create()
+
+                listView.setOnItemClickListener { _, _, which, _ ->
+                    val item = arrayAdapter.getItem(which)
+                    if (item != null) {
+                        viewModel.seekToChapter(item.index)
+                    }
+                    dialog.dismiss()
                 }
 
-                val dialog = builderSingle.create()
+                searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                    override fun onQueryTextSubmit(query: String?): Boolean {
+                        arrayAdapter.filter.filter(query)
+                        return true
+                    }
+
+                    override fun onQueryTextChange(newText: String?): Boolean {
+                        arrayAdapter.filter.filter(newText)
+                        return true
+                    }
+                })
+
                 dialog.show()
 
-                dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
                 if (validChapter) {
-                    dialog.listView.setSelection(currentChapter)
-                    dialog.listView.setItemChecked(currentChapter, true)
+                    listView.setSelection(currentChapter)
+                    listView.setItemChecked(currentChapter, true)
                 }
             }
         }

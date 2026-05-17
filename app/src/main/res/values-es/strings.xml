@@ -34,6 +34,7 @@
     <!-- Búsqueda y Proveedores -->
     <string name="search">Búsqueda</string>
     <string name="search_hint">Buscar novelas…</string>
+    <string name="search_chapters_hint">Buscar capítulos…</string>
     <string name="search_downloads">Buscar mis novelas…</string>
     <string name="advanced_search">Búsqueda avanzada</string>
     <string name="advanced_search_desc">Muestra los resultados de búsqueda separados por proveedor</string>

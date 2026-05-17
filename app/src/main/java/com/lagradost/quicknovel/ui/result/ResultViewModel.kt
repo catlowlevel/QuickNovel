@@ -86,8 +86,9 @@ class ResultViewModel : ViewModel() {
             true,
             Boolean::class
         )
-
     }
+
+    val chapterQuery: MutableLiveData<String?> = MutableLiveData<String?>(null)
 
     fun reorderChapters() {
         when (val response = this.loadResponse.value) {
@@ -117,9 +118,14 @@ class ResultViewModel : ViewModel() {
         val filterDownloaded = filterChapterByDownloads
         val sort = sortChapterBy
         val state = downloadState.value
+        val query = chapterQuery.value
 
         return list.filter { chapter ->
             val read = hasReadChapter(chapter)
+
+            if (!query.isNullOrBlank() && !chapter.name.contains(query, ignoreCase = true)) {
+                return@filter false
+            }
 
             (filterUnread && !read) || (filterRead && read) ||
                     (filterDownloaded && (state != null && state.progress > (chapterIndex(chapter)

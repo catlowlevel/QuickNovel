@@ -10,6 +10,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.SearchView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
@@ -122,7 +123,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
         val parameter = binding.chapterList.layoutParams
         parameter.height =
-            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop
+            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop - 60.toPx
 
         binding.chapterList.layoutParams = parameter
         //ViewGroup.LayoutParams(binding.chapterList.layoutParams.width,displayMetrics.heightPixels)
@@ -499,6 +500,20 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             resultReloadConnectionOpenInBrowser.setOnClickListener {
                 viewModel.openInBrowser()
             }
+
+            chapterSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean {
+                    viewModel.chapterQuery.value = query
+                    viewModel.reorderChapters()
+                    return true
+                }
+
+                override fun onQueryTextChange(newText: String?): Boolean {
+                    viewModel.chapterQuery.value = newText
+                    viewModel.reorderChapters()
+                    return true
+                }
+            })
 
             reviewsFab.setOnClickListener {
                 resultReviews.smoothScrollToPosition(0) // NEEDS THIS TO RESET VELOCITY

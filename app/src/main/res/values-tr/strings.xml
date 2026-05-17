@@ -12,6 +12,7 @@
     <string name="restore_settings">Verileri yedekten geri yükle</string>
 
     <string name="search_hint">Roman Ara</string>
+    <string name="search_chapters_hint">Bölümleri Ara…</string>
     <string name="synopsis">Özet</string>
     <string name="no_data">Veri Yok</string>
     <string name="no_author">Yazar bulunamadı</string>

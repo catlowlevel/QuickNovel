@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_margin="10dp"
+        android:background="@drawable/search_background">
+
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/chapter_search"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:iconifiedByDefault="false"
+            app:iconifiedByDefault="false"
+            app:queryBackground="@color/transparent"
+            app:queryHint="@string/search_chapters_hint"
+            app:searchIcon="@drawable/search_icon"
+            tools:ignore="RtlSymmetry" />
+    </FrameLayout>
+
+    <ListView
+        android:id="@+id/chapter_list"
+        android:layout_width="match_parent"
+        android:layout_height="400dp"
+        android:choiceMode="singleChoice" />
+</LinearLayout>
