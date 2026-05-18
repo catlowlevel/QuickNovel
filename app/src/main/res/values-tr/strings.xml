@@ -210,4 +210,5 @@
     <string name="download_path_key">download_path_key</string>
     <string name="download_path_pref">İndirme yolu</string>
     <string name="bionic_reading">Biyonik Okuma</string>
+    <string name="chapter_word_count">%1$s (%2$d kelime)</string>
 </resources>

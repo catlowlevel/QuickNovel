@@ -314,4 +314,5 @@
     <string name="replacement_text">Replacement</string>
     <string name="use_regex">Use Regex</string>
     <string name="case_sensitive">Case Sensitive</string>
+    <string name="chapter_word_count">%1$s (%2$d words)</string>
 </resources>

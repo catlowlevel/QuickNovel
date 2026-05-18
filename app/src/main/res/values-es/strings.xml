@@ -298,4 +298,5 @@
     <string name="operation_no_implemented">" Esta operación no está implementada."</string>
     <string name="conection_error">Error de conexión.</string>
     <string name="unknown">Desconocido</string>
+    <string name="chapter_word_count">%1$s (%2$d palabras)</string>
 </resources>

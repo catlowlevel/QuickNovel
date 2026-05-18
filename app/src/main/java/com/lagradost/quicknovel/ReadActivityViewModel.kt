@@ -448,6 +448,10 @@ data class LiveChapterData(
     val rawText: String,
     //val ttsLines: List<TTSHelper.TTSLine>
 ) {
+    val wordCount by lazy {
+        originalRendered.toString().split(Regex("\\s+")).count { it.isNotBlank() }
+    }
+
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
         ttsParseText(rendered.substring(0, rendered.length), index)
@@ -578,6 +582,17 @@ class ReadActivityViewModel : ViewModel() {
 
     private val loading: HashSet<Int> = hashSetOf()
     private val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
+
+    private fun getChapterTitle(index: Int): UiText {
+        val title = chaptersTitlesInternal.getOrNull(index) ?: return UiText.DynamicString("")
+        val count = (chapterData[index] as? Resource.Success)?.value?.wordCount
+        return if (count != null) {
+            UiText.StringResource(R.string.chapter_word_count, listOf(title, count))
+        } else {
+            title
+        }
+    }
+
     private val hasExpanded: HashSet<Int> = hashSetOf()
 
     var currentIndex = Int.MIN_VALUE
@@ -936,6 +951,9 @@ class ReadActivityViewModel : ViewModel() {
             // set the data and return
             chapterMutex.withLock {
                 chapterData[index] = data
+                if (index == currentIndex) {
+                    _chapterTile.postValue(getChapterTitle(index))
+                }
             }
         } catch (t: Throwable) {
             // Tasks.await may throw
@@ -1703,7 +1721,7 @@ class ReadActivityViewModel : ViewModel() {
     private var lastScrollMs: Long = 0
     private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
         if (alsoTitle) {
-            _chapterTile.postValue(chaptersTitlesInternal[scrollIndex.index])
+            _chapterTile.postValue(getChapterTitle(scrollIndex.index))
         }
 
         desiredIndex = scrollIndex
@@ -1771,7 +1789,7 @@ class ReadActivityViewModel : ViewModel() {
         // push the update
         updateReadArea(seekToDesired = true)
         // update the view
-        _chapterTile.postValue(chaptersTitlesInternal[index])
+        _chapterTile.postValue(getChapterTitle(index))
         //_loadingStatus.postValue(Resource.Success(true))
     }
 
