@@ -736,7 +736,6 @@ object TTSHelper {
                 var msg = message
                 val invalidChars =
                     arrayOf(
-                        "-",
                         "<",
                         ">",
                         "_",
@@ -745,8 +744,6 @@ object TTSHelper {
                         "»",
                         "「",
                         "」",
-                        "—",
-                        "–",
                         "¿",
                         "*",
                         "~",
@@ -755,7 +752,6 @@ object TTSHelper {
                 for (c in invalidChars) {
                     msg = msg.replace(c, " ")
                 }
-                msg = msg.replace("...", " ")
                 if (msg
                         .replace("\n", "")
                         .replace("\t", "")
