@@ -20,6 +20,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.Gravity
 import android.view.WindowManager
@@ -926,6 +927,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             var initialY = 0f
             var initialTouchX = 0f
             var initialTouchY = 0f
+            var isDragging = false
+            val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
 
             handle.setOnTouchListener { v, event ->
                 when (event.action) {
@@ -934,47 +937,33 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         initialY = view.translationY
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
+                        isDragging = false
+                        v.isPressed = true
                         true
                     }
 
                     MotionEvent.ACTION_MOVE -> {
                         val dx = event.rawX - initialTouchX
                         val dy = event.rawY - initialTouchY
-                        view.translationX = initialX + dx
-                        view.translationY = initialY + dy
+                        if (isDragging || dx.absoluteValue > touchSlop || dy.absoluteValue > touchSlop) {
+                            if (!isDragging) {
+                                isDragging = true
+                                v.isPressed = false
+                            }
+                            view.translationX = initialX + dx
+                            view.translationY = initialY + dy
+                        }
                         true
                     }
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false
                         viewModel.floatingTTSX = view.translationX
                         viewModel.floatingTTSY = view.translationY
+                        if (!isDragging && event.action == MotionEvent.ACTION_UP) {
+                            v.performClick()
+                        }
                         true
-                    }
-
-                    else -> false
-                }
-            }
-        }
-
-        fun setupHold(view: View, action: () -> Unit) {
-            val handler = android.os.Handler(android.os.Looper.getMainLooper())
-            val runnable = object : Runnable {
-                override fun run() {
-                    action()
-                    handler.postDelayed(this, 100)
-                }
-            }
-
-            view.setOnTouchListener { v, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        handler.postDelayed(runnable, 400)
-                        false
-                    }
-
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        handler.removeCallbacks(runnable)
-                        false
                     }
 
                     else -> false
@@ -990,10 +979,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         setupDraggable(binding.readerTtsFloatingControl, binding.readerTtsFloatingControl)
-        setupDraggable(binding.readerTtsFloatingControl, binding.ttsFloatingDragHandle)
-
-        setupHold(binding.ttsFloatingBack) { viewModel.backwardsTTS() }
-        setupHold(binding.ttsFloatingForward) { viewModel.forwardsTTS() }
+        setupDraggable(binding.readerTtsFloatingControl, binding.ttsFloatingPausePlay)
+        setupDraggable(binding.readerTtsFloatingControl, binding.ttsFloatingBack)
+        setupDraggable(binding.readerTtsFloatingControl, binding.ttsFloatingForward)
 
         binding.ttsActionForward.setOnClickListener {
             viewModel.forwardsTTS()
