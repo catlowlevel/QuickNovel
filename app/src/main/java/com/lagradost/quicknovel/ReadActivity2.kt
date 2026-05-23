@@ -1873,10 +1873,41 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
-    private class TTSOverrideAdapter(val overrides: MutableList<TTSOverride>) :
+    private class TTSOverrideAdapter(
+        val overrides: MutableList<TTSOverride>,
+        private val onChanged: () -> Unit
+    ) :
         RecyclerView.Adapter<TTSOverrideAdapter.ViewHolder>() {
 
-        class ViewHolder(val binding: TtsOverrideItemBinding) : RecyclerView.ViewHolder(binding.root)
+        class ViewHolder(val binding: TtsOverrideItemBinding, onChanged: () -> Unit) :
+            RecyclerView.ViewHolder(binding.root) {
+            var currentItem: TTSOverride? = null
+
+            init {
+                binding.overrideEnabled.setOnCheckedChangeListener { _, isChecked ->
+                    currentItem?.enabled = isChecked
+                    onChanged()
+                }
+                binding.overrideOriginal.addTextChangedListener {
+                    val text = it.toString()
+                    currentItem?.original = text
+                    onChanged()
+                }
+                binding.overrideReplacement.addTextChangedListener {
+                    val text = it.toString()
+                    currentItem?.replacement = text
+                    onChanged()
+                }
+                binding.overrideRegex.setOnCheckedChangeListener { _, isChecked ->
+                    currentItem?.useRegex = isChecked
+                    onChanged()
+                }
+                binding.overrideCaseSensitive.setOnCheckedChangeListener { _, isChecked ->
+                    currentItem?.caseSensitive = isChecked
+                    onChanged()
+                }
+            }
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             return ViewHolder(
@@ -1884,12 +1915,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     LayoutInflater.from(parent.context),
                     parent,
                     false
-                )
+                ), onChanged
             )
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = overrides[position]
+            holder.currentItem = null // Prevent listeners from triggering
             holder.binding.apply {
                 overrideEnabled.isChecked = item.enabled
                 overrideOriginal.setText(item.original)
@@ -1897,23 +1929,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 overrideRegex.isChecked = item.useRegex
                 overrideCaseSensitive.isChecked = item.caseSensitive
 
-                overrideEnabled.setOnCheckedChangeListener { _, isChecked -> item.enabled = isChecked }
-                overrideOriginal.addTextChangedListener { item.original = it.toString() }
-                overrideReplacement.addTextChangedListener { item.replacement = it.toString() }
-                overrideRegex.setOnCheckedChangeListener { _, isChecked ->
-                    item.useRegex = isChecked
-                }
-                overrideCaseSensitive.setOnCheckedChangeListener { _, isChecked ->
-                    item.caseSensitive = isChecked
-                }
                 overrideDelete.setOnClickListener {
                     val pos = holder.bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) {
                         overrides.removeAt(pos)
                         notifyItemRemoved(pos)
+                        onChanged()
                     }
                 }
             }
+            holder.currentItem = item
         }
 
         override fun getItemCount() = overrides.size
@@ -1925,7 +1950,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         bottomSheetDialog.setContentView(dialogBinding.root)
 
         val overrides = viewModel.ttsOverrides.toMutableList()
-        val adapter = TTSOverrideAdapter(overrides)
+        val updateTest = {
+            val input = dialogBinding.ttsOverridesTestInput.text.toString()
+            val result = TTSHelper.applyOverrides(input, overrides)
+            dialogBinding.ttsOverridesTestResult.text = result
+        }
+
+        val adapter = TTSOverrideAdapter(overrides, updateTest)
         dialogBinding.ttsOverridesList.adapter = adapter
         dialogBinding.ttsOverridesList.layoutManager = LinearLayoutManager(this)
 
@@ -1937,12 +1968,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         dialogBinding.ttsOverridesSave.setOnClickListener {
             viewModel.ttsOverrides = overrides.toTypedArray()
             bottomSheetDialog.dismiss()
-        }
-
-        val updateTest = {
-            val input = dialogBinding.ttsOverridesTestInput.text.toString()
-            val result = TTSHelper.applyOverrides(input, overrides)
-            dialogBinding.ttsOverridesTestResult.text = result
         }
 
         dialogBinding.ttsOverridesTestInput.addTextChangedListener {
