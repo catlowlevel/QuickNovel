@@ -447,6 +447,14 @@ data class LiveChapterData(
     val title: UiText,
     val rawText: String,
     //val ttsLines: List<TTSHelper.TTSLine>
+
+    val summarizedRendered: Spanned? = null,
+    val summarizedSpans: List<TextSpan>? = null,
+    val isSummarized: Boolean = false,
+
+    val aiTranslatedRendered: Spanned? = null,
+    val aiTranslatedSpans: List<TextSpan>? = null,
+    val isAiTranslated: Boolean = false
 ) {
     val wordCount by lazy {
         originalRendered.toString().split(Regex("\\s+")).count { it.isNotBlank() }
@@ -454,7 +462,14 @@ data class LiveChapterData(
 
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
-        ttsParseText(rendered.substring(0, rendered.length), index)
+        val r = if (isSummarized) {
+            summarizedRendered ?: rendered
+        } else if (isAiTranslated) {
+            aiTranslatedRendered ?: rendered
+        } else {
+            rendered
+        }
+        ttsParseText(r.substring(0, r.length), index)
     }
 }
 
@@ -501,14 +516,18 @@ class ReadActivityViewModel : ViewModel() {
         get() = getKey<MLSettings>(EPUB_CURRENT_ML, book.title()) ?: MLSettings("en", "en", false)
         set(value) = setKey(EPUB_CURRENT_ML, book.title(), value)
 
+    var aiSettings
+        get() = getKey<AiSettings>(EPUB_AI_SETTINGS) ?: AiSettings()
+        set(value) = setKey(EPUB_AI_SETTINGS, value)
+
     private val _chapterData: MutableLiveData<ChapterUpdate> =
         MutableLiveData<ChapterUpdate>(null)
     val chapter: LiveData<ChapterUpdate> = _chapterData
 
     // we use bool as we cant construct Nothing, does not represent anything
-    val _loadingStatus: MutableLiveData<Resource<Boolean>> =
-        MutableLiveData<Resource<Boolean>>(null)
-    val loadingStatus: LiveData<Resource<Boolean>> = _loadingStatus
+    val _loadingStatus: MutableLiveData<Resource<Boolean>?> =
+        MutableLiveData<Resource<Boolean>?>(null)
+    val loadingStatus: LiveData<Resource<Boolean>?> = _loadingStatus
 
     private val _chaptersTitles: MutableLiveData<List<UiText>> =
         MutableLiveData<List<UiText>>(null)
@@ -581,7 +600,7 @@ class ReadActivityViewModel : ViewModel() {
     private val requested: HashSet<Int> = hashSetOf()
 
     private val loading: HashSet<Int> = hashSetOf()
-    private val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
+    val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
 
     private fun getChapterTitle(index: Int): UiText {
         val title = chaptersTitlesInternal.getOrNull(index) ?: return UiText.DynamicString("")
@@ -698,7 +717,13 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             is Resource.Success -> {
-                data.value.spans
+                if (data.value.isSummarized) {
+                    data.value.summarizedSpans ?: data.value.spans
+                } else if (data.value.isAiTranslated) {
+                    data.value.aiTranslatedSpans ?: data.value.spans
+                } else {
+                    data.value.spans
+                }
             }
 
             is Resource.Failure -> listOf<SpanDisplay>(
@@ -1167,10 +1192,182 @@ class ReadActivityViewModel : ViewModel() {
                 }
             }
         }
-
-        // update what we have read
         updateReadArea()
-        //refreshChapters()
+    }
+
+    fun summarizeChapter(index: Int, reload: Boolean = false) {
+        val data = chapterData[index]
+        if (data == null || data !is Resource.Success) return
+
+        val chapter = data.value
+        if (chapter.isSummarized && !reload) {
+            val updated = chapter.copy(isSummarized = false)
+            chapterData[index] = Resource.Success(updated)
+            updateReadArea()
+            return
+        }
+
+        if (chapter.summarizedRendered != null && !reload) {
+            val updated = chapter.copy(isSummarized = true, isAiTranslated = false)
+            chapterData[index] = Resource.Success(updated)
+            updateReadArea()
+            return
+        }
+
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
+            showToast("AI provider not configured")
+            return
+        }
+
+        ioSafe {
+            try {
+                _loadingStatus.postValue(Resource.Loading("Summarizing..."))
+                
+                val textToSummarize = chapter.originalRendered.toString()
+                val textHash = hashString(textToSummarize.toByteArray())
+                val providerName = aiSettings.providerType.name
+                val modelName = aiSettings.model.ifBlank { "default" }.replace(Regex("[^a-zA-Z0-9]"), "_")
+                val cacheFile = context?.cacheDir?.let { File(it, "ai_sum_${textHash}_${providerName}_${modelName}.txt") }
+
+                if (!reload && cacheFile?.exists() == true) {
+                    val summary = cacheFile.readText()
+                    val rendered = markwonMutex.withLock {
+                        markwon.render(markwon.parse(summary))
+                    }
+                    val spans = parseTextToSpans(rendered, index)
+                    val updated = chapter.copy(
+                        summarizedRendered = rendered,
+                        summarizedSpans = spans,
+                        isSummarized = true,
+                        isAiTranslated = false
+                    )
+                    chapterData[index] = Resource.Success(updated)
+                    updateReadArea()
+                    return@ioSafe
+                }
+
+                // Set the specific chapter to loading in the list to show local loading
+                chapterData[index] = Resource.Loading(null)
+                updateReadArea()
+
+                // Use originalRendered to avoid summarizing translated text
+                val summary = provider.summarize(textToSummarize)
+                
+                safe { cacheFile?.writeText(summary) }
+
+                val rendered = markwonMutex.withLock {
+                    markwon.render(markwon.parse(summary))
+                }
+                val spans = parseTextToSpans(rendered, index)
+
+                val updated = chapter.copy(
+                    summarizedRendered = rendered,
+                    summarizedSpans = spans,
+                    isSummarized = true,
+                    isAiTranslated = false
+                )
+
+                chapterData[index] = Resource.Success(updated)
+                updateReadArea()
+            } catch (e: Exception) {
+                logError(e)
+                showToast(e.message ?: "Failed to summarize")
+                // Ensure we stay on original
+                val updated = chapter.copy(isSummarized = false)
+                chapterData[index] = Resource.Success(updated)
+                updateReadArea()
+            } finally {
+                _loadingStatus.postValue(null)
+            }
+        }
+    }
+
+    fun aiTranslateChapter(index: Int, reload: Boolean = false) {
+        val data = chapterData[index]
+        if (data == null || data !is Resource.Success) return
+
+        val chapter = data.value
+        if (chapter.isAiTranslated && !reload) {
+            val updated = chapter.copy(isAiTranslated = false)
+            chapterData[index] = Resource.Success(updated)
+            updateReadArea()
+            return
+        }
+
+        if (chapter.aiTranslatedRendered != null && !reload) {
+            val updated = chapter.copy(isAiTranslated = true, isSummarized = false)
+            chapterData[index] = Resource.Success(updated)
+            updateReadArea()
+            return
+        }
+
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
+            showToast("AI provider not configured")
+            return
+        }
+
+        ioSafe {
+            try {
+                _loadingStatus.postValue(Resource.Loading("Translating with AI..."))
+                
+                val textToTranslate = chapter.originalRendered.toString()
+                val textHash = hashString(textToTranslate.toByteArray())
+                val providerName = aiSettings.providerType.name
+                val modelName = aiSettings.model.ifBlank { "default" }.replace(Regex("[^a-zA-Z0-9]"), "_")
+                val targetLang = aiSettings.targetLanguage.replace(Regex("[^a-zA-Z0-9]"), "_")
+                val cacheFile = context?.cacheDir?.let { File(it, "ai_tra_${textHash}_${providerName}_${modelName}_${targetLang}.txt") }
+
+                if (!reload && cacheFile?.exists() == true) {
+                    val translation = cacheFile.readText()
+                    val rendered = markwonMutex.withLock {
+                        markwon.render(markwon.parse(translation))
+                    }
+                    val spans = parseTextToSpans(rendered, index)
+                    val updated = chapter.copy(
+                        aiTranslatedRendered = rendered,
+                        aiTranslatedSpans = spans,
+                        isAiTranslated = true,
+                        isSummarized = false
+                    )
+                    chapterData[index] = Resource.Success(updated)
+                    updateReadArea()
+                    return@ioSafe
+                }
+
+                // Set the specific chapter to loading in the list to show local loading
+                chapterData[index] = Resource.Loading(null)
+                updateReadArea()
+
+                // Use originalRendered to avoid translating already translated text
+                val translation = provider.translate(textToTranslate, aiSettings.targetLanguage)
+
+                safe { cacheFile?.writeText(translation) }
+
+                val rendered = markwonMutex.withLock {
+                    markwon.render(markwon.parse(translation))
+                }
+                val spans = parseTextToSpans(rendered, index)
+
+                val updated = chapter.copy(
+                    aiTranslatedRendered = rendered,
+                    aiTranslatedSpans = spans,
+                    isAiTranslated = true,
+                    isSummarized = false
+                )
+
+                chapterData[index] = Resource.Success(updated)
+                updateReadArea()
+            } catch (e: Exception) {
+                logError(e)
+                showToast(e.message ?: "Failed to translate")
+                // Ensure we stay on original
+                val updated = chapter.copy(isAiTranslated = false)
+                chapterData[index] = Resource.Success(updated)
+                updateReadArea()
+            } finally {
+                _loadingStatus.postValue(null)
+            }
+        }
     }
 
     private suspend fun initMLFromSettings(settings: MLSettings, allowDownload: Boolean) {

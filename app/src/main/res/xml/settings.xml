@@ -121,6 +121,16 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+            android:key="ai"
+            android:title="@string/ai_settings"
+            app:isPreferenceVisible="true">
+        <Preference
+                android:icon="@drawable/ic_baseline_menu_book_24"
+                android:key="ai_settings_pref"
+                android:title="@string/ai_settings" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
             android:key="extra"
             android:title="@string/info"
             app:isPreferenceVisible="true">

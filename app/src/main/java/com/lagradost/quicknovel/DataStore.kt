@@ -64,7 +64,24 @@ const val EPUB_CURRENT_POSITION_SCROLL_CHAR: String = "reader_epub_position_scro
 const val EPUB_CURRENT_ML: String = "reader_epub_ml"
 const val EPUB_CURRENT_POSITION_READ_AT: String = "reader_epub_position_read"
 const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
+const val EPUB_AI_SETTINGS: String = "reader_epub_ai_settings"
 const val RESULT_BOOKMARK: String = "result_bookmarked"
+
+enum class AiProviderType {
+    Gemini,
+    OpenAI,
+    Claude,
+    Custom
+}
+
+data class AiSettings(
+    val providerType: AiProviderType = AiProviderType.Gemini,
+    val apiKey: String = "",
+    val model: String = "",
+    val customUrl: String = "",
+    val useAi: Boolean = false,
+    val targetLanguage: String = "English"
+)
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 const val HISTORY_FOLDER: String = "result_history"
 const val CURRENT_TAB : String = "current_tab"

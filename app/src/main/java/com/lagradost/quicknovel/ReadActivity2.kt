@@ -1201,7 +1201,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-        var last: Resource<Boolean> = Resource.Loading() // very dirty
+        var last: Resource<Boolean>? = Resource.Loading() // very dirty
         observe(viewModel.loadingStatus) { loading ->
             val different = last != loading
             last = loading
@@ -1240,6 +1240,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     binding.failText.text = loading.errorString
                     binding.readNormalLayout.isVisible = false
                 }
+
+                else -> {}
             }
         }
 
@@ -1388,6 +1390,66 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             val binding = ReadBottomSettingsBinding.inflate(layoutInflater, null, false)
             bottomSheetDialog.setContentView(binding.root)
+
+            binding.readSummarize.apply {
+                // Initial text
+                val data = viewModel.chapterData[viewModel.currentIndex]
+                if (data is Resource.Success) {
+                    text = if (data.value.isSummarized) {
+                        context.getString(R.string.restore_original)
+                    } else {
+                        context.getString(R.string.summarize_chapter)
+                    }
+                }
+
+                setOnClickListener {
+                    viewModel.summarizeChapter(viewModel.currentIndex)
+                    bottomSheetDialog.dismiss()
+                }
+
+                setOnLongClickListener {
+                    AlertDialog.Builder(context, R.style.AlertDialogCustom)
+                        .setTitle(R.string.ai_confirm_reload)
+                        .setMessage(R.string.ai_confirm_reload_msg)
+                        .setPositiveButton(R.string.download) { _, _ ->
+                            viewModel.summarizeChapter(viewModel.currentIndex, reload = true)
+                            bottomSheetDialog.dismiss()
+                        }
+                        .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+                        .show()
+                    true
+                }
+            }
+
+            binding.readAiTranslate.apply {
+                // Initial text
+                val data = viewModel.chapterData[viewModel.currentIndex]
+                if (data is Resource.Success) {
+                    text = if (data.value.isAiTranslated) {
+                        context.getString(R.string.restore_original)
+                    } else {
+                        context.getString(R.string.ai_translate_chapter)
+                    }
+                }
+
+                setOnClickListener {
+                    viewModel.aiTranslateChapter(viewModel.currentIndex)
+                    bottomSheetDialog.dismiss()
+                }
+
+                setOnLongClickListener {
+                    AlertDialog.Builder(context, R.style.AlertDialogCustom)
+                        .setTitle(R.string.ai_confirm_reload)
+                        .setMessage(R.string.ai_confirm_reload_msg)
+                        .setPositiveButton(R.string.download) { _, _ ->
+                            viewModel.aiTranslateChapter(viewModel.currentIndex, reload = true)
+                            bottomSheetDialog.dismiss()
+                        }
+                        .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+                        .show()
+                    true
+                }
+            }
 
             binding.readReadingType.setText(viewModel.readerType.stringRes)
             binding.readReadingType.setOnLongClickListener {

@@ -43,6 +43,28 @@
                 android:visibility="visible"
                 app:icon="@drawable/ic_baseline_autorenew_24" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/read_summarize"
+                style="@style/BlackButton"
+                android:layout_width="match_parent"
+                android:layout_marginStart="0dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="0dp"
+                android:text="@string/summarize_chapter"
+                android:visibility="visible"
+                app:icon="@drawable/ic_baseline_menu_book_24" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/read_ai_translate"
+                style="@style/BlackButton"
+                android:layout_width="match_parent"
+                android:layout_marginStart="0dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="0dp"
+                android:text="@string/ai_translate_chapter"
+                android:visibility="visible"
+                app:icon="@drawable/translate_24px" />
+
             <com.google.android.material.checkbox.MaterialCheckBox
                 android:id="@+id/read_settings_scroll_vol"
                 style="@style/WhiteCheckmark"

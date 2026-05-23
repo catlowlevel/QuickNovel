@@ -164,6 +164,20 @@
 
     <string name="home_more_info">More info</string>
     <string name="home_expanded_hide">Hide</string>
+    <string name="summarize_chapter">Summarize Chapter</string>
+    <string name="ai_translate_chapter">AI Translate Chapter</string>
+    <string name="ai_target_language">AI Target Language</string>
+    <string name="ai_confirm_reload">Confirm Reload</string>
+    <string name="ai_confirm_reload_msg">Are you sure you want to redo the API call? This will consume tokens.</string>
+    <string name="restore_original">Restore Original</string>
+    <string name="ai_settings">AI Settings</string>
+    <string name="ai_provider">AI Provider</string>
+    <string name="ai_api_key">API Key</string>
+    <string name="ai_model">Model</string>
+    <string name="ai_custom_url">Custom API URL (Optional)</string>
+    <string name="ai_fetch_models">Fetch Models</string>
+    <string name="ai_test_connection">Test Connection</string>
+
     <string name="reload_chapter">Reload Chapter</string>
     <string name="provider_lang_settings">Provider Languages</string>
     <string name="locale_settings">App Languages</string>

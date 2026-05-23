@@ -52,6 +52,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.lagradost.quicknovel.databinding.DialogAiSettingsBinding
+import com.lagradost.quicknovel.AiProviderType
+import com.lagradost.quicknovel.AiSettings
+import com.lagradost.quicknovel.DataStore.getKey
+import com.lagradost.quicknovel.DataStore.setKey
+import com.lagradost.quicknovel.EPUB_AI_SETTINGS
+import com.lagradost.quicknovel.ai.AiManager
+import androidx.core.view.isVisible
+import com.lagradost.quicknovel.util.UIHelper.dismissSafe
+import com.lagradost.quicknovel.util.UIHelper.popupMenu
+
 class SettingsFragment : PreferenceFragmentCompat() {
     private fun PreferenceFragmentCompat?.getPref(id: Int): Preference? {
         if (this == null) return null
@@ -509,6 +520,104 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     logError(e)
                 }
             }
+            return@setOnPreferenceClickListener true
+        }
+
+        findPreference<Preference>("ai_settings_pref")?.setOnPreferenceClickListener {
+            val context = it.context
+            val builder = AlertDialog.Builder(context, R.style.AlertDialogCustom)
+            val binding = DialogAiSettingsBinding.inflate(layoutInflater, null, false)
+            builder.setView(binding.root)
+
+            var currentSettings = context.getKey<AiSettings>(EPUB_AI_SETTINGS) ?: AiSettings()
+
+            fun updateUi() {
+                binding.aiProviderSelect.text = currentSettings.providerType.name
+                binding.aiApiKeyInput.setText(currentSettings.apiKey)
+                binding.aiModelInput.setText(currentSettings.model)
+                binding.aiTargetLanguageInput.setText(currentSettings.targetLanguage)
+                binding.aiCustomUrlInput.setText(currentSettings.customUrl)
+                binding.aiCustomUrlLayout.isVisible = currentSettings.providerType == AiProviderType.Custom
+            }
+
+            updateUi()
+
+            binding.aiProviderSelect.setOnClickListener { view ->
+                view.popupMenu(
+                    AiProviderType.entries.map { it.ordinal to txt(it.name) },
+                    selectedItemId = currentSettings.providerType.ordinal
+                ) {
+                    currentSettings = currentSettings.copy(providerType = AiProviderType.entries[itemId])
+                    updateUi()
+                }
+            }
+
+            binding.aiFetchModels.setOnClickListener {
+                val tempSettings = currentSettings.copy(
+                    apiKey = binding.aiApiKeyInput.text.toString(),
+                    model = binding.aiModelInput.text.toString(),
+                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
+                    customUrl = binding.aiCustomUrlInput.text.toString()
+                )
+                val provider = AiManager.getProvider(tempSettings)
+                if (provider == null) {
+                    showToast("Provider not configured")
+                    return@setOnClickListener
+                }
+                ioSafe {
+                    try {
+                        val models = provider.getModels()
+                        activity?.runOnUiThread {
+                            binding.root.popupMenu(
+                                models.mapIndexed { index, s -> index to txt(s) },
+                                selectedItemId = null
+                            ) {
+                                binding.aiModelInput.setText(models[itemId])
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logError(e)
+                        showToast(e.message)
+                    }
+                }
+            }
+
+            binding.aiTestConnection.setOnClickListener {
+                val tempSettings = currentSettings.copy(
+                    apiKey = binding.aiApiKeyInput.text.toString(),
+                    model = binding.aiModelInput.text.toString(),
+                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
+                    customUrl = binding.aiCustomUrlInput.text.toString()
+                )
+                val provider = AiManager.getProvider(tempSettings)
+                if (provider == null) {
+                    showToast("Provider not configured")
+                    return@setOnClickListener
+                }
+                ioSafe {
+                    try {
+                        provider.summarize("Test")
+                        showToast("Connection successful!")
+                    } catch (e: Exception) {
+                        logError(e)
+                        showToast("Connection failed: ${e.message}")
+                    }
+                }
+            }
+
+            builder.setPositiveButton(R.string.sort_apply) { _, _ ->
+                val finalSettings = currentSettings.copy(
+                    apiKey = binding.aiApiKeyInput.text.toString(),
+                    model = binding.aiModelInput.text.toString(),
+                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
+                    customUrl = binding.aiCustomUrlInput.text.toString(),
+                    useAi = true
+                )
+                context.setKey(EPUB_AI_SETTINGS, finalSettings)
+            }
+            builder.setNegativeButton(R.string.sort_cancel) { d, _ -> d.dismiss() }
+
+            builder.show()
             return@setOnPreferenceClickListener true
         }
 

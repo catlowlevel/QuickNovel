@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
@@ -557,6 +558,51 @@ object UIHelper {
                         ?.mutate()?.apply {
                             setTint(context.getResourceColor(android.R.attr.textColorPrimary))
                         }
+
+                    else -> emptyIcon
+                }
+            }
+        }
+
+        popup.setOnMenuItemClickListener {
+            it.onMenuItemClick()
+            true
+        }
+
+        popup.show()
+        return popup
+    }
+
+    @SuppressLint("RestrictedApi")
+    @JvmName("popupMenuUiText")
+    inline fun View.popupMenu(
+        items: List<Pair<Int, UiText>>,
+        selectedItemId: Int? = null,
+        noinline onMenuItemClick: MenuItem.() -> Unit,
+    ): PopupMenu {
+        val ctw = ContextThemeWrapper(context, R.style.PopupMenu)
+        val popup = PopupMenu(
+            ctw,
+            this,
+            Gravity.NO_GRAVITY,
+            androidx.appcompat.R.attr.actionOverflowMenuStyle,
+            0
+        )
+
+        items.forEach { (id, uiText) ->
+            popup.menu.add(0, id, 0, uiText.asString(context))
+        }
+
+        if (popup.menu is MenuBuilder) {
+            val menuBuilder = popup.menu as MenuBuilder
+            menuBuilder.setOptionalIconsVisible(true)
+            val emptyIcon = ColorDrawable(Color.TRANSPARENT)
+            for (item in menuBuilder.visibleItems) {
+                item.icon = when {
+                    item.itemId == selectedItemId -> context.resources.getDrawable(
+                        R.drawable.ic_baseline_check_24,
+                        context.theme
+                    )
 
                     else -> emptyIcon
                 }
