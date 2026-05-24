@@ -552,18 +552,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             getBottomY()
         }
 
-        if (viewModel.ttsLock) {
-            lockTop = currentScroll + (top.top - topBar)
-            lockBottom = currentScroll + (bottom.bottom - bottomBar)
-        } else {
-            lockTop = null
-            lockBottom = null
-        }
-
-        // binding.tmpTtsStart.fixLine(top.top)
-        //binding.tmpTtsEnd.fixLine(bottom.bottom)
-
-        if (viewModel.ttsAutoCenter) {
+        val plannedDelta = if (viewModel.ttsAutoCenter) {
             val center = (topBar + bottomBar) / 2
             val innerIndex = top.innerIndex
             val paragraphLines = lines.filter { it.index == top.index && it.innerIndex == innerIndex }
@@ -587,21 +576,70 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     delta = bottom.bottom - bottomBar
                 }
             }
-
-            if (delta.absoluteValue > 2 && binding.realText.canScrollVertically(delta)) {
-                binding.realText.smoothScrollBy(0, delta)
-            }
+            delta
         } else {
             val topScroll = top.top - topBar
             val bottomScroll = bottom.bottom - bottomBar
 
             // we have reached the end, scroll to the top
             if (bottomScroll > 0) {
-                binding.realText.scrollBy(0, topScroll)
+                topScroll
             }
             // we have scrolled up while being on top
             else if (topScroll < 0) {
-                binding.realText.scrollBy(0, topScroll)
+                topScroll
+            } else {
+                0
+            }
+        }
+
+        var avoidanceDelta = 0
+        if (binding.readerTtsFloatingControl.isVisible) {
+            val controlLocation = IntArray(2)
+            binding.readerTtsFloatingControl.getLocationInWindow(controlLocation)
+            val controlTop = controlLocation[1]
+            val controlBottom = controlTop + binding.readerTtsFloatingControl.height
+
+            val expectedTop = top.top - plannedDelta
+            val expectedBottom = bottom.bottom - plannedDelta
+
+            if (expectedTop < controlBottom && expectedBottom > controlTop) {
+                val shiftUp = expectedBottom - controlTop // > 0
+                val shiftDown = expectedTop - controlBottom // < 0
+
+                val canPushUp = (expectedTop - shiftUp >= topBar)
+                val canPushDown = (expectedBottom - shiftDown <= bottomBar)
+
+                avoidanceDelta = when {
+                    canPushUp && canPushDown -> {
+                        if (shiftUp <= -shiftDown) shiftUp else shiftDown
+                    }
+                    canPushUp -> shiftUp
+                    canPushDown -> shiftDown
+                    else -> 0 // Fallback: center sentence as normal (avoidanceDelta = 0)
+                }
+            }
+        }
+
+        if (viewModel.ttsLock) {
+            lockTop = currentScroll + (top.top - topBar) - avoidanceDelta
+            lockBottom = currentScroll + (bottom.bottom - bottomBar) - avoidanceDelta
+        } else {
+            lockTop = null
+            lockBottom = null
+        }
+
+        // binding.tmpTtsStart.fixLine(top.top)
+        //binding.tmpTtsEnd.fixLine(bottom.bottom)
+
+        val totalDelta = plannedDelta + avoidanceDelta
+        if (viewModel.ttsAutoCenter) {
+            if (totalDelta.absoluteValue > 2 && binding.realText.canScrollVertically(totalDelta)) {
+                binding.realText.smoothScrollBy(0, totalDelta)
+            }
+        } else {
+            if (totalDelta != 0) {
+                binding.realText.scrollBy(0, totalDelta)
             }
         }
     }
