@@ -656,10 +656,10 @@ object TTSHelper {
     }
 
     private fun isValidSpeakOutMsg(msg: String): Boolean {
-        return msg.isNotEmpty() && msg.isNotBlank() && msg.contains("[A-z0-9]".toRegex())
+        return msg.isNotEmpty() && msg.isNotBlank() && msg.any { it.isLetterOrDigit() }
     }
 
-    fun ttsParseText(text: String, tag: Int): ArrayList<TTSLine> {
+    fun ttsParseText(text: String, tag: Int, charOffset: Int = 0): ArrayList<TTSLine> {
         val ttsLines = ArrayList<TTSLine>()
 
         val invalidStartChars =
@@ -686,15 +686,33 @@ object TTSHelper {
             while (i < text.length) {
                 val c = text[i]
                 if (c == '.' || c == '!' || c == '?' || c == ':' || c == ';' || c == '\n') {
+                    if (c == '\n') {
+                        endIndex = i + 1
+                        break
+                    }
+
                     // Peek ahead to handle multiple punctuation (e.g., ?! or ...)
                     var j = i + 1
                     while (j < text.length && (text[j] == '.' || text[j] == '!' || text[j] == '?' || text[j] == ':' || text[j] == ';')) {
                         j++
                     }
 
-                    // Check if it's an abbreviation like "A.I." or "Mr."
-                    // Simple heuristic: if it's a period and the previous char is a single capital letter, don't split unless followed by whitespace and another capital
-                    val isAbbreviation = c == '.' && i > 0 && text[i - 1].isUpperCase() && (i == 1 || text[i - 2].isWhitespace() || text[i - 2] == '.')
+                    // Check if it's an abbreviation like "A.I." or "i.e."
+                    var isAbbreviation = false
+                    if (c == '.') {
+                        if (j < text.length && (text[j].isUpperCase() || text[j].isDigit())) {
+                            // "A.I." or "3.14"
+                            isAbbreviation = true
+                        } else {
+                            // Look ahead after whitespace
+                            var m = j
+                            while (m < text.length && text[m].isWhitespace()) m++
+                            // If followed by lowercase, it's likely an abbreviation (e.g., "e.g. something")
+                            if (m < text.length && text[m].isLowerCase()) {
+                                isAbbreviation = true
+                            }
+                        }
+                    }
 
                     // Sentence boundary: punctuation followed by whitespace or end of string
                     if (!isAbbreviation && (j == text.length || text[j].isWhitespace() || text[j] == '\"' || text[j] == '\'' || text[j] == '’' || text[j] == '”' || text[j] == '»' || text[j] == '」')) {
@@ -757,7 +775,7 @@ object TTSHelper {
                         .replace(".", "").isNotEmpty()
                 ) {
                     if (isValidSpeakOutMsg(msg)) {
-                        ttsLines.add(TTSLine(msg, index, endIndex, index = tag))
+                        ttsLines.add(TTSLine(msg, index + charOffset, endIndex + charOffset, index = tag))
                     }
                 }
             } catch (t: Throwable) {
