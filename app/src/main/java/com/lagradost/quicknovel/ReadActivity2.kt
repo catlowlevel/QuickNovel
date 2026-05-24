@@ -971,8 +971,19 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                                 isDragging = true
                                 v.isPressed = false
                             }
-                            view.translationX = initialX + dx
-                            view.translationY = initialY + dy
+                            val parentView = view.parent as? View
+                            if (parentView != null && parentView.width > 0 && parentView.height > 0) {
+                                val minX = -view.left.toFloat()
+                                val maxX = (parentView.width - view.left - view.width).toFloat()
+                                val minY = -view.top.toFloat()
+                                val maxY = (parentView.height - view.top - view.height).toFloat()
+
+                                view.translationX = if (minX <= maxX) (initialX + dx).coerceIn(minX, maxX) else initialX + dx
+                                view.translationY = if (minY <= maxY) (initialY + dy).coerceIn(minY, maxY) else initialY + dy
+                            } else {
+                                view.translationX = initialX + dx
+                                view.translationY = initialY + dy
+                            }
                         }
                         true
                     }
@@ -2017,6 +2028,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     if (pos != RecyclerView.NO_POSITION) {
                         overrides.removeAt(pos)
                         notifyItemRemoved(pos)
+                        notifyItemRangeChanged(pos, overrides.size - pos)
                         onChanged()
                     }
                 }

@@ -1241,13 +1241,17 @@ class ReadActivityViewModel : ViewModel() {
                         isSummarized = true,
                         isAiTranslated = false
                     )
-                    chapterData[index] = Resource.Success(updated)
+                    chapterMutex.withLock {
+                        chapterData[index] = Resource.Success(updated)
+                    }
                     updateReadArea()
                     return@ioSafe
                 }
 
                 // Set the specific chapter to loading in the list to show local loading
-                chapterData[index] = Resource.Loading(null)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Loading(null)
+                }
                 updateReadArea()
 
                 // Use originalRendered to avoid summarizing translated text
@@ -1267,14 +1271,18 @@ class ReadActivityViewModel : ViewModel() {
                     isAiTranslated = false
                 )
 
-                chapterData[index] = Resource.Success(updated)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Success(updated)
+                }
                 updateReadArea()
             } catch (e: Exception) {
                 logError(e)
                 showToast(e.message ?: "Failed to summarize")
                 // Ensure we stay on original
                 val updated = chapter.copy(isSummarized = false)
-                chapterData[index] = Resource.Success(updated)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Success(updated)
+                }
                 updateReadArea()
             } finally {
                 _loadingStatus.postValue(null)
@@ -1329,13 +1337,17 @@ class ReadActivityViewModel : ViewModel() {
                         isAiTranslated = true,
                         isSummarized = false
                     )
-                    chapterData[index] = Resource.Success(updated)
+                    chapterMutex.withLock {
+                        chapterData[index] = Resource.Success(updated)
+                    }
                     updateReadArea()
                     return@ioSafe
                 }
 
                 // Set the specific chapter to loading in the list to show local loading
-                chapterData[index] = Resource.Loading(null)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Loading(null)
+                }
                 updateReadArea()
 
                 // Use originalRendered to avoid translating already translated text
@@ -1355,14 +1367,18 @@ class ReadActivityViewModel : ViewModel() {
                     isSummarized = false
                 )
 
-                chapterData[index] = Resource.Success(updated)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Success(updated)
+                }
                 updateReadArea()
             } catch (e: Exception) {
                 logError(e)
                 showToast(e.message ?: "Failed to translate")
                 // Ensure we stay on original
                 val updated = chapter.copy(isAiTranslated = false)
-                chapterData[index] = Resource.Success(updated)
+                chapterMutex.withLock {
+                    chapterData[index] = Resource.Success(updated)
+                }
                 updateReadArea()
             } finally {
                 _loadingStatus.postValue(null)
