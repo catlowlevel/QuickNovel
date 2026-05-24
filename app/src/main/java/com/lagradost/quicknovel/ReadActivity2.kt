@@ -455,7 +455,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val rvLocation = IntArray(2)
         binding.realText.getLocationInWindow(rvLocation)
         val rvTop = rvLocation[1]
-        val targetCenter = (getTopY() + getBottomY()) / 2 - rvTop
+
+        val topBar = topBarHeight
+        val bottomBar = if (binding.readerBottomViewHolder.isVisible) {
+            val outLocation = IntArray(2)
+            binding.readerBottomViewHolder.getLocationInWindow(outLocation)
+            outLocation[1]
+        } else {
+            getBottomY()
+        }
+
+        val targetCenter = (topBar + bottomBar) / 2 - rvTop
 
         val smoothScroller = object : LinearSmoothScroller(this) {
             override fun calculateDtToFit(
@@ -533,9 +543,18 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             return
         }
 
+        val topBar = topBarHeight
+        val bottomBar = if (binding.readerBottomViewHolder.isVisible) {
+            val outLocation = IntArray(2)
+            binding.readerBottomViewHolder.getLocationInWindow(outLocation)
+            outLocation[1]
+        } else {
+            getBottomY()
+        }
+
         if (viewModel.ttsLock) {
-            lockTop = currentScroll + (top.top - getTopY())
-            lockBottom = currentScroll + (bottom.bottom - getBottomY())
+            lockTop = currentScroll + (top.top - topBar)
+            lockBottom = currentScroll + (bottom.bottom - bottomBar)
         } else {
             lockTop = null
             lockBottom = null
@@ -545,7 +564,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         //binding.tmpTtsEnd.fixLine(bottom.bottom)
 
         if (viewModel.ttsAutoCenter) {
-            val center = (getTopY() + getBottomY()) / 2
+            val center = (topBar + bottomBar) / 2
             val innerIndex = top.innerIndex
             val paragraphLines = lines.filter { it.index == top.index && it.innerIndex == innerIndex }
 
@@ -554,16 +573,18 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             val paragraphCenter = (paragraphTop + paragraphBottom) / 2
             var delta = paragraphCenter - center
 
+            val visibleHeight = bottomBar - topBar
             // Safety: Ensure current sentence is visible
-            if (bottom.bottom - top.top > getBottomY() - getTopY()) {
-                // Sentence larger than screen, center it
+            // if a paragraph is larger than the screen, then center the currently read sentences instead
+            if (paragraphBottom - paragraphTop > visibleHeight || bottom.bottom - top.top > visibleHeight) {
+                // Paragraph or sentence larger than screen, center the sentence instead
                 delta = (top.top + bottom.bottom) / 2 - center
             } else {
-                if (top.top - delta < getTopY()) {
-                    delta = top.top - getTopY()
+                if (top.top - delta < topBar) {
+                    delta = top.top - topBar
                 }
-                if (bottom.bottom - delta > getBottomY()) {
-                    delta = bottom.bottom - getBottomY()
+                if (bottom.bottom - delta > bottomBar) {
+                    delta = bottom.bottom - bottomBar
                 }
             }
 
@@ -571,8 +592,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 binding.realText.smoothScrollBy(0, delta)
             }
         } else {
-            val topScroll = top.top - getTopY()
-            val bottomScroll = bottom.bottom - getBottomY()
+            val topScroll = top.top - topBar
+            val bottomScroll = bottom.bottom - bottomBar
 
             // we have reached the end, scroll to the top
             if (bottomScroll > 0) {
