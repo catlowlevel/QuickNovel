@@ -660,29 +660,14 @@ object TTSHelper {
     }
 
     fun ttsParseText(text: String, tag: Int): ArrayList<TTSLine> {
-        val cleanText = text
-            .replace("\\.([A-z])".toRegex(), ",$1")//\.([A-z]) \.([^-\s])
-            .replace("([.:])([0-9])".toRegex(), ",$2") // GOOD FOR DECIMALS
-            .replace(
-                "(^|[ \"“‘'])(Dr|Mr|Mrs)\\. ([A-Z])".toRegex(),
-                "$1$2, $3"
-            )
-
-        //println("SIZE: ${text.length}")
-
-        debugAssert({ cleanText.length != text.length }) {
-            "TTS requires same length"
-        }
-
         val ttsLines = ArrayList<TTSLine>()
-
 
         val invalidStartChars =
             arrayOf(
                 ' ', '.', ',', '\n', '\"',
                 '\'', '’', '‘', '“', '”', '«', '»', '「', '」', '…', '[', ']'
             )
-        val endingCharacters = arrayOf(".", "\n", ";", "?", ":")
+
         var index = 0
         while (true) {
             if (index >= text.length) {
@@ -695,31 +680,41 @@ object TTSHelper {
                 }
             }
 
-            var endIndex = Int.MAX_VALUE
-            for (a in endingCharacters) {
-                val indexEnd = cleanText.indexOf(a, index)
+            // Find the end of the sentence
+            var endIndex = text.length
+            var i = index
+            while (i < text.length) {
+                val c = text[i]
+                if (c == '.' || c == '!' || c == '?' || c == ':' || c == ';' || c == '\n') {
+                    // Peek ahead to handle multiple punctuation (e.g., ?! or ...)
+                    var j = i + 1
+                    while (j < text.length && (text[j] == '.' || text[j] == '!' || text[j] == '?' || text[j] == ':' || text[j] == ';')) {
+                        j++
+                    }
 
-                if (indexEnd == -1) continue
+                    // Check if it's an abbreviation like "A.I." or "Mr."
+                    // Simple heuristic: if it's a period and the previous char is a single capital letter, don't split unless followed by whitespace and another capital
+                    val isAbbreviation = c == '.' && i > 0 && text[i - 1].isUpperCase() && (i == 1 || text[i - 2].isWhitespace() || text[i - 2] == '.')
 
-                if (indexEnd < endIndex) {
-                    endIndex = indexEnd + 1
+                    // Sentence boundary: punctuation followed by whitespace or end of string
+                    if (!isAbbreviation && (j == text.length || text[j].isWhitespace() || text[j] == '\"' || text[j] == '\'' || text[j] == '’' || text[j] == '”' || text[j] == '»' || text[j] == '」')) {
+                        endIndex = j
+                        break
+                    }
+                    i = j - 1 // Move to the end of the punctuation sequence
                 }
+                i++
             }
 
-
-            if (endIndex > text.length) {
-                endIndex = text.length
-            }
             if (index >= text.length) {
                 break
             }
 
-            val invalidEndChars =
-                arrayOf('\n')
+            val invalidEndChars = arrayOf('\n')
             while (true) {
                 var containsInvalidEndChar = false
                 for (a in invalidEndChars) {
-                    if (endIndex <= 0 || endIndex > text.length) break
+                    if (endIndex <= index || endIndex > text.length) break
                     if (text[endIndex - 1] == a) {
                         containsInvalidEndChar = true
                         endIndex--
@@ -730,8 +725,12 @@ object TTSHelper {
                 }
             }
 
+            if (index >= endIndex) {
+                if (index < text.length) index++
+                continue
+            }
+
             try {
-                // THIS PART IF FOR THE SPEAK PART, REMOVING STUFF THAT IS WACK
                 val message = text.substring(index, endIndex)
                 var msg = message
                 val invalidChars =
@@ -748,7 +747,7 @@ object TTSHelper {
                         "*",
                         "~",
                         "\u200c" // Zero width joiner
-                    ) // "\'", //Don't ect
+                    )
                 for (c in invalidChars) {
                     msg = msg.replace(c, " ")
                 }
@@ -765,9 +764,6 @@ object TTSHelper {
                 break
             }
             index = endIndex
-            if (text.getOrNull(index)?.isWhitespace() == true) {
-                index++
-            }
         }
 
         return ttsLines
