@@ -328,5 +328,9 @@
     <string name="replacement_text">Replacement</string>
     <string name="use_regex">Use Regex</string>
     <string name="case_sensitive">Case Sensitive</string>
+    <string name="tts_local_tab">Local</string>
+    <string name="tts_global_tab">Global</string>
+    <string name="tts_override_local_warn">Duplicates a global rule (local overrides global)</string>
+    <string name="tts_override_global_warn">Duplicates a local rule (global is ignored here)</string>
     <string name="chapter_word_count">%1$s (%2$d words)</string>
 </resources>

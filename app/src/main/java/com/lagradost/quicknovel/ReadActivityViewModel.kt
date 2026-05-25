@@ -1529,6 +1529,7 @@ class ReadActivityViewModel : ViewModel() {
     fun init(book: AbstractBook, context: Context) {
         this.book = book
         _title.postValue(book.title())
+        ttsSession?.overrides = getCombinedTtsOverrides()
 
         updateChapters()
         val imageLoader: ImageLoader = SingletonImageLoader.get(context)
@@ -2074,11 +2075,44 @@ class ReadActivityViewModel : ViewModel() {
             ttsPitchKey = value
         }
 
-    var ttsOverrides: Array<TTSOverride>
+    var ttsOverridesGlobal: Array<TTSOverride>
         get() = getKey(EPUB_TTS_OVERRIDES) ?: emptyArray()
         set(value) {
             setKey(EPUB_TTS_OVERRIDES, value)
-            ttsSession?.overrides = value.toList()
+            ttsSession?.overrides = getCombinedTtsOverrides()
+        }
+
+    var ttsOverridesLocal: Array<TTSOverride>
+        get() = if (::book.isInitialized) {
+            getKey(EPUB_TTS_OVERRIDES_LOCAL, book.title()) ?: emptyArray()
+        } else {
+            emptyArray()
+        }
+        set(value) {
+            if (::book.isInitialized) {
+                setKey(EPUB_TTS_OVERRIDES_LOCAL, book.title(), value)
+                ttsSession?.overrides = getCombinedTtsOverrides()
+            }
+        }
+
+    fun getCombinedTtsOverrides(): List<TTSOverride> {
+        val locals = ttsOverridesLocal
+        val globals = ttsOverridesGlobal
+        val combined = mutableListOf<TTSOverride>()
+        combined.addAll(locals)
+        val localOriginals = locals.map { it.original }.toSet()
+        for (global in globals) {
+            if (global.original !in localOriginals) {
+                combined.add(global)
+            }
+        }
+        return combined
+    }
+
+    var ttsOverrides: Array<TTSOverride>
+        get() = getCombinedTtsOverrides().toTypedArray()
+        set(value) {
+            ttsOverridesGlobal = value
         }
 
 

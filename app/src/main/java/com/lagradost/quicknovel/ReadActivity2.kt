@@ -48,6 +48,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.tabs.TabLayout
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
@@ -2006,12 +2007,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     }
 
     private class TTSOverrideAdapter(
-        val overrides: MutableList<TTSOverride>,
+        var overrides: MutableList<TTSOverride>,
+        val isLocalTab: () -> Boolean,
+        val getAlternateOverrides: () -> MutableList<TTSOverride>,
         private val onChanged: () -> Unit
     ) :
         RecyclerView.Adapter<TTSOverrideAdapter.ViewHolder>() {
 
-        class ViewHolder(val binding: TtsOverrideItemBinding, onChanged: () -> Unit) :
+        inner class ViewHolder(val binding: TtsOverrideItemBinding, onChanged: () -> Unit) :
             RecyclerView.ViewHolder(binding.root) {
             var currentItem: TTSOverride? = null
 
@@ -2024,6 +2027,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     val text = it.toString()
                     currentItem?.original = text
                     onChanged()
+                    currentItem?.let { item -> updateWarning(this, item) }
                 }
                 binding.overrideReplacement.addTextChangedListener {
                     val text = it.toString()
@@ -2038,6 +2042,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     currentItem?.caseSensitive = isChecked
                     onChanged()
                 }
+            }
+        }
+
+        private fun updateWarning(holder: ViewHolder, item: TTSOverride) {
+            val currentOriginal = item.original.trim()
+            if (currentOriginal.isNotEmpty()) {
+                val alternateOriginals = getAlternateOverrides().map { it.original.trim() }.toSet()
+                if (currentOriginal in alternateOriginals) {
+                    holder.binding.overrideWarning.visibility = View.VISIBLE
+                    holder.binding.overrideWarning.text = holder.binding.root.context.getString(
+                        if (isLocalTab()) R.string.tts_override_local_warn else R.string.tts_override_global_warn
+                    )
+                } else {
+                    holder.binding.overrideWarning.visibility = View.GONE
+                }
+            } else {
+                holder.binding.overrideWarning.visibility = View.GONE
             }
         }
 
@@ -2061,6 +2082,25 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 overrideRegex.isChecked = item.useRegex
                 overrideCaseSensitive.isChecked = item.caseSensitive
 
+                updateWarning(holder, item)
+
+                if (isLocalTab()) {
+                    overrideMove.setImageResource(R.drawable.ic_baseline_public_24)
+                } else {
+                    overrideMove.setImageResource(R.drawable.ic_baseline_menu_book_24)
+                }
+
+                overrideMove.setOnClickListener {
+                    val pos = holder.bindingAdapterPosition
+                    if (pos != RecyclerView.NO_POSITION) {
+                        val itemToMove = overrides.removeAt(pos)
+                        getAlternateOverrides().add(itemToMove)
+                        notifyItemRemoved(pos)
+                        notifyItemRangeChanged(pos, overrides.size - pos)
+                        onChanged()
+                    }
+                }
+
                 overrideDelete.setOnClickListener {
                     val pos = holder.bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) {
@@ -2082,24 +2122,51 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val dialogBinding = TtsOverridesDialogBinding.inflate(layoutInflater)
         bottomSheetDialog.setContentView(dialogBinding.root)
 
-        val overrides = viewModel.ttsOverrides.toMutableList()
+        val localOverrides = viewModel.ttsOverridesLocal.toMutableList()
+        val globalOverrides = viewModel.ttsOverridesGlobal.toMutableList()
+
+        val tabLayout = dialogBinding.ttsOverridesTabs
+        val localTab = tabLayout.newTab().setText(R.string.tts_local_tab)
+        val globalTab = tabLayout.newTab().setText(R.string.tts_global_tab)
+        tabLayout.addTab(localTab)
+        tabLayout.addTab(globalTab)
+
         val updateTest = {
             val input = dialogBinding.ttsOverridesTestInput.text.toString()
-            val result = TTSHelper.applyOverrides(input, overrides)
+            val activeOverrides = if (tabLayout.selectedTabPosition == 0) localOverrides else globalOverrides
+            val result = TTSHelper.applyOverrides(input, activeOverrides)
             dialogBinding.ttsOverridesTestResult.text = result
         }
 
-        val adapter = TTSOverrideAdapter(overrides, updateTest)
+        val adapter = TTSOverrideAdapter(
+            localOverrides,
+            isLocalTab = { tabLayout.selectedTabPosition == 0 },
+            getAlternateOverrides = { if (tabLayout.selectedTabPosition == 0) globalOverrides else localOverrides },
+            onChanged = updateTest
+        )
         dialogBinding.ttsOverridesList.adapter = adapter
         dialogBinding.ttsOverridesList.layoutManager = LinearLayoutManager(this)
 
+        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                val isLocal = tab?.position == 0
+                adapter.overrides = if (isLocal) localOverrides else globalOverrides
+                adapter.notifyDataSetChanged()
+                updateTest()
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {}
+        })
+
         dialogBinding.ttsOverridesAdd.setOnClickListener {
-            overrides.add(TTSOverride("", ""))
-            adapter.notifyItemInserted(overrides.size - 1)
+            val activeOverrides = if (tabLayout.selectedTabPosition == 0) localOverrides else globalOverrides
+            activeOverrides.add(TTSOverride("", ""))
+            adapter.notifyItemInserted(activeOverrides.size - 1)
         }
 
         dialogBinding.ttsOverridesSave.setOnClickListener {
-            viewModel.ttsOverrides = overrides.toTypedArray()
+            viewModel.ttsOverridesLocal = localOverrides.toTypedArray()
+            viewModel.ttsOverridesGlobal = globalOverrides.toTypedArray()
             bottomSheetDialog.dismiss()
         }
 

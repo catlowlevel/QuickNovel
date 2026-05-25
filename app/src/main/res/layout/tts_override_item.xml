@@ -48,7 +48,24 @@
                 android:textColor="?attr/textColor"
                 android:textColorHint="@color/white_attr_20"
                 android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/override_warning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/colorOngoing"
+                android:textSize="11sp"
+                android:paddingVertical="2dp"
+                android:visibility="gone" />
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/override_move"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_baseline_public_24"
+            app:tint="?attr/white" />
 
         <ImageButton
             android:id="@+id/override_delete"
