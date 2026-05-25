@@ -697,20 +697,34 @@ object TTSHelper {
                         j++
                     }
 
-                    // Check if it's an abbreviation like "A.I." or "i.e."
+                    // Check if it's an abbreviation like "A.I.", "i.e.", "Mr.", "Dr."
                     var isAbbreviation = false
                     if (c == '.') {
-                        if (j < text.length && (text[j].isUpperCase() || text[j].isDigit())) {
-                            // "A.I." or "3.14"
+                        // 1. Single letter initials like "J. K. Rowling" or "U.S.A."
+                        val isSingleLetterInitial = i > 0 && text[i - 1].isUpperCase() && (i == 1 || text[i - 2].isWhitespace() || text[i - 2] == '.')
+
+                        // 2. Lookahead for uppercase/digits without space (e.g. "A.I.", "3.14")
+                        val isFollowedByUpperOrDigitNoSpace = j < text.length && (text[j].isUpperCase() || text[j].isDigit())
+
+                        // 3. Lookahead after whitespace for lowercase (e.g. "e.g. something")
+                        var m = j
+                        while (m < text.length && text[m].isWhitespace()) m++
+                        val isFollowedByLowercase = m < text.length && text[m].isLowerCase()
+
+                        // 4. Dynamic heuristics for abbreviation:
+                        var k = i - 1
+                        while (k >= 0 && (text[k].isLetter() || text[k] == '.')) {
+                            k--
+                        }
+                        val precedingWord = text.substring(k + 1, i)
+
+                        // - It contains internal periods (e.g. "e.g", "i.e", "a.m", "p.m", "U.S")
+                        val hasInternalPeriod = precedingWord.contains('.')
+                        // - It contains no vowels (e.g. "Mr", "Mrs", "Dr", "Ms", "St", "vs", "ltd", "Sgt", "Cpl", "Pvt")
+                        val isVowelless = precedingWord.isNotEmpty() && precedingWord.none { it in "aeiouyAEIOUY" }
+
+                        if (isSingleLetterInitial || isFollowedByUpperOrDigitNoSpace || isFollowedByLowercase || hasInternalPeriod || isVowelless) {
                             isAbbreviation = true
-                        } else {
-                            // Look ahead after whitespace
-                            var m = j
-                            while (m < text.length && text[m].isWhitespace()) m++
-                            // If followed by lowercase, it's likely an abbreviation (e.g., "e.g. something")
-                            if (m < text.length && text[m].isLowerCase()) {
-                                isAbbreviation = true
-                            }
                         }
                     }
 
