@@ -856,6 +856,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 bionicReading = viewModel.bionicReading,
                 isTextSelectable = viewModel.isTextSelectable,
                 verticalPadding = viewModel.textVerticalPadding,
+                ttsBlurUpcoming = viewModel.ttsBlurUpcoming,
             ).also { config ->
                 updateOtherTextConfig(config)
             }
@@ -909,6 +910,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
         observe(viewModel.isTextSelectableLive) { isTextSelectable ->
             if (textAdapter.changeTextSelectable(isTextSelectable)) {
+                updateTextAdapterConfig()
+            }
+        }
+        observe(viewModel.ttsBlurUpcomingLive) { blurUpcoming ->
+            if (textAdapter.changeTTSBlurUpcoming(blurUpcoming)) {
                 updateTextAdapterConfig()
             }
         }
@@ -1912,6 +1918,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 binding.readSettingsFloatingTts.isChecked = viewModel.floatingTTSSettings
                 binding.readSettingsFloatingTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.floatingTTSSettings = isChecked
+                }
+
+                binding.readSettingsBlurUpcoming.isChecked = viewModel.ttsBlurUpcoming
+                binding.readSettingsBlurUpcoming.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.ttsBlurUpcoming = isChecked
                 }
 
                 binding.readSettingsShowTime.isChecked = viewModel.showTime

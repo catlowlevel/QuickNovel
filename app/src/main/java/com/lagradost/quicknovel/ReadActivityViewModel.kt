@@ -2134,6 +2134,14 @@ class ReadActivityViewModel : ViewModel() {
         bionicReadingLive
     )
 
+    val ttsBlurUpcomingLive: MutableLiveData<Boolean> = MutableLiveData(null)
+    var ttsBlurUpcoming by PreferenceDelegateLiveView(
+        EPUB_TTS_BLUR_UPCOMING,
+        false,
+        Boolean::class,
+        ttsBlurUpcomingLive
+    )
+
     val isTextSelectableLive: MutableLiveData<Boolean> = MutableLiveData(null)
     var isTextSelectable by PreferenceDelegateLiveView(
         EPUB_TEXT_SELECTABLE,

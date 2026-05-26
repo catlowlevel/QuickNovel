@@ -123,47 +123,102 @@ fun TextVisualLine.toScroll(): ScrollIndex {
     return ScrollIndex(index = this.index, innerIndex = this.innerIndex, char = this.startChar)
 }
 
-fun removeHighLightedText(tv: TextView) {
+fun removeHighlightAndBlur(tv: TextView) {
     val wordToSpan: Spannable = SpannableString(tv.text)
-
-    val spans = wordToSpan.getSpans<android.text.Annotation>(0, tv.text.length)
+    val length = tv.text.length
     var shouldUpdate = false
-    for (s in spans) {
+
+    // Remove rounded background annotations
+    val annotations = wordToSpan.getSpans<android.text.Annotation>(0, length)
+    for (s in annotations) {
         if (s.value == "rounded") {
             wordToSpan.removeSpan(s)
             shouldUpdate = true
         }
     }
 
-    // no need to re render an untouched textview
+    // Remove MaskFilterSpans used for blurring
+    val maskFilterSpans = wordToSpan.getSpans<android.text.style.MaskFilterSpan>(0, length)
+    for (s in maskFilterSpans) {
+        wordToSpan.removeSpan(s)
+        shouldUpdate = true
+    }
+
     if (shouldUpdate) {
         tv.setText(wordToSpan, TextView.BufferType.SPANNABLE)
     }
 }
 
-fun setHighLightedText(tv: TextView, start: Int, end: Int) {
+fun setHighlightAndBlur(
+    tv: TextView,
+    highlightStart: Int?,
+    highlightEnd: Int?,
+    blurStart: Int?,
+    blurEnd: Int?
+) {
     try {
         val wordToSpan: Spannable = SpannableString(tv.text)
         val length = tv.text.length
-        val spans = wordToSpan.getSpans<android.text.Annotation>(0, length)
 
-        // remove previous HighLighted text
-        for (s in spans) {
-            if (s.value == "rounded")
+        // Clear previous highlight annotations
+        val annotations = wordToSpan.getSpans<android.text.Annotation>(0, length)
+        for (s in annotations) {
+            if (s.value == "rounded") {
                 wordToSpan.removeSpan(s)
+            }
         }
 
-        wordToSpan.setSpan(
-            android.text.Annotation("", "rounded"),
-            minOf(maxOf(start, 0), length),
-            minOf(maxOf(end, 0), length),
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
+        // Clear previous blurring spans
+        val maskFilterSpans = wordToSpan.getSpans<android.text.style.MaskFilterSpan>(0, length)
+        for (s in maskFilterSpans) {
+            wordToSpan.removeSpan(s)
+        }
+
+        // Set hardware acceleration layer for this TextView to Software if blurring is applied,
+        // because BlurMaskFilter requires software layer type to render correctly on some devices.
+        if (blurStart != null && blurEnd != null && blurStart < blurEnd) {
+            if (tv.layerType != android.view.View.LAYER_TYPE_SOFTWARE) {
+                tv.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+            }
+        }
+
+        // Apply new highlight if specified
+        if (highlightStart != null && highlightEnd != null && highlightStart < highlightEnd) {
+            wordToSpan.setSpan(
+                android.text.Annotation("", "rounded"),
+                minOf(maxOf(highlightStart, 0), length),
+                minOf(maxOf(highlightEnd, 0), length),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+
+        // Apply new blur if specified
+        if (blurStart != null && blurEnd != null && blurStart < blurEnd) {
+            wordToSpan.setSpan(
+                android.text.style.MaskFilterSpan(
+                    android.graphics.BlurMaskFilter(
+                        15f,
+                        android.graphics.BlurMaskFilter.Blur.NORMAL
+                    )
+                ),
+                minOf(maxOf(blurStart, 0), length),
+                minOf(maxOf(blurEnd, 0), length),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
 
         tv.setText(wordToSpan, TextView.BufferType.SPANNABLE)
     } catch (t: Throwable) {
         logError(t)
     }
+}
+
+fun removeHighLightedText(tv: TextView) {
+    removeHighlightAndBlur(tv)
+}
+
+fun setHighLightedText(tv: TextView, start: Int, end: Int) {
+    setHighlightAndBlur(tv, start, end, null, null)
 }
 
 const val CONFIG_COLOR = 1 shl 0
@@ -186,6 +241,7 @@ data class TextConfig(
     val isTextSelectable: Boolean,
     /** Vertical text padding in dp */
     val verticalPadding: Float,
+    val ttsBlurUpcoming: Boolean,
 ) {
     private val fontFile: File? by lazy {
         if (textFont == "") null else systemFonts.firstOrNull { it.name == textFont }
@@ -315,6 +371,12 @@ class TextAdapter(
     fun changeTextSelectable(isTextSelectable: Boolean): Boolean {
         if (config.isTextSelectable == isTextSelectable) return false
         config = config.copy(isTextSelectable = isTextSelectable)
+        return true
+    }
+
+    fun changeTTSBlurUpcoming(to: Boolean): Boolean {
+        if (config.ttsBlurUpcoming == to) return false
+        config = config.copy(ttsBlurUpcoming = to)
         return true
     }
 
@@ -699,24 +761,44 @@ class TextAdapter(
 
     fun updateTTSLine(binding: ViewBinding, span: TextSpan, line: TTSHelper.TTSLine?) {
         if (binding !is SingleTextBinding) return
-        // if the line does not apply
-        if (line == null || line.index != span.index ||
-            (line.startChar < span.start && line.endChar < span.start)
-            || (line.startChar > span.end && line.endChar > span.end)
-        ) {
-            removeHighLightedText(binding.root)
+        val tv = binding.root
+
+        val isUpcoming = line != null && (span.index > line.index || (span.index == line.index && span.start >= line.endChar))
+        val isCurrent = line != null && line.index == span.index && line.startChar < span.end && line.endChar > span.start
+
+        if (line == null) {
+            removeHighlightAndBlur(tv)
             return
         }
 
-        val length = binding.root.length()
-        val start = minOf(maxOf(line.startChar - span.start, 0), length)
-        val end = minOf(maxOf(line.endChar - span.start, 0), length)
+        if (!config.ttsBlurUpcoming) {
+            if (!isCurrent) {
+                removeHighlightAndBlur(tv)
+                return
+            }
+            val length = tv.length()
+            val start = minOf(maxOf(line.startChar - span.start, 0), length)
+            val end = minOf(maxOf(line.endChar - span.start, 0), length)
+            setHighlightAndBlur(tv, highlightStart = start, highlightEnd = end, blurStart = null, blurEnd = null)
+            return
+        }
 
-        setHighLightedText(
-            binding.root,
-            start,
-            end
-        )
+        if (isUpcoming) {
+            setHighlightAndBlur(tv, highlightStart = null, highlightEnd = null, blurStart = 0, blurEnd = tv.length())
+        } else if (isCurrent) {
+            val length = tv.length()
+            val start = minOf(maxOf(line.startChar - span.start, 0), length)
+            val end = minOf(maxOf(line.endChar - span.start, 0), length)
+            setHighlightAndBlur(
+                tv,
+                highlightStart = start,
+                highlightEnd = end,
+                blurStart = end,
+                blurEnd = length
+            )
+        } else {
+            removeHighlightAndBlur(tv)
+        }
     }
 
     private fun setConfig(binding: ViewBinding, config: TextConfig) {

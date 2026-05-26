@@ -132,6 +132,7 @@
     <string name="general_settings">General</string>
     <string name="lock_tts">Lock TTS scroll area</string>
     <string name="tts_auto_center">Center TTS</string>
+    <string name="blur_upcoming_text">Blur upcoming text (TTS)</string>
     <string name="tts_reset_progress">TTS progress reset</string>
     <string name="reading_color">Reading Color</string>
     <string name="read_color">Reader Theme</string>
