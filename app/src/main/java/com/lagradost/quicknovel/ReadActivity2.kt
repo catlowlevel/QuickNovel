@@ -2207,6 +2207,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTest()
         }
 
+        viewModel.ttsLine.value?.let {
+            dialogBinding.ttsOverridesTestInput.setText(it.speakOutMsg)
+        }
+
         dialogBinding.ttsOverridesTestAudio.setOnClickListener {
             val text = dialogBinding.ttsOverridesTestResult.text.toString()
             if (text.isNotEmpty()) {
