@@ -1,6 +1,5 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-kapt'
 
 def signingPropertiesFile = rootProject.file("signing.properties")
 def signingProperties = new Properties()
