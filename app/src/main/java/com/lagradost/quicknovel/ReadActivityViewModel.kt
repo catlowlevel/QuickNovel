@@ -291,7 +291,10 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
         val poster = data.poster
         if (poster != null) {
             try {
-                return MainActivity.app.get(poster).okhttpResponse.body.bytes()
+                val api = Apis.getApiFromNameNull(data.meta.apiName)
+                val client = api?.app ?: MainActivity.app
+                val resolvedPoster = resolveUrl(poster)
+                return client.get(resolvedPoster).okhttpResponse.body.bytes()
             } catch (t: Throwable) {
                 logError(t)
             }
