@@ -20,6 +20,7 @@ class NovelFireProvider:  MainAPI() {
     override val name = "NovelFire"
     override val mainUrl = "https://novelfire.net"
     override val iconId = R.drawable.icon_novelfire
+    override val usesCloudFlareKiller = true
 
     override val hasMainPage = true
 

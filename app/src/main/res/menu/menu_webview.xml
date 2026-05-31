@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_refresh"
+        android:icon="@drawable/ic_baseline_autorenew_24"
+        android:title="Refresh"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_go_back"
+        android:icon="@drawable/ic_baseline_arrow_back_24"
+        android:title="Go Back"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_go_forward"
+        android:icon="@drawable/ic_baseline_arrow_forward_24"
+        android:title="Go Forward"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_clear_cookies"
+        android:icon="@drawable/ic_sharp_clear_24"
+        android:title="Clear Cookies"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_copy_link"
+        android:title="Copy Link"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_share"
+        android:icon="@drawable/ic_outline_share_24"
+        android:title="Share"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_open_in_browser"
+        android:icon="@drawable/ic_baseline_open_in_new_24"
+        android:title="Open in System Browser"
+        app:iconTint="?attr/iconColor"
+        app:showAsAction="never" />
+</menu>

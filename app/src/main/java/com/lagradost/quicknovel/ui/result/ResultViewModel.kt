@@ -18,6 +18,7 @@ import com.lagradost.quicknovel.BookDownloader2Helper
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.CommonActivity.activity
+import com.lagradost.quicknovel.WebViewActivity
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DownloadActionType
 import com.lagradost.quicknovel.DownloadProgressState
@@ -263,9 +264,9 @@ class ResultViewModel : ViewModel() {
     fun openInBrowser() = viewModelScope.launchSafe {
         loadMutex.withLock {
             if (loadUrl.isBlank()) return@launchSafe
-            val i = Intent(Intent.ACTION_VIEW)
-            i.data = loadUrl.toUri()
-            activity?.startActivity(i)
+            activity?.let { act ->
+                act.startActivity(WebViewActivity.newIntent(act, loadUrl))
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.SearchResponse
+import com.lagradost.quicknovel.WebViewActivity
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.map
 import com.lagradost.quicknovel.util.Apis
@@ -66,9 +67,9 @@ class MainPageViewModel : ViewModel() {
         try {
             val url = currentUrl.value
             if (url != null) {
-                val i = Intent(Intent.ACTION_VIEW)
-                i.data = Uri.parse(url)
-                activity?.startActivity(i)
+                activity?.let { act ->
+                    act.startActivity(WebViewActivity.newIntent(act, url))
+                }
             }
         } catch (_: Throwable) {
 

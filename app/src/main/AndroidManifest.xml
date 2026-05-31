@@ -259,6 +259,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".WebViewActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
