@@ -868,6 +868,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             setNavigationOnClickListener {
                 this@ReadActivity2.onBackPressed()
             }
+            inflateMenu(R.menu.menu_reader)
+            menu.findItem(R.id.action_open_in_browser)?.isVisible = false
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_open_in_browser -> {
+                        openChapterInWebView()
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
 
         //updateTimeText()
@@ -1129,6 +1140,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         observe(viewModel.chaptersTitles) { titles ->
+            binding.readToolbar.menu.findItem(R.id.action_open_in_browser)?.isVisible = viewModel.book is QuickBook
             binding.readActionChapters.setOnClickListener {
                 val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
                 val currentChapter = viewModel.desiredIndex?.index
@@ -2226,5 +2238,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         bottomSheetDialog.show()
+    }
+
+    private fun openChapterInWebView() {
+        val index = viewModel.currentIndex
+        val url = viewModel.book.getChapterUrl(index)
+        if (url != null) {
+            startActivity(WebViewActivity.newIntent(this, url))
+        } else {
+            showToast("Chapter URL not available")
+        }
     }
 }

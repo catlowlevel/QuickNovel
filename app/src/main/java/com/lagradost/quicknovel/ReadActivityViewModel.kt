@@ -173,6 +173,9 @@ abstract class AbstractBook {
     abstract fun title(): String
     abstract fun getChapterTitle(index: Int): UiText
     abstract fun getLoadingStatus(index: Int): String?
+    open fun getChapterUrl(index: Int): String? {
+        return null
+    }
 
     @Throws
     open fun loadImage(image: String): ByteArray? {
@@ -241,6 +244,11 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
 
     override fun getLoadingStatus(index: Int): String {
         return data.data[index].url
+    }
+
+    override fun getChapterUrl(index: Int): String? {
+        val rawUrl = data.data.getOrNull(index)?.url ?: return null
+        return resolveUrl(rawUrl)
     }
 
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
