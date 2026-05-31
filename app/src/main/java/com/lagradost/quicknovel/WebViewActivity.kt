@@ -19,6 +19,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.lagradost.quicknovel.databinding.ActivityWebviewBinding
 import com.lagradost.quicknovel.network.WebViewResolver
+import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
 
 class WebViewActivity : AppCompatActivity() {
 
@@ -47,6 +48,7 @@ class WebViewActivity : AppCompatActivity() {
         binding.webviewToolbar.setNavigationOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
+        fixPaddingStatusbar(binding.webviewToolbarHolder)
 
         // Get target URL
         targetUrl = intent.getStringExtra(EXTRA_URL)

@@ -6,16 +6,23 @@
     android:orientation="vertical"
     android:background="?attr/primaryBlackBackground">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/webview_toolbar"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/webview_toolbar_holder"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="?attr/primaryGrayBackground"
-        app:titleTextColor="?attr/textColor"
-        app:subtitleTextColor="?attr/grayTextColor"
-        app:navigationIcon="@drawable/ic_baseline_arrow_back_24"
-        app:navigationIconTint="?attr/iconColor"
-        app:title="Web Browser" />
+        android:layout_height="wrap_content"
+        android:background="?attr/primaryGrayBackground">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/webview_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:titleTextColor="?attr/textColor"
+            app:subtitleTextColor="?attr/grayTextColor"
+            app:navigationIcon="@drawable/ic_baseline_arrow_back_24"
+            app:navigationIconTint="?attr/iconColor"
+            app:title="Web Browser" />
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/webview_progress"
