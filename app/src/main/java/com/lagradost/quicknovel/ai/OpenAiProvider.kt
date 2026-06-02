@@ -37,8 +37,18 @@ class OpenAiProvider(
     }
 
     private suspend fun chatCompletion(systemMessage: String, userMessage: String): String {
-        val selectedModel = model.ifBlank { "gpt-5.4-mini" }
-        val baseUrl = customUrl.ifBlank { "https://api.openai.com/v1/chat/completions" }
+        val selectedModel = model.ifBlank {
+            if (customUrl.isNotBlank()) "gpt-5-nano" else "gpt-5.4-mini"
+        }
+        val baseUrl = if (customUrl.isNotBlank()) {
+            if (customUrl.endsWith("/chat/completions")) {
+                customUrl
+            } else {
+                "${customUrl.removeSuffix("/")}/chat/completions"
+            }
+        } else {
+            "https://api.openai.com/v1/chat/completions"
+        }
         
         val request = ChatRequest(
             model = selectedModel,
@@ -70,22 +80,45 @@ class OpenAiProvider(
     }
 
     override suspend fun getModels(): List<String> {
+        val modelsUrl = if (customUrl.isNotBlank()) {
+            if (customUrl.endsWith("/chat/completions")) {
+                customUrl.substringBefore("/chat/completions") + "/models"
+            } else if (customUrl.endsWith("/models")) {
+                customUrl
+            } else {
+                "${customUrl.removeSuffix("/")}/models"
+            }
+        } else {
+            "https://api.openai.com/v1/models"
+        }
         return try {
             val response = app.get(
-                "https://api.openai.com/v1/models",
+                modelsUrl,
                 headers = mapOf("Authorization" to "Bearer $apiKey")
             )
             if (response.isSuccessful) {
                 val res = app.responseParser?.parse(response.text, ListModelsResponse::class)
                 res?.data?.filter { 
-                    it.id.startsWith("gpt-") && !it.id.contains("vision") && !it.id.contains("audio")
+                    if (customUrl.isNotBlank()) {
+                        !it.id.contains("vision") && !it.id.contains("audio")
+                    } else {
+                        it.id.startsWith("gpt-") && !it.id.contains("vision") && !it.id.contains("audio")
+                    }
                 }?.map { it.id }?.sortedDescending() ?: emptyList()
             } else {
-                listOf("gpt-5.4-mini", "gpt-5.5", "gpt-5.4-pro", "gpt-4o-mini")
+                if (customUrl.isNotBlank()) {
+                    listOf("gpt-5-nano", "gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5")
+                } else {
+                    listOf("gpt-5.4-mini", "gpt-5.5", "gpt-5.4-pro", "gpt-4o-mini")
+                }
             }
         } catch (e: Exception) {
             logError(e)
-            listOf("gpt-5.4-mini", "gpt-5.5", "gpt-5.4-pro", "gpt-4o-mini")
+            if (customUrl.isNotBlank()) {
+                listOf("gpt-5-nano", "gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5")
+            } else {
+                listOf("gpt-5.4-mini", "gpt-5.5", "gpt-5.4-pro", "gpt-4o-mini")
+            }
         }
     }
 

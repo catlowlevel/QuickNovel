@@ -538,7 +538,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 binding.aiModelInput.setText(currentSettings.model)
                 binding.aiTargetLanguageInput.setText(currentSettings.targetLanguage)
                 binding.aiCustomUrlInput.setText(currentSettings.customUrl)
-                binding.aiCustomUrlLayout.isVisible = currentSettings.providerType == AiProviderType.Custom
+                binding.aiCustomUrlLayout.isVisible = true
             }
 
             updateUi()

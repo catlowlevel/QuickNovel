@@ -4,7 +4,11 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
 
-class ClaudeProvider(private val apiKey: String, private val model: String) : AiProvider {
+class ClaudeProvider(
+    private val apiKey: String,
+    private val model: String,
+    private val customUrl: String = ""
+) : AiProvider {
     data class ClaudeRequest(
         @JsonProperty("model") val model: String,
         @JsonProperty("max_tokens") val maxTokens: Int = 4096,
@@ -27,8 +31,18 @@ class ClaudeProvider(private val apiKey: String, private val model: String) : Ai
     }
 
     private suspend fun sendMessage(prompt: String): String {
-        val selectedModel = model.ifBlank { "claude-sonnet-4-6" }
-        val url = "https://api.anthropic.com/v1/messages"
+        val selectedModel = model.ifBlank {
+            if (customUrl.isNotBlank()) "claude-haiku-4-5" else "claude-sonnet-4-6"
+        }
+        val url = if (customUrl.isNotBlank()) {
+            if (customUrl.endsWith("/messages")) {
+                customUrl
+            } else {
+                "${customUrl.removeSuffix("/")}/messages"
+            }
+        } else {
+            "https://api.anthropic.com/v1/messages"
+        }
         
         val request = ClaudeRequest(
             model = selectedModel,
@@ -61,9 +75,20 @@ class ClaudeProvider(private val apiKey: String, private val model: String) : Ai
     }
 
     override suspend fun getModels(): List<String> {
+        val modelsUrl = if (customUrl.isNotBlank()) {
+            if (customUrl.endsWith("/messages")) {
+                customUrl.substringBefore("/messages") + "/models"
+            } else if (customUrl.endsWith("/models")) {
+                customUrl
+            } else {
+                "${customUrl.removeSuffix("/")}/models"
+            }
+        } else {
+            "https://api.anthropic.com/v1/models"
+        }
         return try {
             val response = app.get(
-                "https://api.anthropic.com/v1/models",
+                modelsUrl,
                 headers = mapOf(
                     "x-api-key" to apiKey,
                     "anthropic-version" to "2023-06-01"
@@ -71,13 +96,23 @@ class ClaudeProvider(private val apiKey: String, private val model: String) : Ai
             )
             if (response.isSuccessful) {
                 val res = app.responseParser?.parse(response.text, ListModelsResponse::class)
-                res?.data?.map { it.id } ?: emptyList()
+                res?.data?.filter {
+                    if (customUrl.isNotBlank()) it.id.startsWith("claude-") else true
+                }?.map { it.id } ?: emptyList()
             } else {
-                listOf("claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5")
+                if (customUrl.isNotBlank()) {
+                    listOf("claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7")
+                } else {
+                    listOf("claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5")
+                }
             }
         } catch (e: Exception) {
             logError(e)
-            listOf("claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5")
+            if (customUrl.isNotBlank()) {
+                listOf("claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7")
+            } else {
+                listOf("claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5")
+            }
         }
     }
 

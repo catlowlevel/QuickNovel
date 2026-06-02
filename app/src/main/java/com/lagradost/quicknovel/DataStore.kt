@@ -72,8 +72,7 @@ const val RESULT_BOOKMARK: String = "result_bookmarked"
 enum class AiProviderType {
     Gemini,
     OpenAI,
-    Claude,
-    Custom
+    Claude
 }
 
 data class AiSettings(

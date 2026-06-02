@@ -4,12 +4,17 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
 
-class GeminiProvider(private val apiKey: String, private val model: String) : AiProvider {
+class GeminiProvider(
+    private val apiKey: String,
+    private val model: String,
+    private val customUrl: String = ""
+) : AiProvider {
     data class GeminiRequest(
         @JsonProperty("contents") val contents: List<Content>
     )
 
     data class Content(
+        @JsonProperty("role") val role: String = "user",
         @JsonProperty("parts") val parts: List<Part>
     )
 
@@ -28,26 +33,49 @@ class GeminiProvider(private val apiKey: String, private val model: String) : Ai
     }
 
     private suspend fun generateContent(prompt: String): String {
-        val selectedModel = model.ifBlank { "gemini-1.5-flash" }
-        // Use v1 for GA models, v1beta for previews/experimental
-        val apiVersion = if (selectedModel.contains("preview") || selectedModel.contains("beta")) "v1beta" else "v1"
-        val url = "https://generativelanguage.googleapis.com/$apiVersion/models/$selectedModel:generateContent?key=$apiKey"
+        val selectedModel = model.ifBlank {
+            if (customUrl.isNotBlank()) "gemini-3-flash" else "gemini-1.5-flash"
+        }
         
-        val request = GeminiRequest(listOf(Content(listOf(Part(prompt)))))
+        val request = GeminiRequest(listOf(Content(role = "user", parts = listOf(Part(prompt)))))
 
-        val response = app.post(
-            url,
-            json = request,
-            timeout = 120
-        )
+        val response = if (customUrl.isNotBlank()) {
+            val url = if (customUrl.contains(":generateContent")) {
+                customUrl
+            } else {
+                val base = customUrl.removeSuffix("/")
+                if (base.contains("/models/")) {
+                    "$base:generateContent"
+                } else {
+                    "$base/models/$selectedModel:generateContent"
+                }
+            }
+            app.post(
+                url,
+                headers = mapOf("x-goog-api-key" to apiKey),
+                json = request,
+                timeout = 120
+            )
+        } else {
+            val apiVersion = if (selectedModel.contains("preview") || selectedModel.contains("beta")) "v1beta" else "v1"
+            val url = "https://generativelanguage.googleapis.com/$apiVersion/models/$selectedModel:generateContent?key=$apiKey"
+            app.post(
+                url,
+                json = request,
+                timeout = 120
+            )
+        }
 
         if (!response.isSuccessful) {
-            // Fallback to v1beta if v1 fails and it's not already using it
-            if (apiVersion == "v1") {
-                val fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/$selectedModel:generateContent?key=$apiKey"
-                val fallbackResponse = app.post(fallbackUrl, json = request, timeout = 120)
-                if (fallbackResponse.isSuccessful) {
-                    return parseResponse(fallbackResponse.text)
+            if (customUrl.isBlank()) {
+                val selectedModel = model.ifBlank { "gemini-1.5-flash" }
+                val apiVersion = if (selectedModel.contains("preview") || selectedModel.contains("beta")) "v1beta" else "v1"
+                if (apiVersion == "v1") {
+                    val fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/$selectedModel:generateContent?key=$apiKey"
+                    val fallbackResponse = app.post(fallbackUrl, json = request, timeout = 120)
+                    if (fallbackResponse.isSuccessful) {
+                        return parseResponse(fallbackResponse.text)
+                    }
                 }
             }
             throw Exception("Gemini API error: ${response.code} ${response.text}")
@@ -69,16 +97,47 @@ class GeminiProvider(private val apiKey: String, private val model: String) : Ai
 
     override suspend fun getModels(): List<String> {
         return try {
-            val response = app.get("https://generativelanguage.googleapis.com/v1/models?key=$apiKey")
-            if (response.isSuccessful) {
-                val res = app.responseParser?.parse(response.text, ListModelsResponse::class)
-                res?.models?.map { it.name.substringAfter("models/") } ?: emptyList()
+            if (customUrl.isNotBlank()) {
+                val modelsUrl = if (customUrl.contains("/models/")) {
+                    customUrl.substringBefore("/models/") + "/models"
+                } else if (customUrl.endsWith("/models")) {
+                    customUrl
+                } else {
+                    "${customUrl.removeSuffix("/")}/models"
+                }
+                val response = app.get(
+                    modelsUrl,
+                    headers = mapOf("x-goog-api-key" to apiKey)
+                )
+                if (response.isSuccessful) {
+                    try {
+                        val res = app.responseParser?.parse(response.text, OpenCodeListModelsResponse::class)
+                        val list = res?.data?.filter { it.id.startsWith("gemini-") }?.map { it.id } ?: emptyList()
+                        if (list.isNotEmpty()) return list
+                    } catch (e: Exception) {
+                        // Ignore and try standard Google format
+                    }
+                    val res = app.responseParser?.parse(response.text, ListModelsResponse::class)
+                    res?.models?.map { it.name.substringAfter("models/") } ?: emptyList()
+                } else {
+                    listOf("gemini-3-flash", "gemini-3.5-flash", "gemini-3.1-pro")
+                }
             } else {
-                listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-3.5-flash")
+                val response = app.get("https://generativelanguage.googleapis.com/v1/models?key=$apiKey")
+                if (response.isSuccessful) {
+                    val res = app.responseParser?.parse(response.text, ListModelsResponse::class)
+                    res?.models?.map { it.name.substringAfter("models/") } ?: emptyList()
+                } else {
+                    listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-3.5-flash")
+                }
             }
         } catch (e: Exception) {
             logError(e)
-            listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-3.5-flash")
+            if (customUrl.isNotBlank()) {
+                listOf("gemini-3-flash", "gemini-3.5-flash", "gemini-3.1-pro")
+            } else {
+                listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-3.5-flash")
+            }
         }
     }
 
@@ -96,5 +155,13 @@ class GeminiProvider(private val apiKey: String, private val model: String) : Ai
 
     data class GeminiModel(
         @JsonProperty("name") val name: String
+    )
+
+    data class OpenCodeListModelsResponse(
+        @JsonProperty("data") val data: List<OpenCodeModel>?
+    )
+
+    data class OpenCodeModel(
+        @JsonProperty("id") val id: String
     )
 }
