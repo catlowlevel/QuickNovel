@@ -118,7 +118,7 @@ class WtrLabProvider : MainAPI() {
         val nextData = parseJson<ResultJsonResponse.Root>(json)
 
         val returnValue = nextData.props.pageProps.series?.map { series ->
-            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.id}/${series.slug}") {
+            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.rawId}/${series.slug}") {
                 posterUrl = fixUrlNull(series.data.image)
             }
         } ?: emptyList()
@@ -133,7 +133,7 @@ class WtrLabProvider : MainAPI() {
         val nextData = parseJson<ResultJsonResponse.Root>(json)
 
         return nextData.props.pageProps.series?.map { series ->
-            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.id}/${series.slug}") {
+            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.rawId}/${series.slug}") {
                 posterUrl = fixUrlNull(series.data.image)
             }
         } ?: emptyList()
@@ -178,6 +178,7 @@ class WtrLabProvider : MainAPI() {
         )
 
         return newStreamResponse(title, url, chapters) {
+            author = serie.serieData.data.author
             synopsis = serie.serieData.data.description
             posterUrl = fixUrlNull(serie.serieData.data.image)
             this.views = serie.serieData.view
