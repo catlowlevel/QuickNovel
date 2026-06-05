@@ -197,7 +197,7 @@ fun setHighlightAndBlur(
             wordToSpan.setSpan(
                 android.text.style.MaskFilterSpan(
                     android.graphics.BlurMaskFilter(
-                        15f,
+                        20f,
                         android.graphics.BlurMaskFilter.Blur.NORMAL
                     )
                 ),
