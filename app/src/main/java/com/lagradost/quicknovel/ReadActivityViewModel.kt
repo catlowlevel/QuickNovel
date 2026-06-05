@@ -468,7 +468,14 @@ data class LiveChapterData(
     val isAiTranslated: Boolean = false
 ) {
     val wordCount by lazy {
-        originalRendered.toString().split(Regex("\\s+")).count { it.isNotBlank() }
+        val activeText = if (isSummarized) {
+            summarizedRendered ?: rendered
+        } else if (isAiTranslated) {
+            aiTranslatedRendered ?: rendered
+        } else {
+            rendered
+        }
+        activeText.toString().split(Regex("\\s+")).count { it.isNotBlank() }
     }
 
     // tts lines are lazy because not everyone uses tts
@@ -1215,6 +1222,9 @@ class ReadActivityViewModel : ViewModel() {
             val updated = chapter.copy(isSummarized = false)
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
+            if (index == currentIndex) {
+                _chapterTile.postValue(getChapterTitle(index))
+            }
             return
         }
 
@@ -1222,6 +1232,9 @@ class ReadActivityViewModel : ViewModel() {
             val updated = chapter.copy(isSummarized = true, isAiTranslated = false)
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
+            if (index == currentIndex) {
+                _chapterTile.postValue(getChapterTitle(index))
+            }
             return
         }
 
@@ -1254,6 +1267,9 @@ class ReadActivityViewModel : ViewModel() {
                     )
                     chapterMutex.withLock {
                         chapterData[index] = Resource.Success(updated)
+                        if (index == currentIndex) {
+                            _chapterTile.postValue(getChapterTitle(index))
+                        }
                     }
                     updateReadArea()
                     return@ioSafe
@@ -1284,6 +1300,9 @@ class ReadActivityViewModel : ViewModel() {
 
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
+                    if (index == currentIndex) {
+                        _chapterTile.postValue(getChapterTitle(index))
+                    }
                 }
                 updateReadArea()
             } catch (e: Exception) {
@@ -1293,6 +1312,9 @@ class ReadActivityViewModel : ViewModel() {
                 val updated = chapter.copy(isSummarized = false)
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
+                    if (index == currentIndex) {
+                        _chapterTile.postValue(getChapterTitle(index))
+                    }
                 }
                 updateReadArea()
             } finally {
@@ -1310,6 +1332,9 @@ class ReadActivityViewModel : ViewModel() {
             val updated = chapter.copy(isAiTranslated = false)
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
+            if (index == currentIndex) {
+                _chapterTile.postValue(getChapterTitle(index))
+            }
             return
         }
 
@@ -1317,6 +1342,9 @@ class ReadActivityViewModel : ViewModel() {
             val updated = chapter.copy(isAiTranslated = true, isSummarized = false)
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
+            if (index == currentIndex) {
+                _chapterTile.postValue(getChapterTitle(index))
+            }
             return
         }
 
@@ -1350,6 +1378,9 @@ class ReadActivityViewModel : ViewModel() {
                     )
                     chapterMutex.withLock {
                         chapterData[index] = Resource.Success(updated)
+                        if (index == currentIndex) {
+                            _chapterTile.postValue(getChapterTitle(index))
+                        }
                     }
                     updateReadArea()
                     return@ioSafe
@@ -1380,6 +1411,9 @@ class ReadActivityViewModel : ViewModel() {
 
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
+                    if (index == currentIndex) {
+                        _chapterTile.postValue(getChapterTitle(index))
+                    }
                 }
                 updateReadArea()
             } catch (e: Exception) {
@@ -1389,6 +1423,9 @@ class ReadActivityViewModel : ViewModel() {
                 val updated = chapter.copy(isAiTranslated = false)
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
+                    if (index == currentIndex) {
+                        _chapterTile.postValue(getChapterTitle(index))
+                    }
                 }
                 updateReadArea()
             } finally {
