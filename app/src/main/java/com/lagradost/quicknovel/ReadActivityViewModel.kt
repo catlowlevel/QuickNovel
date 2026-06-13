@@ -489,7 +489,17 @@ data class LiveChapterData(
         result
     }
 
-    fun getActiveSpans(overrides: List<TTSOverride>? = null): List<TextSpan> {
+    @Volatile
+    private var cachedSpans: List<TextSpan>? = null
+    @Volatile
+    private var cachedOverrides: List<TTSOverride>? = null
+
+    fun getActiveSpans(overrides: List<TTSOverride>? = null): List<TextSpan> = synchronized(this) {
+        val currentCached = cachedSpans
+        val currentOverrides = cachedOverrides
+        if (currentCached != null && currentOverrides == overrides) {
+            return currentCached
+        }
         val baseSpans = if (isSummarized) {
             summarizedSpans ?: spans
         } else if (isAiTranslated) {
@@ -502,7 +512,10 @@ data class LiveChapterData(
         } else {
             baseSpans
         }
-        return applyOverrideHighlights(fixed, overrides)
+        val highlighted = applyOverrideHighlights(fixed, overrides)
+        cachedSpans = highlighted
+        cachedOverrides = overrides
+        return highlighted
     }
 
     private fun applyOverrideHighlights(
