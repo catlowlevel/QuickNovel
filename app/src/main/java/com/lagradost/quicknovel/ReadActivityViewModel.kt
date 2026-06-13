@@ -465,7 +465,8 @@ data class LiveChapterData(
 
     val aiTranslatedRendered: Spanned? = null,
     val aiTranslatedSpans: List<TextSpan>? = null,
-    val isAiTranslated: Boolean = false
+    val isAiTranslated: Boolean = false,
+    val isFormattingFixed: Boolean = false
 ) {
     val wordCount by lazy {
         val activeText = if (isSummarized) {
@@ -480,14 +481,130 @@ data class LiveChapterData(
 
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
-        val r = if (isSummarized) {
-            summarizedRendered ?: rendered
-        } else if (isAiTranslated) {
-            aiTranslatedRendered ?: rendered
-        } else {
-            rendered
+        val activeSpans = getActiveSpans()
+        val result = ArrayList<TTSHelper.TTSLine>()
+        for (span in activeSpans) {
+            result.addAll(ttsParseText(span.text.toString(), index, span.start))
         }
-        ttsParseText(r.substring(0, r.length), index)
+        result
+    }
+
+    fun getActiveSpans(): List<TextSpan> {
+        val baseSpans = if (isSummarized) {
+            summarizedSpans ?: spans
+        } else if (isAiTranslated) {
+            aiTranslatedSpans ?: spans
+        } else {
+            spans
+        }
+        return if (isFormattingFixed) {
+            fixChapterFormatting(baseSpans)
+        } else {
+            baseSpans
+        }
+    }
+
+    private fun fixChapterFormatting(spansList: List<TextSpan>): List<TextSpan> {
+        val mutableSpans = spansList.toMutableList()
+        val sentenceEndChars = setOf('.', '!', '?', '”', '"', '’', '\'', '…')
+        
+        var i = 0
+        while (i < mutableSpans.size - 1) {
+            val currentSpan = mutableSpans[i]
+            val currentText = currentSpan.text.toString()
+            val currentTrimmed = currentText.trim()
+            
+            val isBroken = currentTrimmed.isNotEmpty() && currentTrimmed.last() !in sentenceEndChars
+            if (isBroken) {
+                val nextSpan = mutableSpans[i + 1]
+                val nextText = nextSpan.text.toString()
+                val nextTrimmed = nextText.trim()
+                
+                val firstLetter = nextTrimmed.firstOrNull { it.isLetter() }
+                val nextStartsLowercase = firstLetter != null && firstLetter.isLowerCase()
+                
+                if (nextStartsLowercase) {
+                    val sentenceEndIndex = findFirstSentenceEnd(nextText)
+                    
+                    val firstSentenceText = nextSpan.text.subSequence(0, sentenceEndIndex) as Spanned
+                    val remainingText = nextSpan.text.subSequence(sentenceEndIndex, nextSpan.text.length) as Spanned
+                    
+                    val mergedBuilder = SpannableStringBuilder()
+                    mergedBuilder.append(currentSpan.text)
+                    if (currentText.isNotEmpty() && !currentText.last().isWhitespace() &&
+                        firstSentenceText.isNotEmpty() && !firstSentenceText.first().isWhitespace()) {
+                        mergedBuilder.append(" ")
+                    }
+                    mergedBuilder.append(firstSentenceText)
+                    
+                    val mergedSpan = TextSpan(
+                        text = mergedBuilder.toSpanned(),
+                        start = currentSpan.start,
+                        end = currentSpan.start + mergedBuilder.length,
+                        index = currentSpan.index,
+                        innerIndex = currentSpan.innerIndex
+                    )
+                    
+                    mutableSpans[i] = mergedSpan
+                    
+                    if (remainingText.toString().trim().isNotEmpty()) {
+                        val remainingSpan = TextSpan(
+                            text = remainingText,
+                            start = nextSpan.start + sentenceEndIndex,
+                            end = nextSpan.end,
+                            index = nextSpan.index,
+                            innerIndex = nextSpan.innerIndex
+                        )
+                        mutableSpans[i + 1] = remainingSpan
+                    } else {
+                        mutableSpans.removeAt(i + 1)
+                    }
+                    continue
+                }
+            }
+            i++
+        }
+        
+        return mutableSpans.mapIndexed { idx, span ->
+            if (span.innerIndex != idx) {
+                span.copy().apply { innerIndex = idx }
+            } else {
+                span
+            }
+        }
+    }
+
+    private fun findFirstSentenceEnd(text: String): Int {
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '.' || c == '!' || c == '?' || c == '…') {
+                var j = i + 1
+                while (j < text.length && (text[j] == '.' || text[j] == '!' || text[j] == '?' || text[j] == '…')) {
+                    j++
+                }
+                while (j < text.length && (text[j] == '\"' || text[j] == '\'' || text[j] == '’' || text[j] == '”' || text[j] == '»' || text[j] == '」')) {
+                    j++
+                }
+                var isAbbreviation = false
+                if (c == '.') {
+                    val precedingStart = (i - 1 downTo 0).firstOrNull { text[it].isWhitespace() || text[it] == '.' } ?: -1
+                    val precedingWord = text.substring(precedingStart + 1, i)
+                    val isSingleLetterInitial = precedingWord.length == 1 && precedingWord[0].isUpperCase()
+                    val isVowelless = precedingWord.isNotEmpty() && precedingWord.none { it in "aeiouyAEIOUY" }
+                    val isFollowedByUpperOrDigitNoSpace = j < text.length && (text[j].isUpperCase() || text[j].isDigit())
+                    if (isSingleLetterInitial || isVowelless || isFollowedByUpperOrDigitNoSpace) {
+                        isAbbreviation = true
+                    }
+                }
+                if (!isAbbreviation && (j == text.length || text[j].isWhitespace())) {
+                    return j
+                }
+                i = j - 1
+            }
+            i++
+        }
+        return text.length
     }
 }
 
@@ -735,13 +852,7 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             is Resource.Success -> {
-                if (data.value.isSummarized) {
-                    data.value.summarizedSpans ?: data.value.spans
-                } else if (data.value.isAiTranslated) {
-                    data.value.aiTranslatedSpans ?: data.value.spans
-                } else {
-                    data.value.spans
-                }
+                data.value.getActiveSpans()
             }
 
             is Resource.Failure -> listOf<SpanDisplay>(
@@ -853,6 +964,16 @@ class ReadActivityViewModel : ViewModel() {
         if (cIndex - chapterPaddingBottom <= index && index <= cIndex + chapterPaddingTop) {
             updateReadArea(seekToDesired)
         }
+    }
+
+    fun toggleFixParagraphs(index: Int) {
+        val data = chapterData[index]
+        if (data == null || data !is Resource.Success) return
+
+        val chapter = data.value
+        val updated = chapter.copy(isFormattingFixed = !chapter.isFormattingFixed)
+        chapterData[index] = Resource.Success(updated)
+        updateReadArea()
     }
 
     private val markwonMutex = Mutex()
@@ -1973,7 +2094,7 @@ class ReadActivityViewModel : ViewModel() {
         return runBlocking {
             chapterMutex.withLock { chapterData[index] }?.letInner { live ->
                 // todo binary search, but strip all but TextSpan first
-                live.spans.firstOrNull { it.start >= char }?.innerIndex
+                live.getActiveSpans().firstOrNull { it.start >= char }?.innerIndex
             }
         }
     }

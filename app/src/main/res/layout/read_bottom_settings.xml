@@ -75,6 +75,15 @@
                     android:visibility="visible"
                     app:icon="@drawable/translate_24px" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/read_fix_paragraphs"
+                    style="@style/BlackButton"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/fix_paragraphs"
+                    android:visibility="visible"
+                    app:icon="@drawable/ic_baseline_edit_24" />
+
                 <com.google.android.material.checkbox.MaterialCheckBox
                     android:id="@+id/read_settings_scroll_vol"
                     style="@style/WhiteCheckmark"

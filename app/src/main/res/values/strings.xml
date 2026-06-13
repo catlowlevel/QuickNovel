@@ -168,6 +168,7 @@
     <string name="home_expanded_hide">Hide</string>
     <string name="summarize_chapter">Summarize Chapter</string>
     <string name="ai_translate_chapter">AI Translate Chapter</string>
+    <string name="fix_paragraphs">Fix Paragraph Formatting</string>
     <string name="ai_target_language">AI Target Language</string>
     <string name="ai_confirm_reload">Confirm Reload</string>
     <string name="ai_confirm_reload_msg">Are you sure you want to redo the API call? This will consume tokens.</string>
