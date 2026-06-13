@@ -508,6 +508,15 @@ data class LiveChapterData(
         val mutableSpans = spansList.toMutableList()
         val sentenceEndChars = setOf('.', '!', '?', '”', '"', '’', '\'', '…')
         
+        val highlightColor = context?.let { ctx ->
+            try {
+                val baseColor = androidx.core.content.ContextCompat.getColor(ctx, R.color.colorPrimary)
+                android.graphics.Color.argb(50, android.graphics.Color.red(baseColor), android.graphics.Color.green(baseColor), android.graphics.Color.blue(baseColor))
+            } catch (e: Exception) {
+                android.graphics.Color.argb(50, 61, 80, 250) // Fallback to semi-transparent #3d50fa
+            }
+        } ?: android.graphics.Color.argb(50, 61, 80, 250)
+
         var i = 0
         while (i < mutableSpans.size - 1) {
             val currentSpan = mutableSpans[i]
@@ -535,7 +544,16 @@ data class LiveChapterData(
                         firstSentenceText.isNotEmpty() && !firstSentenceText.first().isWhitespace()) {
                         mergedBuilder.append(" ")
                     }
+                    val highlightStart = mergedBuilder.length
                     mergedBuilder.append(firstSentenceText)
+                    val highlightEnd = mergedBuilder.length
+
+                    mergedBuilder.setSpan(
+                        android.text.style.BackgroundColorSpan(highlightColor),
+                        highlightStart,
+                        highlightEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
                     
                     val mergedSpan = TextSpan(
                         text = mergedBuilder.toSpanned(),
