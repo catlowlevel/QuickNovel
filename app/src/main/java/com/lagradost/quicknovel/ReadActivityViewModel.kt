@@ -489,7 +489,7 @@ data class LiveChapterData(
         result
     }
 
-    fun getActiveSpans(): List<TextSpan> {
+    fun getActiveSpans(overrides: List<TTSOverride>? = null): List<TextSpan> {
         val baseSpans = if (isSummarized) {
             summarizedSpans ?: spans
         } else if (isAiTranslated) {
@@ -497,10 +497,76 @@ data class LiveChapterData(
         } else {
             spans
         }
-        return if (isFormattingFixed) {
+        val fixed = if (isFormattingFixed) {
             fixChapterFormatting(baseSpans)
         } else {
             baseSpans
+        }
+        return applyOverrideHighlights(fixed, overrides)
+    }
+
+    private fun applyOverrideHighlights(
+        spansList: List<TextSpan>,
+        overrides: List<TTSOverride>?
+    ): List<TextSpan> {
+        if (overrides.isNullOrEmpty()) return spansList
+
+        val highlightColor = context?.let { ctx ->
+            try {
+                val baseColor = androidx.core.content.ContextCompat.getColor(ctx, R.color.colorPrimaryRed)
+                android.graphics.Color.argb(50, android.graphics.Color.red(baseColor), android.graphics.Color.green(baseColor), android.graphics.Color.blue(baseColor))
+            } catch (e: Exception) {
+                android.graphics.Color.argb(50, 213, 0, 0) // Fallback to semi-transparent colorPrimaryRed #D50000
+            }
+        } ?: android.graphics.Color.argb(50, 213, 0, 0)
+
+        return spansList.map { span ->
+            var builder: SpannableStringBuilder? = null
+            
+            for (override in overrides) {
+                if (!override.enabled || override.original.isEmpty()) continue
+                try {
+                    val textStr = span.text.toString()
+                    if (override.useRegex) {
+                        val options = if (override.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+                        val regex = override.original.toRegex(options)
+                        regex.findAll(textStr).forEach { match ->
+                            val b = builder ?: SpannableStringBuilder(span.text).also { builder = it }
+                            b.setSpan(
+                                android.text.style.BackgroundColorSpan(highlightColor),
+                                match.range.first,
+                                match.range.last + 1,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                        }
+                    } else {
+                        var index = textStr.indexOf(override.original, ignoreCase = !override.caseSensitive)
+                        while (index != -1) {
+                            val b = builder ?: SpannableStringBuilder(span.text).also { builder = it }
+                            b.setSpan(
+                                android.text.style.BackgroundColorSpan(highlightColor),
+                                index,
+                                index + override.original.length,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                            index = textStr.indexOf(
+                                override.original,
+                                index + override.original.length,
+                                ignoreCase = !override.caseSensitive
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore regex error
+                }
+            }
+            
+            val finalBuilder = builder
+            if (finalBuilder != null) {
+                span.copy(text = finalBuilder.toSpanned())
+            } else {
+                span
+            }
         }
     }
 
@@ -870,7 +936,7 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             is Resource.Success -> {
-                data.value.getActiveSpans()
+                data.value.getActiveSpans(getCombinedTtsOverrides())
             }
 
             is Resource.Failure -> listOf<SpanDisplay>(
@@ -2112,7 +2178,7 @@ class ReadActivityViewModel : ViewModel() {
         return runBlocking {
             chapterMutex.withLock { chapterData[index] }?.letInner { live ->
                 // todo binary search, but strip all but TextSpan first
-                live.getActiveSpans().firstOrNull { it.start >= char }?.innerIndex
+                live.getActiveSpans(getCombinedTtsOverrides()).firstOrNull { it.start >= char }?.innerIndex
             }
         }
     }
@@ -2267,6 +2333,7 @@ class ReadActivityViewModel : ViewModel() {
         set(value) {
             setKey(EPUB_TTS_OVERRIDES, value)
             ttsSession?.overrides = getCombinedTtsOverrides()
+            updateReadArea()
         }
 
     var ttsOverridesLocal: Array<TTSOverride>
@@ -2279,6 +2346,7 @@ class ReadActivityViewModel : ViewModel() {
             if (::book.isInitialized) {
                 setKey(EPUB_TTS_OVERRIDES_LOCAL, book.title(), value)
                 ttsSession?.overrides = getCombinedTtsOverrides()
+                updateReadArea()
             }
         }
 
