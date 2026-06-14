@@ -585,7 +585,8 @@ data class LiveChapterData(
 
     private fun fixChapterFormatting(spansList: List<TextSpan>): List<TextSpan> {
         val mutableSpans = spansList.toMutableList()
-        val sentenceEndChars = setOf('.', '!', '?', '”', '"', '’', '\'', '…')
+        val sentenceEndChars = FormattingHelper.sentenceEndChars
+        val quoteChars = FormattingHelper.quoteChars
         
         val highlightColor = context?.let { ctx ->
             try {
@@ -600,33 +601,75 @@ data class LiveChapterData(
         while (i < mutableSpans.size - 1) {
             val currentSpan = mutableSpans[i]
             val currentText = currentSpan.text.toString()
-            val currentTrimmed = currentText.trim()
             
-            val isBroken = currentTrimmed.isNotEmpty() && currentTrimmed.last() !in sentenceEndChars
+            val semanticLastChar = FormattingHelper.getSemanticLastChar(currentText)
+            val isBroken = semanticLastChar != null && semanticLastChar !in sentenceEndChars
+            
             if (isBroken) {
                 val nextSpan = mutableSpans[i + 1]
                 val nextText = nextSpan.text.toString()
+                
+                val currentTrimmed = currentText.trim()
                 val nextTrimmed = nextText.trim()
                 
-                val firstLetter = nextTrimmed.firstOrNull { it.isLetter() }
+                val currentEndsWithQuote = currentTrimmed.isNotEmpty() && currentTrimmed.last() in quoteChars
+                val nextStartsWithQuote = nextTrimmed.isNotEmpty() && nextTrimmed.first() in quoteChars
+                
+                val nextSemanticFirst = FormattingHelper.getSemanticFirstText(nextTrimmed)
+                val firstLetter = nextSemanticFirst.firstOrNull { it.isLetter() }
                 val nextStartsLowercase = firstLetter != null && firstLetter.isLowerCase()
                 
-                if (nextStartsLowercase) {
-                    val sentenceEndIndex = findFirstSentenceEnd(nextText)
+                val shouldMerge = nextStartsLowercase || 
+                        semanticLastChar == ',' || semanticLastChar == ';' || semanticLastChar == ':' ||
+                        (currentEndsWithQuote && nextStartsWithQuote)
+                
+                if (shouldMerge) {
+                    var currentQuoteIdx = -1
+                    if (currentEndsWithQuote && nextStartsWithQuote) {
+                        for (idx in currentSpan.text.length - 1 downTo 0) {
+                            val c = currentSpan.text[idx]
+                            if (c.isWhitespace()) continue
+                            if (c in quoteChars) {
+                                currentQuoteIdx = idx
+                                break
+                            }
+                        }
+                    }
                     
-                    val firstSentenceText = nextSpan.text.subSequence(0, sentenceEndIndex) as Spanned
-                    val remainingText = nextSpan.text.subSequence(sentenceEndIndex, nextSpan.text.length) as Spanned
+                    var nextQuoteIdx = -1
+                    if (currentEndsWithQuote && nextStartsWithQuote) {
+                        for (idx in 0 until nextSpan.text.length) {
+                            val c = nextSpan.text[idx]
+                            if (c.isWhitespace()) continue
+                            if (c in quoteChars) {
+                                nextQuoteIdx = idx
+                                break
+                            }
+                        }
+                    }
+                    
+                    val currentMergedText = if (currentQuoteIdx != -1) {
+                        currentSpan.text.subSequence(0, currentQuoteIdx) as Spanned
+                    } else {
+                        currentSpan.text
+                    }
+                    
+                    val nextMergedText = if (nextQuoteIdx != -1) {
+                        nextSpan.text.subSequence(nextQuoteIdx + 1, nextSpan.text.length) as Spanned
+                    } else {
+                        nextSpan.text
+                    }
                     
                     val mergedBuilder = SpannableStringBuilder()
-                    mergedBuilder.append(currentSpan.text)
-                    if (currentText.isNotEmpty() && !currentText.last().isWhitespace() &&
-                        firstSentenceText.isNotEmpty() && !firstSentenceText.first().isWhitespace()) {
+                    mergedBuilder.append(currentMergedText)
+                    if (currentMergedText.isNotEmpty() && !currentMergedText.last().isWhitespace() &&
+                        nextMergedText.isNotEmpty() && !nextMergedText.first().isWhitespace()) {
                         mergedBuilder.append(" ")
                     }
                     val highlightStart = mergedBuilder.length
-                    mergedBuilder.append(firstSentenceText)
+                    mergedBuilder.append(nextMergedText)
                     val highlightEnd = mergedBuilder.length
-
+                    
                     mergedBuilder.setSpan(
                         android.text.style.BackgroundColorSpan(highlightColor),
                         highlightStart,
@@ -643,19 +686,7 @@ data class LiveChapterData(
                     )
                     
                     mutableSpans[i] = mergedSpan
-                    
-                    if (remainingText.toString().trim().isNotEmpty()) {
-                        val remainingSpan = TextSpan(
-                            text = remainingText,
-                            start = nextSpan.start + sentenceEndIndex,
-                            end = nextSpan.end,
-                            index = nextSpan.index,
-                            innerIndex = nextSpan.innerIndex
-                        )
-                        mutableSpans[i + 1] = remainingSpan
-                    } else {
-                        mutableSpans.removeAt(i + 1)
-                    }
+                    mutableSpans.removeAt(i + 1)
                     continue
                 }
             }
@@ -669,39 +700,6 @@ data class LiveChapterData(
                 span
             }
         }
-    }
-
-    private fun findFirstSentenceEnd(text: String): Int {
-        var i = 0
-        while (i < text.length) {
-            val c = text[i]
-            if (c == '.' || c == '!' || c == '?' || c == '…') {
-                var j = i + 1
-                while (j < text.length && (text[j] == '.' || text[j] == '!' || text[j] == '?' || text[j] == '…')) {
-                    j++
-                }
-                while (j < text.length && (text[j] == '\"' || text[j] == '\'' || text[j] == '’' || text[j] == '”' || text[j] == '»' || text[j] == '」')) {
-                    j++
-                }
-                var isAbbreviation = false
-                if (c == '.') {
-                    val precedingStart = (i - 1 downTo 0).firstOrNull { text[it].isWhitespace() || text[it] == '.' } ?: -1
-                    val precedingWord = text.substring(precedingStart + 1, i)
-                    val isSingleLetterInitial = precedingWord.length == 1 && precedingWord[0].isUpperCase()
-                    val isVowelless = precedingWord.isNotEmpty() && precedingWord.none { it in "aeiouyAEIOUY" }
-                    val isFollowedByUpperOrDigitNoSpace = j < text.length && (text[j].isUpperCase() || text[j].isDigit())
-                    if (isSingleLetterInitial || isVowelless || isFollowedByUpperOrDigitNoSpace) {
-                        isAbbreviation = true
-                    }
-                }
-                if (!isAbbreviation && (j == text.length || text[j].isWhitespace())) {
-                    return j
-                }
-                i = j - 1
-            }
-            i++
-        }
-        return text.length
     }
 }
 
