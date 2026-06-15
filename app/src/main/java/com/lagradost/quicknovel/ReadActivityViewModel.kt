@@ -603,8 +603,7 @@ data class LiveChapterData(
             val currentText = currentSpan.text.toString()
             
             val semanticLastChar = FormattingHelper.getSemanticLastChar(currentText)
-            val isBroken = semanticLastChar != null && semanticLastChar !in sentenceEndChars && 
-                (semanticLastChar in setOf(',', ';', ':') || !FormattingHelper.isHeader(currentText))
+            val isBroken = semanticLastChar != null && semanticLastChar !in sentenceEndChars
             
             if (isBroken) {
                 val nextSpan = mutableSpans[i + 1]

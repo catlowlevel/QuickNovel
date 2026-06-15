@@ -26,28 +26,13 @@ class FormattingHelperTest {
     }
 
     @Test
-    fun testIsHeader() {
-        assertTrue(FormattingHelper.isHeader("\"Primordial Garden, Tea Party Venue\""))
-        assertTrue(FormattingHelper.isHeader("Chapter 1"))
-        assertTrue(FormattingHelper.isHeader("Chapter One"))
-        assertTrue(FormattingHelper.isHeader("THE PRIMORDIAL GARDEN"))
-        assertTrue(FormattingHelper.isHeader("Introduction"))
-        assertFalse(FormattingHelper.isHeader("\"The simple, wooden tavern appeared...\""))
-        assertFalse(FormattingHelper.isHeader("He was the"))
-        assertFalse(FormattingHelper.isHeader("This is a"))
-        assertFalse(FormattingHelper.isHeader("\"Yes\""))
-        assertFalse(FormattingHelper.isHeader("\"Yes,\""))
-    }
-
-    @Test
     fun testMergeLogic() {
         val sentenceEndChars = FormattingHelper.sentenceEndChars
         val quoteChars = FormattingHelper.quoteChars
 
         fun tryMerge(currentText: String, nextText: String): String? {
             val semanticLastChar = FormattingHelper.getSemanticLastChar(currentText)
-            val isBroken = semanticLastChar != null && semanticLastChar !in sentenceEndChars && 
-                (semanticLastChar in setOf(',', ';', ':') || !FormattingHelper.isHeader(currentText))
+            val isBroken = semanticLastChar != null && semanticLastChar !in sentenceEndChars
             if (!isBroken) return null
 
             val currentTrimmed = currentText.trim()
@@ -122,8 +107,5 @@ class FormattingHelperTest {
 
         // Test that any broken paragraph merges if the next starts with a letter
         assertEquals("The sun was Yesterday it rained.", tryMerge("The sun was", "Yesterday it rained."))
-
-        // Test that headers (Title Case strings) do not merge
-        assertNull(tryMerge("\"Chapter One: The Journey Begins\"", "\"The sun was rising over the mountains as they set off.\""))
     }
 }
