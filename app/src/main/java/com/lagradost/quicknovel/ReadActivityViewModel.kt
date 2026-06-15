@@ -926,21 +926,12 @@ class ReadActivityViewModel : ViewModel() {
 
         val current = currentIndex
 
-        val isTtsActive = currentTTSStatus != TTSHelper.TTSStatus.IsStopped
-        val tts = ttsLine.value
-        val scrollIndex = if (isTtsActive && tts != null) {
-            val inner = innerCharToIndex(tts.index, tts.startChar) ?: 0
-            ScrollIndex(tts.index, inner, tts.startChar)
-        } else {
-            val save = visibility.firstFullyVisible ?: visibility.firstInMemory
-            save.toScroll()
-        }
-
+        val save = visibility.firstFullyVisible ?: visibility.firstInMemory
         desiredTTSIndex = visibility.firstFullyVisibleUnderLine?.toScroll()
-        changeIndex(scrollIndex)
+        changeIndex(save.toScroll())
 
         // update the read area if changed index
-        if (current != scrollIndex.index)
+        if (current != save.index)
             updateReadArea()
 
         // load forwards and backwards
@@ -2075,15 +2066,18 @@ class ReadActivityViewModel : ViewModel() {
                         setKey(EPUB_TTS_CHAPTER_INDEX, book.title(), index)
 
                         // if we are outside the app, then we post new desired location
+                        // as otherwise the scroll overrides it
                         // this is done to scroll to latest when we go back to the app
-                        innerCharToIndex(index, line.startChar)?.let {
-                            changeIndex(
-                                ScrollIndex(
-                                    index,
-                                    it,
-                                    line.startChar
-                                ), alsoTitle = isInApp
-                            )
+                        if (!isInApp) {
+                            innerCharToIndex(index, line.startChar)?.let {
+                                changeIndex(
+                                    ScrollIndex(
+                                        index,
+                                        it,
+                                        line.startChar
+                                    ), alsoTitle = false
+                                )
+                            }
                         }
 
 
