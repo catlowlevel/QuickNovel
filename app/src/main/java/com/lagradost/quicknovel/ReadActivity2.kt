@@ -1540,8 +1540,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
 
             binding.readFixParagraphs.apply {
-                val data = viewModel.chapterData[viewModel.currentIndex]
-                val isFixed = if (data is Resource.Success) data.value.isFormattingFixed else false
+                val isFixed = viewModel.fixParagraphs
                 text = if (isFixed) {
                     context.getString(R.string.restore_original)
                 } else {
@@ -1549,7 +1548,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
 
                 setOnClickListener {
-                    viewModel.toggleFixParagraphs(viewModel.currentIndex)
+                    viewModel.toggleFixParagraphs()
                     bottomSheetDialog.dismiss()
                 }
             }

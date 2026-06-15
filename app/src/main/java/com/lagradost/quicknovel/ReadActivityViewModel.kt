@@ -1068,13 +1068,15 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    fun toggleFixParagraphs(index: Int) {
-        val data = chapterData[index]
-        if (data == null || data !is Resource.Success) return
-
-        val chapter = data.value
-        val updated = chapter.copy(isFormattingFixed = !chapter.isFormattingFixed)
-        chapterData[index] = Resource.Success(updated)
+    fun toggleFixParagraphs() {
+        val newVal = !fixParagraphs
+        fixParagraphs = newVal
+        for (key in chapterData.keys) {
+            val data = chapterData[key]
+            if (data is Resource.Success) {
+                chapterData[key] = Resource.Success(data.value.copy(isFormattingFixed = newVal))
+            }
+        }
         updateReadArea()
     }
 
@@ -1211,6 +1213,7 @@ class ReadActivityViewModel : ViewModel() {
                     originalSpans = originalSpans,
                     rawText = rawText,
                     title = book.getChapterTitle(index),
+                    isFormattingFixed = fixParagraphs
                 )
             }
 
@@ -2513,6 +2516,14 @@ class ReadActivityViewModel : ViewModel() {
         false,
         Boolean::class,
         mlUseOnlineTransaltionLive
+    )
+
+    val fixParagraphsLive: MutableLiveData<Boolean> = MutableLiveData(null)
+    var fixParagraphs by PreferenceDelegateLiveView(
+        EPUB_FIX_PARAGRAPHS,
+        false,
+        Boolean::class,
+        fixParagraphsLive
     )
 
     /*

@@ -67,6 +67,7 @@ const val EPUB_CURRENT_ML: String = "reader_epub_ml"
 const val EPUB_CURRENT_POSITION_READ_AT: String = "reader_epub_position_read"
 const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 const val EPUB_AI_SETTINGS: String = "reader_epub_ai_settings"
+const val EPUB_FIX_PARAGRAPHS: String = "reader_epub_fix_paragraphs"
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 
 enum class AiProviderType {
