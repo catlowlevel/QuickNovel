@@ -617,8 +617,11 @@ data class LiveChapterData(
                 
                 val nextSemanticFirst = FormattingHelper.getSemanticFirstText(nextTrimmed)
                 val firstLetter = nextSemanticFirst.firstOrNull { it.isLetter() }
+                val nextStartsLowercase = firstLetter != null && firstLetter.isLowerCase()
                 
-                val shouldMerge = firstLetter != null
+                val shouldMerge = nextStartsLowercase || 
+                        semanticLastChar == ',' || semanticLastChar == ';' || semanticLastChar == ':' ||
+                        (currentEndsWithQuote && nextStartsWithQuote)
                 
                 if (shouldMerge) {
                     var currentQuoteIdx = -1

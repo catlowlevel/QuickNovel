@@ -43,8 +43,11 @@ class FormattingHelperTest {
 
             val nextSemanticFirst = FormattingHelper.getSemanticFirstText(nextTrimmed)
             val firstLetter = nextSemanticFirst.firstOrNull { it.isLetter() }
+            val nextStartsLowercase = firstLetter != null && firstLetter.isLowerCase()
 
-            val shouldMerge = firstLetter != null
+            val shouldMerge = nextStartsLowercase ||
+                    semanticLastChar == ',' || semanticLastChar == ';' || semanticLastChar == ':' ||
+                    (currentEndsWithQuote && nextStartsWithQuote)
 
             if (!shouldMerge) return null
 
@@ -90,22 +93,19 @@ class FormattingHelperTest {
             return currentMergedText + space + nextMergedText
         }
 
-        // Test quote-boundary merging with capitalization (e.g. proper nouns/titles)
-        assertEquals("\"We met with Mr. Smith.\"", tryMerge("\"We met with\"", "\"Mr. Smith.\""))
-        assertEquals("\"He was the Chosen One.\"", tryMerge("\"He was the\"", "\"Chosen One.\""))
+        // Test the user's two exact cases
+        assertEquals("\"Hello Good Sir.\"", tryMerge("\"Hello Good\"", "\"Sir.\""))
+        assertEquals("\"Hello, Sir\"", tryMerge("\"Hello,\"", "\"Sir\""))
 
-        // Test comma-boundary merging inside quotes with capitalization
-        assertEquals("\"Yes, Captain.\"", tryMerge("\"Yes,\"", "\"Captain.\""))
-
-        // Test normal merging (continuation starts with lowercase)
-        assertEquals("This is a simple test.", tryMerge("This is a", "simple test."))
-        assertEquals("Indeed, we should go.", tryMerge("Indeed,", "we should go."))
+        // Test normal merging
+        assertEquals("Hello world", tryMerge("Hello", "world"))
+        assertEquals("Hello, world", tryMerge("Hello,", "world"))
         
         // Test no merge (already complete sentence)
-        assertNull(tryMerge("The book is on the table.", "It is very interesting."))
-        assertNull(tryMerge("\"No way.\"", "\"That cannot be true.\""))
+        assertNull(tryMerge("Hello.", "world"))
+        assertNull(tryMerge("\"Hello.\"", "\"Sir.\""))
 
-        // Test that any broken paragraph merges if the next starts with a letter
-        assertEquals("The sun was Yesterday it rained.", tryMerge("The sun was", "Yesterday it rained."))
+        // Test capitalization no-merge if not quoted/comma
+        assertNull(tryMerge("Hello", "World"))
     }
 }
