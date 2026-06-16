@@ -69,4 +69,14 @@ class TTSHelperTest {
         assertEquals(1, lines.size)
         assertEquals("This is e.g. a test of abbreviations.", lines[0].speakOutMsg.trim())
     }
+
+    @Test
+    fun testTtsParseText_abbreviationWithNumber() {
+        val text = "Room No. 2 is currently empty."
+        val lines = TTSHelper.ttsParseText(text, 0)
+        
+        assertEquals(1, lines.size)
+        assertEquals("Room No. 2 is currently empty.", lines[0].speakOutMsg.trim())
+    }
 }
+

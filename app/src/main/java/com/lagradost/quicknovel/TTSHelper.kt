@@ -723,7 +723,13 @@ object TTSHelper {
                         // - It contains no vowels (e.g. "Mr", "Mrs", "Dr", "Ms", "St", "vs", "ltd", "Sgt", "Cpl", "Pvt")
                         val isVowelless = precedingWord.isNotEmpty() && precedingWord.none { it in "aeiouyAEIOUY" }
 
-                        if (isSingleLetterInitial || isFollowedByUpperOrDigitNoSpace || isFollowedByLowercase || hasInternalPeriod || isVowelless) {
+                        // 5. Check if it's a common abbreviation followed by a digit (e.g. "No. 2", "Vol. 3", "Ch. 5")
+                        val isFollowedByDigit = m < text.length && text[m].isDigit()
+                        val isCommonNumAbbr = isFollowedByDigit && precedingWord.lowercase() in listOf(
+                            "no", "vol", "ch", "sec", "fig", "p", "pp", "v", "vs", "apt", "ste"
+                        )
+
+                        if (isSingleLetterInitial || isFollowedByUpperOrDigitNoSpace || isFollowedByLowercase || hasInternalPeriod || isVowelless || isCommonNumAbbr) {
                             isAbbreviation = true
                         }
                     }
