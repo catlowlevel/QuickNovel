@@ -664,8 +664,7 @@ object TTSHelper {
 
         val invalidStartChars =
             arrayOf(
-                ' ', '.', ',', '\n', '\"',
-                '\'', '’', '‘', '“', '”', '«', '»', '「', '」', '…', '[', ']'
+                ' ', '.', ',', '\n', '…'
             )
 
         var index = 0
@@ -734,9 +733,16 @@ object TTSHelper {
                         }
                     }
 
-                    // Sentence boundary: punctuation followed by whitespace or end of string
-                    if (!isAbbreviation && (j == text.length || text[j].isWhitespace() || text[j] == '\"' || text[j] == '\'' || text[j] == '’' || text[j] == '”' || text[j] == '»' || text[j] == '」')) {
-                        endIndex = j
+                    // Peek ahead to include trailing quotes and brackets in this sentence
+                    var endOfSentenceIndex = j
+                    val quoteAndBracketChars = arrayOf('\"', '\'', '’', '‘', '“', '”', '«', '»', '「', '」', '[', ']')
+                    while (endOfSentenceIndex < text.length && quoteAndBracketChars.contains(text[endOfSentenceIndex])) {
+                        endOfSentenceIndex++
+                    }
+
+                    // Sentence boundary: punctuation (plus trailing quotes) followed by whitespace or end of string
+                    if (!isAbbreviation && (endOfSentenceIndex == text.length || text[endOfSentenceIndex].isWhitespace())) {
+                        endIndex = endOfSentenceIndex
                         break
                     }
                     i = j - 1 // Move to the end of the punctuation sequence
@@ -748,7 +754,10 @@ object TTSHelper {
                 break
             }
 
-            val invalidEndChars = arrayOf('\n')
+            val invalidEndChars =
+                arrayOf(
+                    ' ', '\n'
+                )
             while (true) {
                 var containsInvalidEndChar = false
                 for (a in invalidEndChars) {
