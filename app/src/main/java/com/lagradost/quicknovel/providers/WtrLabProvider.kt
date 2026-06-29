@@ -21,7 +21,7 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 
 
-class WtrLabProvider : MainAPI() {
+class  WtrLabProvider : MainAPI() {
     override val mainUrl = "https://wtr-lab.com"
     override val name = "WTR-LAB"
     override val lang = "en"
@@ -113,13 +113,12 @@ class WtrLabProvider : MainAPI() {
     ): HeadMainPageResponse {
         val url = "$mainUrl/en/novel-list?page=$page&status=$mainCategory&orderBy=$orderBy&genre=$tag"
         val doc = app.get(url).document
-        val jsonNode = doc.selectFirst("#__NEXT_DATA__")
-        val json = jsonNode?.data() ?: throw ErrorLoadingException("no data")
-        val nextData = parseJson<ResultJsonResponse.Root>(json)
-
-        val returnValue = nextData.props.pageProps.series?.map { series ->
-            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.rawId}/${series.slug}") {
-                posterUrl = fixUrlNull(series.data.image)
+        val returnValue =  doc.select(".series-list>div").mapNotNull { select ->
+            val titleHolder = select.selectFirst("a") ?: return@mapNotNull null
+            val href = titleHolder.attr("href") ?: return@mapNotNull null
+            val name = titleHolder.attr("title") ?: return@mapNotNull null
+            newSearchResponse(name, href) {
+                posterUrl = fixUrlNull(select.selectFirst("a img")?.attr("src"))
             }
         } ?: emptyList()
         return HeadMainPageResponse(url, returnValue)
@@ -128,13 +127,12 @@ class WtrLabProvider : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/en/novel-finder?text=${query.replace(" ", "+")}"
         val doc = app.get(url).document
-        val jsonNode = doc.selectFirst("#__NEXT_DATA__")
-        val json = jsonNode?.data() ?: throw ErrorLoadingException("no data")
-        val nextData = parseJson<ResultJsonResponse.Root>(json)
-
-        return nextData.props.pageProps.series?.map { series ->
-            newSearchResponse(series.data.title, "$mainUrl/en/novel/${series.rawId}/${series.slug}") {
-                posterUrl = fixUrlNull(series.data.image)
+        return doc.select(".series-list>div").mapNotNull { select ->
+            val titleHolder = select.selectFirst("a") ?: return@mapNotNull null
+            val href = titleHolder.attr("href") ?: return@mapNotNull null
+            val name = titleHolder.attr("title") ?: return@mapNotNull null
+            newSearchResponse(name, href) {
+                posterUrl = fixUrlNull(select.selectFirst("a img")?.attr("src"))
             }
         } ?: emptyList()
     }
