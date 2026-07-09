@@ -4,6 +4,42 @@ import org.junit.Test
 import org.junit.Assert.*
 
 class TTSHelperTest {
+    @Test
+    fun testApplyOverrides_censoredWordWithAsterisk() {
+        val result = TTSHelper.applyOverrides(
+            "That was sh*t.",
+            listOf(TTSOverride("sh*t", "shit"))
+        )
+
+        assertEquals("That was shit.", result)
+    }
+
+    @Test
+    fun testTtsParseText_preservesAsteriskForOverrideMatching() {
+        val lines = TTSHelper.ttsParseText("That was sh*t.", 0)
+
+        assertEquals(1, lines.size)
+        assertEquals("That was sh*t.", lines[0].speakOutMsg.trim())
+    }
+
+    @Test
+    fun testCombineOverrides_localOverridesGlobalWithSameOriginal() {
+        val combined = TTSHelper.combineOverrides(
+            listOf(TTSOverride("foo", "local")),
+            listOf(TTSOverride("foo", "global"), TTSOverride("bar", "globalBar"))
+        )
+
+        assertEquals(2, combined.size)
+        assertEquals("local", combined[0].replacement)
+        assertEquals("bar", combined[1].original)
+    }
+
+    @Test
+    fun testFindOverrideRanges_literalAsteriskMatch() {
+        val ranges = TTSHelper.findOverrideRanges("That was sh*t.", TTSOverride("sh*t", "shit"))
+
+        assertEquals(listOf(9..12), ranges)
+    }
 
     @Test
     fun testTtsParseText_standardSentence() {
@@ -201,5 +237,3 @@ class TTSHelperTest {
         assertEquals("This is a well-known fact — at least, to most.", lines[0].speakOutMsg.trim())
     }
 }
-
-

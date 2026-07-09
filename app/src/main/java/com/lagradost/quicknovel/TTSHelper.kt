@@ -427,8 +427,76 @@ data class TTSOverride(
 )
 
 object TTSHelper {
+    private val invalidSpeakChars =
+        arrayOf(
+            "<",
+            ">",
+            "_",
+            "^",
+            "«",
+            "»",
+            "「",
+            "」",
+            "¿",
+            "*",
+            "~",
+            "\u200c" // Zero width joiner
+        )
+
+    private fun sanitizeSpeakOutText(text: String): String {
+        var msg = text
+        for (c in invalidSpeakChars) {
+            msg = msg.replace(c, " ")
+        }
+        return msg
+    }
+
+    fun combineOverrides(
+        localOverrides: List<TTSOverride>,
+        globalOverrides: List<TTSOverride>
+    ): List<TTSOverride> {
+        val combined = localOverrides.toMutableList()
+        val localOriginals = localOverrides.map { it.original }.toSet()
+        for (global in globalOverrides) {
+            if (global.original !in localOriginals) {
+                combined.add(global)
+            }
+        }
+        return combined
+    }
+
+    fun findOverrideRanges(text: String, override: TTSOverride): List<IntRange> {
+        if (!override.enabled || override.original.isEmpty()) return emptyList()
+
+        return try {
+            if (override.useRegex) {
+                val options =
+                    if (override.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+                override.original
+                    .toRegex(options)
+                    .findAll(text)
+                    .map { it.range }
+                    .toList()
+            } else {
+                buildList {
+                    var index = text.indexOf(override.original, ignoreCase = !override.caseSensitive)
+                    while (index != -1) {
+                        add(index until (index + override.original.length))
+                        index = text.indexOf(
+                            override.original,
+                            index + override.original.length,
+                            ignoreCase = !override.caseSensitive
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun applyOverrides(text: String, overrides: List<TTSOverride>?): String {
-        if (overrides.isNullOrEmpty()) return text
+        if (overrides.isNullOrEmpty()) return sanitizeSpeakOutText(text)
         var msg = text
         for (override in overrides) {
             if (!override.enabled || override.original.isEmpty()) continue
@@ -448,7 +516,7 @@ object TTSHelper {
                 // Ignore invalid regex
             }
         }
-        return msg
+        return sanitizeSpeakOutText(msg)
     }
 
     data class TTSLine(
@@ -779,32 +847,14 @@ object TTSHelper {
 
             try {
                 val message = text.substring(index, endIndex)
-                var msg = message
-                val invalidChars =
-                    arrayOf(
-                        "<",
-                        ">",
-                        "_",
-                        "^",
-                        "«",
-                        "»",
-                        "「",
-                        "」",
-                        "¿",
-                        "*",
-                        "~",
-                        "\u200c" // Zero width joiner
-                    )
-                for (c in invalidChars) {
-                    msg = msg.replace(c, " ")
-                }
-                if (msg
+                val speakableMessage = sanitizeSpeakOutText(message)
+                if (speakableMessage
                         .replace("\n", "")
                         .replace("\t", "")
                         .replace(".", "").isNotEmpty()
                 ) {
-                    if (isValidSpeakOutMsg(msg)) {
-                        ttsLines.add(TTSLine(msg, index + charOffset, endIndex + charOffset, index = tag))
+                    if (isValidSpeakOutMsg(speakableMessage)) {
+                        ttsLines.add(TTSLine(message, index + charOffset, endIndex + charOffset, index = tag))
                     }
                 }
             } catch (t: Throwable) {

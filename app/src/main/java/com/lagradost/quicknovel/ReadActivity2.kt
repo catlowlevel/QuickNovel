@@ -2202,7 +2202,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         val updateTest = {
             val input = dialogBinding.ttsOverridesTestInput.text.toString()
-            val activeOverrides = if (tabLayout.selectedTabPosition == 0) localOverrides else globalOverrides
+            val activeOverrides = TTSHelper.combineOverrides(localOverrides, globalOverrides)
             val result = TTSHelper.applyOverrides(input, activeOverrides)
             dialogBinding.ttsOverridesTestResult.text = result
         }

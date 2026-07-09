@@ -535,42 +535,17 @@ data class LiveChapterData(
 
         return spansList.map { span ->
             var builder: SpannableStringBuilder? = null
+            val textStr = span.text.toString()
             
             for (override in overrides) {
-                if (!override.enabled || override.original.isEmpty()) continue
-                try {
-                    val textStr = span.text.toString()
-                    if (override.useRegex) {
-                        val options = if (override.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
-                        val regex = override.original.toRegex(options)
-                        regex.findAll(textStr).forEach { match ->
-                            val b = builder ?: SpannableStringBuilder(span.text).also { builder = it }
-                            b.setSpan(
-                                android.text.style.BackgroundColorSpan(highlightColor),
-                                match.range.first,
-                                match.range.last + 1,
-                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                            )
-                        }
-                    } else {
-                        var index = textStr.indexOf(override.original, ignoreCase = !override.caseSensitive)
-                        while (index != -1) {
-                            val b = builder ?: SpannableStringBuilder(span.text).also { builder = it }
-                            b.setSpan(
-                                android.text.style.BackgroundColorSpan(highlightColor),
-                                index,
-                                index + override.original.length,
-                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                            )
-                            index = textStr.indexOf(
-                                override.original,
-                                index + override.original.length,
-                                ignoreCase = !override.caseSensitive
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Ignore regex error
+                for (matchRange in TTSHelper.findOverrideRanges(textStr, override)) {
+                    val b = builder ?: SpannableStringBuilder(span.text).also { builder = it }
+                    b.setSpan(
+                        android.text.style.BackgroundColorSpan(highlightColor),
+                        matchRange.first,
+                        matchRange.last + 1,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
                 }
             }
             
@@ -2365,17 +2340,7 @@ class ReadActivityViewModel : ViewModel() {
         }
 
     fun getCombinedTtsOverrides(): List<TTSOverride> {
-        val locals = ttsOverridesLocal
-        val globals = ttsOverridesGlobal
-        val combined = mutableListOf<TTSOverride>()
-        combined.addAll(locals)
-        val localOriginals = locals.map { it.original }.toSet()
-        for (global in globals) {
-            if (global.original !in localOriginals) {
-                combined.add(global)
-            }
-        }
-        return combined
+        return TTSHelper.combineOverrides(ttsOverridesLocal.toList(), ttsOverridesGlobal.toList())
     }
 
     var ttsOverrides: Array<TTSOverride>
