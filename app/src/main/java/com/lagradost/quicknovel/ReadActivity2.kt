@@ -1323,9 +1323,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
 
                 is Resource.Loading -> {
-                    binding.readNormalLayout.isVisible = false
+                    val hasContent = textAdapter.itemCount > 0
+                    binding.readNormalLayout.isVisible = hasContent
                     binding.readFail.isVisible = false
                     binding.readLoading.isVisible = true
+                    binding.readLoading.bringToFront()
                     binding.loadingText.apply {
                         isGone = loading.url.isNullOrBlank()
                         text = loading.url ?: ""

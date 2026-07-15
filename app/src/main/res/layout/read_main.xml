@@ -13,6 +13,8 @@
             tools:visibility="visible"
             android:id="@+id/read_loading"
             android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 

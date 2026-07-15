@@ -1483,12 +1483,6 @@ class ReadActivityViewModel : ViewModel() {
                     return@ioSafe
                 }
 
-                // Set the specific chapter to loading in the list to show local loading
-                chapterMutex.withLock {
-                    chapterData[index] = Resource.Loading(null)
-                }
-                updateReadArea()
-
                 // Use originalRendered to avoid summarizing translated text
                 val summary = provider.summarize(textToSummarize)
                 
@@ -1593,12 +1587,6 @@ class ReadActivityViewModel : ViewModel() {
                     updateReadArea()
                     return@ioSafe
                 }
-
-                // Set the specific chapter to loading in the list to show local loading
-                chapterMutex.withLock {
-                    chapterData[index] = Resource.Loading(null)
-                }
-                updateReadArea()
 
                 // Use originalRendered to avoid translating already translated text
                 val translation = provider.translate(textToTranslate, aiSettings.targetLanguage)
