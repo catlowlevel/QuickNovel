@@ -29,9 +29,9 @@ class OpenAiProvider(
     }
 
     override suspend fun translate(text: String, targetLanguage: String): String {
-        val prompt = "Translate the following novel chapter into $targetLanguage. Maintain the original atmosphere, tone, and formatting. Pay special attention to character names, place names, and unique terminology, ensuring they are translated consistently and correctly. If a name has a common translation, use it; otherwise, transliterate it appropriately. Provide only the translated text. Chapter text:\n\n$text"
+        val prompt = "Translate the following novel chapter into natural, idiomatic $targetLanguage. Adapt the sentence structures to flow naturally in $targetLanguage — add necessary articles and grammatical elements, rephrase overly long or convoluted sentences, and ensure the text reads smoothly as native $targetLanguage prose. Preserve the original meaning, atmosphere, and formatting, but prioritize natural readability over word-for-word fidelity. For character names, place names, and unique terminology: use a common translation if one exists, otherwise transliterate. Provide only the translated text. Chapter text:\n\n$text"
         return chatCompletion(
-            systemMessage = "You are an expert translator that translates novel chapters while preserving their essence, tone, and character names.",
+            systemMessage = "You are an expert literary translator. Your translations read like native $targetLanguage prose while faithfully conveying the original meaning, atmosphere, and character voices.",
             userMessage = prompt
         )
     }
