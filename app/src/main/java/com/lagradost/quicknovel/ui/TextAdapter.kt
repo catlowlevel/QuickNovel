@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.text.getSpans
+import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -826,8 +827,9 @@ class TextAdapter(
             }
 
             is SingleFinishedChapterBinding -> {
-                config.setArgs(binding.root, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
-                binding.root.minHeight = config.toolbarHeight
+                config.setArgs(binding.chapterTitle, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                config.setArgs(binding.chapterWordCount, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                binding.root.minimumHeight = config.toolbarHeight
             }
 
             is SingleLoadBinding -> {
@@ -869,7 +871,11 @@ class TextAdapter(
     private fun bindChapter(binding: ViewBinding, obj: ChapterStartSpanned) {
         if (binding !is SingleFinishedChapterBinding) return
 
-        binding.root.setText(obj.name)
+        binding.chapterTitle.setText(obj.name)
+        binding.chapterWordCount.isGone = obj.wordCount == null
+        binding.chapterWordCount.text = obj.wordCount?.let {
+            binding.root.context.getString(R.string.chapter_word_count_label, it)
+        }
         binding.root.setOnClickListener {
             viewModel.switchVisibility()
         }
@@ -919,7 +925,9 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                    newItem.id == oldItem.id &&
+                            oldItem.name == newItem.name &&
+                            oldItem.wordCount == newItem.wordCount
                 }
 
                 is ChapterLoadSpanned -> {

@@ -1133,11 +1133,20 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         observe(viewModel.title) { title ->
-            binding.readToolbar.title = title
+            binding.readToolbar.title = ""
+            binding.readToolbarTitle.text = title
         }
 
         observe(viewModel.chapterTile) { title ->
-            binding.readToolbar.subtitle = title.asString(binding.readToolbar.context)
+            binding.readToolbar.subtitle = ""
+            binding.readToolbarChapterTitle.text = title.asString(binding.readToolbar.context)
+        }
+
+        observeNullable(viewModel.chapterWordCount) { count ->
+            binding.readToolbarWordCount.isGone = count == null
+            binding.readToolbarWordCount.text = count?.let {
+                binding.root.context.getString(R.string.chapter_word_count_label, it)
+            }
         }
 
         observe(viewModel.chaptersTitles) { titles ->

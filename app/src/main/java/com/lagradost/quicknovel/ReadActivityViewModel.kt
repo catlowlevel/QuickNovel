@@ -746,6 +746,10 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<UiText>(null)
     val chapterTile: LiveData<UiText> = _chapterTile
 
+    private val _chapterWordCount: MutableLiveData<Int?> =
+        MutableLiveData<Int?>(null)
+    val chapterWordCount: LiveData<Int?> = _chapterWordCount
+
     private val _bottomVisibility: MutableLiveData<Boolean> =
         MutableLiveData<Boolean>(false)
     val bottomVisibility: LiveData<Boolean> = _bottomVisibility
@@ -815,6 +819,15 @@ class ReadActivityViewModel : ViewModel() {
         } else {
             title
         }
+    }
+
+    private fun getChapterWordCount(index: Int): Int? {
+        return (chapterData[index] as? Resource.Success)?.value?.wordCount
+    }
+
+    private fun postChapterTitle(index: Int) {
+        _chapterTile.postValue(chaptersTitlesInternal.getOrNull(index) ?: UiText.DynamicString(""))
+        _chapterWordCount.postValue(getChapterWordCount(index))
     }
 
     private val hasExpanded: HashSet<Int> = hashSetOf()
@@ -986,6 +999,7 @@ class ReadActivityViewModel : ViewModel() {
                                 idx,
                                 0,
                                 chaptersTitlesInternal[idx],
+                                getChapterWordCount(idx),
                                 canReload
                             )
                         )
@@ -999,7 +1013,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, getChapterWordCount(cIndex), canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -1015,7 +1029,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, getChapterWordCount(cIndex), canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -1189,7 +1203,7 @@ class ReadActivityViewModel : ViewModel() {
             chapterMutex.withLock {
                 chapterData[index] = data
                 if (index == currentIndex) {
-                    _chapterTile.postValue(getChapterTitle(index))
+                    postChapterTitle(index)
                 }
             }
         } catch (t: Throwable) {
@@ -1417,7 +1431,7 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
             if (index == currentIndex) {
-                _chapterTile.postValue(getChapterTitle(index))
+                postChapterTitle(index)
             }
             return
         }
@@ -1427,7 +1441,7 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
             if (index == currentIndex) {
-                _chapterTile.postValue(getChapterTitle(index))
+                postChapterTitle(index)
             }
             return
         }
@@ -1462,7 +1476,7 @@ class ReadActivityViewModel : ViewModel() {
                     chapterMutex.withLock {
                         chapterData[index] = Resource.Success(updated)
                         if (index == currentIndex) {
-                            _chapterTile.postValue(getChapterTitle(index))
+                            postChapterTitle(index)
                         }
                     }
                     updateReadArea()
@@ -1495,7 +1509,7 @@ class ReadActivityViewModel : ViewModel() {
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
                     if (index == currentIndex) {
-                        _chapterTile.postValue(getChapterTitle(index))
+                        postChapterTitle(index)
                     }
                 }
                 updateReadArea()
@@ -1507,7 +1521,7 @@ class ReadActivityViewModel : ViewModel() {
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
                     if (index == currentIndex) {
-                        _chapterTile.postValue(getChapterTitle(index))
+                        postChapterTitle(index)
                     }
                 }
                 updateReadArea()
@@ -1527,7 +1541,7 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
             if (index == currentIndex) {
-                _chapterTile.postValue(getChapterTitle(index))
+                postChapterTitle(index)
             }
             return
         }
@@ -1537,7 +1551,7 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Success(updated)
             updateReadArea()
             if (index == currentIndex) {
-                _chapterTile.postValue(getChapterTitle(index))
+                postChapterTitle(index)
             }
             return
         }
@@ -1573,7 +1587,7 @@ class ReadActivityViewModel : ViewModel() {
                     chapterMutex.withLock {
                         chapterData[index] = Resource.Success(updated)
                         if (index == currentIndex) {
-                            _chapterTile.postValue(getChapterTitle(index))
+                            postChapterTitle(index)
                         }
                     }
                     updateReadArea()
@@ -1606,7 +1620,7 @@ class ReadActivityViewModel : ViewModel() {
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
                     if (index == currentIndex) {
-                        _chapterTile.postValue(getChapterTitle(index))
+                        postChapterTitle(index)
                     }
                 }
                 updateReadArea()
@@ -1618,7 +1632,7 @@ class ReadActivityViewModel : ViewModel() {
                 chapterMutex.withLock {
                     chapterData[index] = Resource.Success(updated)
                     if (index == currentIndex) {
-                        _chapterTile.postValue(getChapterTitle(index))
+                        postChapterTitle(index)
                     }
                 }
                 updateReadArea()
@@ -2177,7 +2191,7 @@ class ReadActivityViewModel : ViewModel() {
     private var lastScrollMs: Long = 0
     private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
         if (alsoTitle) {
-            _chapterTile.postValue(getChapterTitle(scrollIndex.index))
+            postChapterTitle(scrollIndex.index)
         }
 
         desiredIndex = scrollIndex
@@ -2245,7 +2259,7 @@ class ReadActivityViewModel : ViewModel() {
         // push the update
         updateReadArea(seekToDesired = true)
         // update the view
-        _chapterTile.postValue(getChapterTitle(index))
+        postChapterTitle(index)
         //_loadingStatus.postValue(Resource.Success(true))
     }
 
