@@ -67,6 +67,8 @@ const val EPUB_CURRENT_ML: String = "reader_epub_ml"
 const val EPUB_CURRENT_POSITION_READ_AT: String = "reader_epub_position_read"
 const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 const val EPUB_AI_SETTINGS: String = "reader_epub_ai_settings"
+const val EPUB_AI_SETTINGS_PROFILES: String = "reader_epub_ai_settings_profiles"
+const val EPUB_TRANSLATION_GLOSSARY: String = "reader_epub_translation_glossary"
 const val EPUB_FIX_PARAGRAPHS: String = "reader_epub_fix_paragraphs"
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 
@@ -83,6 +85,16 @@ data class AiSettings(
     val customUrl: String = "",
     val useAi: Boolean = false,
     val targetLanguage: String = "English"
+)
+
+data class AiSettingsProfile(
+    val name: String = "",
+    val settings: AiSettings = AiSettings()
+)
+
+data class AiSettingsProfiles(
+    val selectedName: String = "",
+    val profiles: List<AiSettingsProfile> = emptyList()
 )
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 const val HISTORY_FOLDER: String = "result_history"

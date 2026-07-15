@@ -47,6 +47,15 @@ import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.TTSHelper.parseTextToSpans
 import com.lagradost.quicknovel.TTSHelper.preParseHtml
 import com.lagradost.quicknovel.TTSHelper.ttsParseText
+import com.lagradost.quicknovel.ai.AiTranslationCacheKey
+import com.lagradost.quicknovel.ai.GlossaryCategory
+import com.lagradost.quicknovel.ai.NovelIdentity
+import com.lagradost.quicknovel.ai.TranslationGlossary
+import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
+import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
+import com.lagradost.quicknovel.ai.TranslationPromptBuilder
+import com.lagradost.quicknovel.ai.TranslationRequest
+import com.lagradost.quicknovel.ai.TranslationResponseParser
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.letInner
 import com.lagradost.quicknovel.mvvm.logError
@@ -725,6 +734,50 @@ class ReadActivityViewModel : ViewModel() {
         get() = getKey<AiSettings>(EPUB_AI_SETTINGS) ?: AiSettings()
         set(value) = setKey(EPUB_AI_SETTINGS, value)
 
+    fun currentNovelId(): String = NovelIdentity.stableId(book)
+
+    fun loadTranslationGlossary(): TranslationGlossary {
+        val ctx = context ?: return TranslationGlossary()
+        return TranslationGlossaryRepository(ctx).load(currentNovelId())
+    }
+
+    fun saveUserGlossaryEntry(sourceText: String, translatedText: String, category: GlossaryCategory): TranslationGlossary {
+        val ctx = context ?: throw IllegalStateException("Context unavailable")
+        val glossary = TranslationGlossaryRepository(ctx).addOrUpdateUserEntry(
+            currentNovelId(),
+            sourceText,
+            translatedText,
+            category
+        )
+        invalidateAiTranslations()
+        return glossary
+    }
+
+    fun deleteGlossaryEntry(sourceText: String): TranslationGlossary {
+        val ctx = context ?: throw IllegalStateException("Context unavailable")
+        val glossary = TranslationGlossaryRepository(ctx).deleteEntry(currentNovelId(), sourceText)
+        invalidateAiTranslations()
+        return glossary
+    }
+
+    private fun invalidateAiTranslations() {
+        for (entry in chapterData.entries) {
+            val value = entry.value
+            if (value is Resource.Success) {
+                entry.setValue(
+                    Resource.Success(
+                        value.value.copy(
+                            aiTranslatedRendered = null,
+                            aiTranslatedSpans = null,
+                            isAiTranslated = false
+                        )
+                    )
+                )
+            }
+        }
+        updateReadArea()
+    }
+
     private val _chapterData: MutableLiveData<ChapterUpdate> =
         MutableLiveData<ChapterUpdate>(null)
     val chapter: LiveData<ChapterUpdate> = _chapterData
@@ -749,6 +802,10 @@ class ReadActivityViewModel : ViewModel() {
     private val _chapterWordCount: MutableLiveData<Int?> =
         MutableLiveData<Int?>(null)
     val chapterWordCount: LiveData<Int?> = _chapterWordCount
+
+    private val _glossaryDiscovered: MutableLiveData<Int> =
+        MutableLiveData<Int>(0)
+    val glossaryDiscovered: LiveData<Int> = _glossaryDiscovered
 
     private val _bottomVisibility: MutableLiveData<Boolean> =
         MutableLiveData<Boolean>(false)
@@ -1447,13 +1504,13 @@ class ReadActivityViewModel : ViewModel() {
         }
 
         val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
-            showToast("AI provider not configured")
+            showToast(R.string.ai_provider_not_configured)
             return
         }
 
         ioSafe {
             try {
-                _loadingStatus.postValue(Resource.Loading("Summarizing..."))
+                _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.ai_summarizing)))
                 
                 val textToSummarize = chapter.originalRendered.toString()
                 val textHash = hashString(textToSummarize.toByteArray())
@@ -1509,7 +1566,7 @@ class ReadActivityViewModel : ViewModel() {
                 updateReadArea()
             } catch (e: Exception) {
                 logError(e)
-                showToast(e.message ?: "Failed to summarize")
+                showToast(e.message ?: context?.getString(R.string.ai_summarize_failed) ?: "")
                 // Ensure we stay on original
                 val updated = chapter.copy(isSummarized = false)
                 chapterMutex.withLock {
@@ -1551,23 +1608,83 @@ class ReadActivityViewModel : ViewModel() {
         }
 
         val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
-            showToast("AI provider not configured")
+            showToast(R.string.ai_provider_not_configured)
             return
         }
 
         ioSafe {
             try {
-                _loadingStatus.postValue(Resource.Loading("Translating with AI..."))
+                _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.ai_translating)))
                 
                 val textToTranslate = chapter.originalRendered.toString()
                 val textHash = hashString(textToTranslate.toByteArray())
                 val providerName = aiSettings.providerType.name
-                val modelName = aiSettings.model.ifBlank { "default" }.replace(Regex("[^a-zA-Z0-9]"), "_")
-                val targetLang = aiSettings.targetLanguage.replace(Regex("[^a-zA-Z0-9]"), "_")
-                val cacheFile = context?.cacheDir?.let { File(it, "ai_tra_${textHash}_${providerName}_${modelName}_${targetLang}.txt") }
+                val novelId = currentNovelId()
+                val glossaryRepository = context?.let { TranslationGlossaryRepository(it) }
+                val glossary = glossaryRepository?.load(novelId) ?: TranslationGlossary()
+                val glossaryHash = TranslationGlossaryRepository.contentHash(glossary.entries)
+                val cacheName = AiTranslationCacheKey.build(
+                    textHash = textHash,
+                    providerName = providerName,
+                    modelName = aiSettings.model,
+                    targetLanguage = aiSettings.targetLanguage,
+                    novelId = novelId,
+                    glossaryRevision = glossary.revision,
+                    glossaryHash = glossaryHash
+                )
+                val cacheFile = context?.cacheDir?.let { File(it, cacheName) }
 
-                if (!reload && cacheFile?.exists() == true) {
-                    val translation = cacheFile.readText()
+                fun readCachedTranslation(file: File): String? {
+                    val cachedText = file.readText()
+                    val translation = TranslationResponseParser.extractTranslatedTextFallback(cachedText)
+                        ?: if (TranslationResponseParser.looksLikeJsonObject(cachedText)) {
+                            safe { file.delete() }
+                            null
+                        } else {
+                            cachedText
+                        }
+                    if (translation == null) Log.i(TAG, "Ignored invalid AI translation cache for ${file.name}")
+                    return translation
+                }
+
+                fun findCompatibleCachedTranslation(): String? {
+                    val dir = context?.cacheDir ?: return null
+                    val newestGlossaryUpdate = glossary.entries.maxOfOrNull { it.updatedAt } ?: 0L
+                    val prefix = AiTranslationCacheKey.prefix(
+                        textHash = textHash,
+                        providerName = providerName,
+                        modelName = aiSettings.model,
+                        targetLanguage = aiSettings.targetLanguage,
+                        novelId = novelId
+                    )
+                    val legacyName = AiTranslationCacheKey.legacy(
+                        textHash = textHash,
+                        providerName = providerName,
+                        modelName = aiSettings.model,
+                        targetLanguage = aiSettings.targetLanguage
+                    )
+                    val candidates = dir.listFiles()?.filter { file ->
+                        file.isFile &&
+                                (file.name.startsWith(prefix) || file.name == legacyName) &&
+                                file.lastModified() >= newestGlossaryUpdate
+                    }?.sortedByDescending { it.lastModified() }.orEmpty()
+
+                    for (candidate in candidates) {
+                        val translation = readCachedTranslation(candidate) ?: continue
+                        safe { cacheFile?.writeText(translation) }
+                        return translation
+                    }
+                    return null
+                }
+
+                if (!reload) {
+                    val translation = if (cacheFile?.exists() == true) {
+                        readCachedTranslation(cacheFile)
+                    } else {
+                        findCompatibleCachedTranslation()
+                    }
+
+                    if (translation != null) {
                     val rendered = markwonMutex.withLock {
                         markwon.render(markwon.parse(translation))
                     }
@@ -1586,12 +1703,41 @@ class ReadActivityViewModel : ViewModel() {
                     }
                     updateReadArea()
                     return@ioSafe
+                    }
                 }
 
-                // Use originalRendered to avoid translating already translated text
-                val translation = provider.translate(textToTranslate, aiSettings.targetLanguage)
+                // Use originalRendered to avoid translating already translated text.
+                val result = provider.translate(
+                    TranslationRequest(
+                        text = textToTranslate,
+                        targetLanguage = aiSettings.targetLanguage,
+                        novelTitle = book.title(),
+                        chapterTitle = book.getChapterTitle(index).asStringNull(context),
+                        glossary = glossary.entries
+                    )
+                )
+                val translation = result.translatedText
+                val merge = glossaryRepository?.mergeAiDiscoveries(novelId, result.discoveredEntries)
+                if ((merge?.addedCount ?: 0) > 0) {
+                    _glossaryDiscovered.postValue(merge?.addedCount ?: 0)
+                }
 
                 safe { cacheFile?.writeText(translation) }
+                val mergedGlossary = merge?.glossary
+                if (mergedGlossary != null && mergedGlossary != glossary) {
+                    val mergedCacheName = AiTranslationCacheKey.build(
+                        textHash = textHash,
+                        providerName = providerName,
+                        modelName = aiSettings.model,
+                        targetLanguage = aiSettings.targetLanguage,
+                        novelId = novelId,
+                        glossaryRevision = mergedGlossary.revision,
+                        glossaryHash = TranslationGlossaryRepository.contentHash(mergedGlossary.entries)
+                    )
+                    safe {
+                        context?.cacheDir?.let { File(it, mergedCacheName).writeText(translation) }
+                    }
+                }
 
                 val rendered = markwonMutex.withLock {
                     markwon.render(markwon.parse(translation))
@@ -1614,7 +1760,7 @@ class ReadActivityViewModel : ViewModel() {
                 updateReadArea()
             } catch (e: Exception) {
                 logError(e)
-                showToast(e.message ?: "Failed to translate")
+                showToast(e.message ?: context?.getString(R.string.ai_translate_failed) ?: "")
                 // Ensure we stay on original
                 val updated = chapter.copy(isAiTranslated = false)
                 chapterMutex.withLock {

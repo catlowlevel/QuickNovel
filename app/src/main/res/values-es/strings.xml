@@ -301,4 +301,39 @@
     <string name="conection_error">Error de conexión.</string>
     <string name="unknown">Desconocido</string>
     <string name="chapter_word_count">%1$s (%2$d palabras)</string>
+    <string name="ai_token_setting">AI Token Setting</string>
+    <string name="ai_token_setting_name">Token Setting Name</string>
+    <string name="ai_save_token_setting">Save Setting</string>
+    <string name="ai_token_setting_saved">AI token setting saved</string>
+    <string name="ai_token_setting_name_required">Token setting name is required</string>
+    <string name="ai_token_setting_keep_one">Keep at least one AI token setting</string>
+    <string name="ai_token_setting_not_found">AI token setting not found</string>
+    <string name="ai_token_setting_delete_confirm" formatted="true">Delete AI token setting %s?</string>
+    <string name="ai_connection_successful">Connection successful</string>
+    <string name="ai_connection_failed_format" formatted="true">Connection failed: %s</string>
+    <string name="ai_provider_not_configured">AI provider not configured</string>
+    <string name="ai_summarizing">Summarizing...</string>
+    <string name="ai_translating">Translating with AI...</string>
+    <string name="ai_summarize_failed">Failed to summarize</string>
+    <string name="ai_translate_failed">Failed to translate</string>
+    <string name="translation_glossary">Translation Glossary</string>
+    <string name="translation_glossary_empty">No glossary entries yet</string>
+    <string name="translation_glossary_search">Search glossary</string>
+    <string name="translation_glossary_source">Source term</string>
+    <string name="translation_glossary_target">Translation</string>
+    <string name="translation_glossary_category">Category</string>
+    <string name="translation_glossary_all_categories">All Categories</string>
+    <string name="translation_glossary_all_sources">All Sources</string>
+    <string name="translation_glossary_sort_newest">Sort: Newest</string>
+    <string name="translation_glossary_sort_category">Sort: Category</string>
+    <string name="translation_glossary_sort_source">Sort: Source</string>
+    <string name="translation_glossary_sort_translation">Sort: Translation</string>
+    <string name="translation_glossary_ai">AI</string>
+    <string name="translation_glossary_manual">Manual</string>
+    <string name="translation_glossary_locked">Locked</string>
+    <string name="translation_glossary_add">Add Entry</string>
+    <string name="translation_glossary_edit">Edit Entry</string>
+    <string name="translation_glossary_delete_confirm">Delete this glossary entry?</string>
+    <string name="translation_glossary_required">Source and translation are required</string>
+    <string name="translation_glossary_discovered" formatted="true">%d glossary entries discovered</string>
 </resources>

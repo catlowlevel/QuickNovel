@@ -1,0 +1,75 @@
+package com.lagradost.quicknovel.ai
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.lagradost.quicknovel.DataStore
+
+object TranslationResponseParser {
+    fun parse(raw: String): TranslationResult {
+        val node = readJsonObject(raw)
+        val translated = node.get("translated_text")?.asText()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("AI response did not include translated_text")
+
+        val discovered = node.get("discovered_terms")
+        val candidates = if (discovered?.isArray == true) {
+            discovered.mapNotNull { candidate ->
+                if (!candidate.isObject) return@mapNotNull null
+                val source = candidate.get("source")?.asText()?.trim().orEmpty()
+                val translation = candidate.get("translation")?.asText()?.trim().orEmpty()
+                val category = candidate.get("category")?.asText()?.trim()?.uppercase()?.let {
+                    runCatching { GlossaryCategory.valueOf(it) }.getOrNull()
+                } ?: return@mapNotNull null
+                if (!TranslationGlossaryRepository.isValidTermPair(source, translation)) return@mapNotNull null
+                GlossaryCandidate(source, translation, category)
+            }
+        } else {
+            emptyList()
+        }
+
+        return TranslationResult(translated, candidates)
+    }
+
+    fun extractJson(raw: String): String {
+        val trimmed = raw.trim()
+        extractJsonFence(trimmed)?.let { return it }
+
+        val start = trimmed.indexOf('{')
+        val end = trimmed.lastIndexOf('}')
+        if (start == -1 || end <= start) throw IllegalArgumentException("AI response was not a JSON object")
+        return trimmed.substring(start, end + 1)
+    }
+
+    fun extractTranslatedTextFallback(raw: String): String? {
+        return runCatching {
+            val node = readJsonObject(raw)
+            node.get("translated_text")?.asText()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    fun safeFallbackText(raw: String): String? {
+        extractTranslatedTextFallback(raw)?.let { return it }
+        return if (looksLikeJsonObject(raw)) null else raw
+    }
+
+    fun looksLikeJsonObject(raw: String): Boolean {
+        val trimmed = raw.trim()
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) return true
+        return extractJsonFence(trimmed) != null
+    }
+
+    private fun readJsonObject(raw: String): JsonNode {
+        val node = DataStore.mapper.readTree(extractJson(raw))
+        if (!node.isObject) throw IllegalArgumentException("AI response was not a JSON object")
+        return node
+    }
+
+    private fun extractJsonFence(trimmed: String): String? {
+        if (!trimmed.startsWith("```")) return null
+        val firstLineEnd = trimmed.indexOf('\n').takeIf { it != -1 } ?: return null
+        val fenceHeader = trimmed.substring(3, firstLineEnd).trim()
+        if (fenceHeader.isNotBlank() && !fenceHeader.equals("json", ignoreCase = true)) return null
+        val closingFenceStart = trimmed.lastIndexOf("```")
+        if (closingFenceStart <= firstLineEnd) return null
+        val inner = trimmed.substring(firstLineEnd + 1, closingFenceStart).trim()
+        return inner.takeIf { it.startsWith("{") && it.endsWith("}") }
+    }
+}

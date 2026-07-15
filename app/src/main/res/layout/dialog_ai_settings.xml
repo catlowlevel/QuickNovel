@@ -13,6 +13,60 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="@string/ai_token_setting"
+            android:textSize="14sp"
+            android:textColor="?attr/textColor" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ai_profile_select"
+            style="@style/BlackButton"
+            android:layout_width="match_parent"
+            android:layout_marginTop="5dp"
+            android:text="@string/default_text" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="15dp"
+            android:hint="@string/ai_token_setting_name">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/ai_profile_name_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ai_save_profile"
+                style="@style/WhiteButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/ai_save_token_setting"
+                android:layout_marginEnd="5dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ai_delete_profile"
+                style="@style/WhiteButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/delete"
+                android:layout_marginStart="5dp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="@string/ai_provider"
             android:textSize="14sp"
             android:textColor="?attr/textColor" />

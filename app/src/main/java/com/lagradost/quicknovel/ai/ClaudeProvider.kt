@@ -25,9 +25,18 @@ class ClaudeProvider(
         return sendMessage(prompt)
     }
 
-    override suspend fun translate(text: String, targetLanguage: String): String {
-        val prompt = "Translate the following novel chapter into natural, idiomatic $targetLanguage. Adapt the sentence structures to flow naturally in $targetLanguage — add necessary articles and grammatical elements, rephrase overly long or convoluted sentences, and ensure the text reads smoothly as native $targetLanguage prose. Preserve the original meaning, atmosphere, and formatting, but prioritize natural readability over word-for-word fidelity. For character names, place names, and unique terminology: use a common translation if one exists, otherwise transliterate. Provide only the translated text. Chapter text:\n\n$text"
-        return sendMessage(prompt)
+    override suspend fun translate(request: TranslationRequest): TranslationResult {
+        val raw = sendMessage(TranslationPromptBuilder.build(request))
+        return try {
+            TranslationResponseParser.parse(raw)
+        } catch (e: Exception) {
+            val fallback = if (customUrl.isNotBlank()) TranslationResponseParser.safeFallbackText(raw) else null
+            if (fallback != null) {
+                TranslationResult(fallback, emptyList())
+            } else {
+                throw e
+            }
+        }
     }
 
     private suspend fun sendMessage(prompt: String): String {
@@ -57,7 +66,7 @@ class ClaudeProvider(
                 "content-type" to "application/json"
             ),
             json = request,
-            timeout = 120
+            timeout = 300
         )
 
         if (!response.isSuccessful) {

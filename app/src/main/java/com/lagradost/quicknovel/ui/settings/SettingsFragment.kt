@@ -55,9 +55,12 @@ import java.util.Locale
 import com.lagradost.quicknovel.databinding.DialogAiSettingsBinding
 import com.lagradost.quicknovel.AiProviderType
 import com.lagradost.quicknovel.AiSettings
+import com.lagradost.quicknovel.AiSettingsProfile
+import com.lagradost.quicknovel.AiSettingsProfiles
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.DataStore.setKey
 import com.lagradost.quicknovel.EPUB_AI_SETTINGS
+import com.lagradost.quicknovel.EPUB_AI_SETTINGS_PROFILES
 import com.lagradost.quicknovel.ai.AiManager
 import androidx.core.view.isVisible
 import com.lagradost.quicknovel.util.UIHelper.dismissSafe
@@ -531,8 +534,58 @@ class SettingsFragment : PreferenceFragmentCompat() {
             builder.setView(binding.root)
 
             var currentSettings = context.getKey<AiSettings>(EPUB_AI_SETTINGS) ?: AiSettings()
+            val storedProfiles = context.getKey<AiSettingsProfiles>(EPUB_AI_SETTINGS_PROFILES)
+            var profiles = storedProfiles?.profiles?.toMutableList() ?: mutableListOf()
+            if (profiles.isEmpty()) {
+                profiles += AiSettingsProfile(context.getString(R.string.default_text), currentSettings)
+            }
+            var selectedProfileName = profiles.firstOrNull { it.settings == currentSettings }?.name
+                ?: storedProfiles?.selectedName?.takeIf { name -> profiles.any { it.name == name } }
+                ?: profiles.first().name
+
+            fun readSettingsFromInputs(): AiSettings {
+                return currentSettings.copy(
+                    apiKey = binding.aiApiKeyInput.text.toString(),
+                    model = binding.aiModelInput.text.toString(),
+                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
+                    customUrl = binding.aiCustomUrlInput.text.toString()
+                )
+            }
+
+            fun saveProfiles() {
+                context.setKey(
+                    EPUB_AI_SETTINGS_PROFILES,
+                    AiSettingsProfiles(
+                        selectedName = selectedProfileName,
+                        profiles = profiles.sortedBy { profile -> profile.name.lowercase(Locale.ROOT) }
+                    )
+                )
+            }
+
+            fun upsertCurrentProfile(showSavedToast: Boolean): Boolean {
+                val name = binding.aiProfileNameInput.text?.toString()?.trim().orEmpty()
+                if (name.isBlank()) {
+                    showToast(R.string.ai_token_setting_name_required)
+                    return false
+                }
+
+                currentSettings = readSettingsFromInputs()
+                val existing = profiles.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+                val profile = AiSettingsProfile(name, currentSettings)
+                if (existing == -1) {
+                    profiles += profile
+                } else {
+                    profiles[existing] = profile
+                }
+                selectedProfileName = name
+                saveProfiles()
+                if (showSavedToast) showToast(R.string.ai_token_setting_saved)
+                return true
+            }
 
             fun updateUi() {
+                binding.aiProfileSelect.text = selectedProfileName
+                binding.aiProfileNameInput.setText(selectedProfileName)
                 binding.aiProviderSelect.text = currentSettings.providerType.name
                 binding.aiApiKeyInput.setText(currentSettings.apiKey)
                 binding.aiModelInput.setText(currentSettings.model)
@@ -542,6 +595,50 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
 
             updateUi()
+
+            binding.aiProfileSelect.setOnClickListener { view ->
+                view.popupMenu(
+                    profiles.mapIndexed { index, profile -> index to txt(profile.name) },
+                    selectedItemId = profiles.indexOfFirst { it.name == selectedProfileName }.takeIf { idx -> idx >= 0 }
+                ) {
+                    val profile = profiles.getOrNull(itemId) ?: return@popupMenu
+                    selectedProfileName = profile.name
+                    currentSettings = profile.settings
+                    updateUi()
+                }
+            }
+
+            binding.aiSaveProfile.setOnClickListener {
+                if (upsertCurrentProfile(showSavedToast = true)) {
+                    updateUi()
+                }
+            }
+
+            binding.aiDeleteProfile.setOnClickListener {
+                if (profiles.size <= 1) {
+                    showToast(R.string.ai_token_setting_keep_one)
+                    return@setOnClickListener
+                }
+                val name = binding.aiProfileNameInput.text?.toString()?.trim().orEmpty()
+                val index = profiles.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+                if (index == -1) {
+                    showToast(R.string.ai_token_setting_not_found)
+                    return@setOnClickListener
+                }
+                AlertDialog.Builder(context, R.style.AlertDialogCustom)
+                    .setTitle(R.string.delete)
+                    .setMessage(context.getString(R.string.ai_token_setting_delete_confirm, profiles[index].name))
+                    .setPositiveButton(R.string.delete) { _, _ ->
+                        profiles.removeAt(index)
+                        val replacement = profiles.first()
+                        selectedProfileName = replacement.name
+                        currentSettings = replacement.settings
+                        saveProfiles()
+                        updateUi()
+                    }
+                    .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+                    .show()
+            }
 
             binding.aiProviderSelect.setOnClickListener { view ->
                 view.popupMenu(
@@ -554,15 +651,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
 
             binding.aiFetchModels.setOnClickListener {
-                val tempSettings = currentSettings.copy(
-                    apiKey = binding.aiApiKeyInput.text.toString(),
-                    model = binding.aiModelInput.text.toString(),
-                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
-                    customUrl = binding.aiCustomUrlInput.text.toString()
-                )
+                val tempSettings = readSettingsFromInputs()
                 val provider = AiManager.getProvider(tempSettings)
                 if (provider == null) {
-                    showToast("Provider not configured")
+                    showToast(R.string.ai_provider_not_configured)
                     return@setOnClickListener
                 }
                 ioSafe {
@@ -584,37 +676,29 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
 
             binding.aiTestConnection.setOnClickListener {
-                val tempSettings = currentSettings.copy(
-                    apiKey = binding.aiApiKeyInput.text.toString(),
-                    model = binding.aiModelInput.text.toString(),
-                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
-                    customUrl = binding.aiCustomUrlInput.text.toString()
-                )
+                val tempSettings = readSettingsFromInputs()
                 val provider = AiManager.getProvider(tempSettings)
                 if (provider == null) {
-                    showToast("Provider not configured")
+                    showToast(R.string.ai_provider_not_configured)
                     return@setOnClickListener
                 }
                 ioSafe {
                     try {
                         provider.summarize("Test")
-                        showToast("Connection successful!")
+                        showToast(R.string.ai_connection_successful)
                     } catch (e: Exception) {
                         logError(e)
-                        showToast("Connection failed: ${e.message}")
+                        showToast(context.getString(R.string.ai_connection_failed_format, e.message))
                     }
                 }
             }
 
             builder.setPositiveButton(R.string.sort_apply) { _, _ ->
-                val finalSettings = currentSettings.copy(
-                    apiKey = binding.aiApiKeyInput.text.toString(),
-                    model = binding.aiModelInput.text.toString(),
-                    targetLanguage = binding.aiTargetLanguageInput.text.toString(),
-                    customUrl = binding.aiCustomUrlInput.text.toString(),
-                    useAi = true
-                )
-                context.setKey(EPUB_AI_SETTINGS, finalSettings)
+                if (upsertCurrentProfile(showSavedToast = false)) {
+                    val finalSettings = readSettingsFromInputs().copy(useAi = true)
+                    context.setKey(EPUB_AI_SETTINGS, finalSettings)
+                    saveProfiles()
+                }
             }
             builder.setNegativeButton(R.string.sort_cancel) { d, _ -> d.dismiss() }
 

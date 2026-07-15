@@ -11,6 +11,8 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -26,10 +28,14 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.Spinner
+import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -76,6 +82,7 @@ import com.lagradost.quicknovel.ui.TextAdapter
 import com.lagradost.quicknovel.ui.TextConfig
 import com.lagradost.quicknovel.ui.TextVisualLine
 import com.lagradost.quicknovel.ui.ViewHolderState
+import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
@@ -92,6 +99,11 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
+import com.lagradost.quicknovel.ai.GlossaryCategory
+import com.lagradost.quicknovel.ai.GlossarySource
+import com.lagradost.quicknovel.ai.TranslationGlossary
+import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
+import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -178,6 +190,372 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         set(value) {
             _imageHolder = WeakReference(value)
         }
+
+    private fun dialogPadding(): Int = (20 * resources.displayMetrics.density).roundToInt()
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+
+    private fun showTranslationGlossaryDialog() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dialogPadding(), dp(12), dialogPadding(), 0)
+        }
+        val textFilter = EditText(this).apply {
+            hint = getString(R.string.translation_glossary_search)
+            isSingleLine = true
+            setTextColor(colorFromAttribute(R.attr.textColor))
+            setHintTextColor(colorFromAttribute(R.attr.grayTextColor))
+            backgroundTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+        }
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(6), 0, dp(8))
+        }
+        val sortRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        fun com.google.android.material.button.MaterialButton.applyGlossaryFilterStyle() {
+            setTextColor(colorFromAttribute(R.attr.textColor))
+            backgroundTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.iconGrayBackground))
+            strokeColor = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+            strokeWidth = dp(1)
+            cornerRadius = dp(6)
+            minHeight = dp(44)
+            insetTop = 0
+            insetBottom = 0
+        }
+        val categoryFilter = com.google.android.material.button.MaterialButton(this).apply {
+            text = getString(R.string.translation_glossary_all_categories)
+            isSingleLine = true
+            isAllCaps = false
+            applyGlossaryFilterStyle()
+        }
+        val sourceFilter = com.google.android.material.button.MaterialButton(this).apply {
+            text = getString(R.string.translation_glossary_all_sources)
+            isSingleLine = true
+            isAllCaps = false
+            applyGlossaryFilterStyle()
+        }
+        val sortButton = com.google.android.material.button.MaterialButton(this).apply {
+            text = getString(R.string.translation_glossary_sort_newest)
+            isSingleLine = true
+            isAllCaps = false
+            applyGlossaryFilterStyle()
+        }
+        val empty = TextView(this).apply {
+            text = getString(R.string.translation_glossary_empty)
+            gravity = Gravity.CENTER
+            setPadding(0, dialogPadding(), 0, dialogPadding())
+            setTextColor(colorFromAttribute(R.attr.grayTextColor))
+        }
+        val list = ListView(this).apply {
+            divider = ColorDrawable(colorFromAttribute(R.attr.primaryGrayBackground))
+            dividerHeight = dp(1)
+            setPadding(0, 0, 0, dp(4))
+            clipToPadding = false
+        }
+        val adapter = GlossaryAdapter()
+        list.adapter = adapter
+        list.emptyView = empty
+
+        root.addView(textFilter, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        filterRow.addView(
+            categoryFilter,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(6)
+            }
+        )
+        filterRow.addView(
+            sourceFilter,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(6)
+            }
+        )
+        root.addView(filterRow)
+        sortRow.addView(sortButton, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        root.addView(sortRow)
+        root.addView(empty, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        root.addView(list, LinearLayout.LayoutParams.MATCH_PARENT, (360 * resources.displayMetrics.density).roundToInt())
+
+        var glossary = viewModel.loadTranslationGlossary()
+        var visibleEntries = glossary.entries
+        var selectedCategory: GlossaryCategory? = null
+        var selectedSource: GlossarySource? = null
+        var sortMode = GlossarySortMode.NEWEST
+
+        fun sourceLabel(source: GlossarySource): String {
+            return if (source == GlossarySource.USER) {
+                getString(R.string.translation_glossary_manual)
+            } else {
+                getString(R.string.translation_glossary_ai)
+            }
+        }
+
+        fun sortLabel(mode: GlossarySortMode): String {
+            return when (mode) {
+                GlossarySortMode.NEWEST -> getString(R.string.translation_glossary_sort_newest)
+                GlossarySortMode.CATEGORY -> getString(R.string.translation_glossary_sort_category)
+                GlossarySortMode.SOURCE_TEXT -> getString(R.string.translation_glossary_sort_source)
+                GlossarySortMode.TRANSLATION -> getString(R.string.translation_glossary_sort_translation)
+            }
+        }
+
+        fun refresh(filter: String = textFilter.text?.toString().orEmpty()) {
+            val normalizedFilter = filter.trim()
+            visibleEntries = glossary.entries.filter { entry ->
+                (selectedCategory == null || entry.category == selectedCategory) &&
+                        (selectedSource == null || entry.source == selectedSource) &&
+                        (normalizedFilter.isBlank() ||
+                        entry.sourceText.contains(normalizedFilter, ignoreCase = true) ||
+                        entry.translatedText.contains(normalizedFilter, ignoreCase = true) ||
+                        entry.category.name.contains(normalizedFilter, ignoreCase = true) ||
+                        sourceLabel(entry.source).contains(normalizedFilter, ignoreCase = true))
+            }.let { filtered ->
+                when (sortMode) {
+                    GlossarySortMode.NEWEST -> filtered.sortedWith(
+                        compareByDescending<TranslationGlossaryEntry> { it.createdAt }
+                            .thenByDescending { it.updatedAt }
+                            .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                    )
+
+                    GlossarySortMode.CATEGORY -> TranslationGlossaryRepository.sortEntries(filtered)
+                    GlossarySortMode.SOURCE_TEXT -> filtered.sortedWith(
+                        compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                            .thenBy { it.sourceText }
+                    )
+
+                    GlossarySortMode.TRANSLATION -> filtered.sortedWith(
+                        compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.translatedText) }
+                            .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                    )
+                }
+            }
+            adapter.entries = visibleEntries
+            adapter.notifyDataSetChanged()
+        }
+
+        categoryFilter.setOnClickListener { view ->
+            val categories = listOf<GlossaryCategory?>(null) + GlossaryCategory.values()
+            view.popupMenu(
+                categories.mapIndexed { index, category ->
+                    index to txt(category?.name ?: getString(R.string.translation_glossary_all_categories))
+                },
+                selectedItemId = categories.indexOf(selectedCategory)
+            ) {
+                selectedCategory = categories[itemId]
+                categoryFilter.text = selectedCategory?.name ?: getString(R.string.translation_glossary_all_categories)
+                refresh()
+            }
+        }
+
+        sourceFilter.setOnClickListener { view ->
+            val sources = listOf<GlossarySource?>(null) + GlossarySource.values()
+            view.popupMenu(
+                sources.mapIndexed { index, source ->
+                    index to txt(source?.let(::sourceLabel) ?: getString(R.string.translation_glossary_all_sources))
+                },
+                selectedItemId = sources.indexOf(selectedSource)
+            ) {
+                selectedSource = sources[itemId]
+                sourceFilter.text = selectedSource?.let(::sourceLabel) ?: getString(R.string.translation_glossary_all_sources)
+                refresh()
+            }
+        }
+
+        sortButton.setOnClickListener { view ->
+            val modes = GlossarySortMode.values().toList()
+            view.popupMenu(
+                modes.mapIndexed { index, mode -> index to txt(sortLabel(mode)) },
+                selectedItemId = modes.indexOf(sortMode)
+            ) {
+                sortMode = modes[itemId]
+                sortButton.text = sortLabel(sortMode)
+                refresh()
+            }
+        }
+
+        textFilter.addTextChangedListener {
+            refresh(it?.toString().orEmpty())
+        }
+
+        list.setOnItemClickListener { _, _, position, _ ->
+            visibleEntries.getOrNull(position)?.let { entry ->
+                showGlossaryEntryDialog(entry) {
+                    glossary = it
+                    refresh()
+                }
+            }
+        }
+
+        refresh()
+        val dialog = AlertDialog.Builder(this, R.style.AlertDialogCustom)
+            .setTitle(R.string.translation_glossary)
+            .setView(root)
+            .setPositiveButton(R.string.translation_glossary_add, null)
+            .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+            .show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            showGlossaryEntryDialog(null) {
+                glossary = it
+                refresh()
+            }
+        }
+    }
+
+    private inner class GlossaryAdapter : BaseAdapter() {
+        var entries: List<TranslationGlossaryEntry> = emptyList()
+
+        override fun getCount(): Int = entries.size
+        override fun getItem(position: Int): TranslationGlossaryEntry = entries[position]
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val holder: GlossaryRowHolder
+            val root = if (convertView == null) {
+                val row = LinearLayout(this@ReadActivity2).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    foreground = ContextCompat.getDrawable(this@ReadActivity2, R.drawable.ripple_regular)
+                }
+                val source = TextView(this@ReadActivity2).apply {
+                    textSize = 16f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(colorFromAttribute(R.attr.textColor))
+                }
+                val target = TextView(this@ReadActivity2).apply {
+                    textSize = 15f
+                    setPadding(0, dp(4), 0, dp(6))
+                    setTextColor(colorFromAttribute(R.attr.textColor))
+                }
+                val meta = TextView(this@ReadActivity2).apply {
+                    textSize = 12f
+                    setTextColor(colorFromAttribute(R.attr.grayTextColor))
+                }
+                row.addView(source)
+                row.addView(target)
+                row.addView(meta)
+                holder = GlossaryRowHolder(source, target, meta)
+                row.tag = holder
+                row
+            } else {
+                holder = convertView.tag as GlossaryRowHolder
+                convertView
+            }
+
+            val entry = getItem(position)
+            holder.source.text = entry.sourceText
+            holder.target.text = entry.translatedText
+            val source = if (entry.source == GlossarySource.USER) {
+                getString(R.string.translation_glossary_manual)
+            } else {
+                getString(R.string.translation_glossary_ai)
+            }
+            holder.meta.text = "${entry.category.name} / $source${if (entry.locked) " / ${getString(R.string.translation_glossary_locked)}" else ""}"
+            return root
+        }
+    }
+
+    private data class GlossaryRowHolder(
+        val source: TextView,
+        val target: TextView,
+        val meta: TextView
+    )
+
+    private enum class GlossarySortMode {
+        NEWEST,
+        CATEGORY,
+        SOURCE_TEXT,
+        TRANSLATION
+    }
+
+    private fun showGlossaryEntryDialog(
+        entry: TranslationGlossaryEntry?,
+        onSaved: (TranslationGlossary) -> Unit
+    ) {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dialogPadding(), dialogPadding(), dialogPadding(), 0)
+        }
+        val sourceInput = EditText(this).apply {
+            hint = getString(R.string.translation_glossary_source)
+            setText(entry?.sourceText.orEmpty())
+            isEnabled = entry == null
+        }
+        val targetInput = EditText(this).apply {
+            hint = getString(R.string.translation_glossary_target)
+            setText(entry?.translatedText.orEmpty())
+        }
+        val categorySpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@ReadActivity2,
+                android.R.layout.simple_spinner_dropdown_item,
+                GlossaryCategory.values().map { it.name }
+            )
+            setSelection(GlossaryCategory.values().indexOf(entry?.category ?: GlossaryCategory.OTHER))
+        }
+
+        root.addView(sourceInput)
+        root.addView(targetInput)
+        root.addView(TextView(this).apply { text = getString(R.string.translation_glossary_category) })
+        root.addView(categorySpinner)
+
+        val builder = AlertDialog.Builder(this, R.style.AlertDialogCustom)
+            .setTitle(if (entry == null) R.string.translation_glossary_add else R.string.translation_glossary_edit)
+            .setView(root)
+            .setPositiveButton(R.string.save, null)
+            .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+
+        if (entry != null) {
+            builder.setNeutralButton(R.string.delete, null)
+        }
+
+        val dialog = builder.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val source = sourceInput.text?.toString().orEmpty()
+            val target = targetInput.text?.toString().orEmpty()
+            if (source.isBlank() || target.isBlank()) {
+                showToast(getString(R.string.translation_glossary_required))
+                return@setOnClickListener
+            }
+
+            val category = GlossaryCategory.values()[categorySpinner.selectedItemPosition]
+            val existing = viewModel.loadTranslationGlossary().entries.firstOrNull {
+                TranslationGlossaryRepository.comparisonKey(it.sourceText) ==
+                        TranslationGlossaryRepository.comparisonKey(source)
+            }
+            if (entry == null && existing != null) {
+                AlertDialog.Builder(this, R.style.AlertDialogCustom)
+                    .setTitle(R.string.translation_glossary_edit)
+                    .setMessage(existing.sourceText)
+                    .setPositiveButton(R.string.save) { _, _ ->
+                        val glossary = viewModel.saveUserGlossaryEntry(source, target, category)
+                        onSaved(glossary)
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+                    .show()
+            } else {
+                val glossary = viewModel.saveUserGlossaryEntry(source, target, category)
+                onSaved(glossary)
+                dialog.dismiss()
+            }
+        }
+
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+            val source = entry?.sourceText ?: return@setOnClickListener
+            AlertDialog.Builder(this, R.style.AlertDialogCustom)
+                .setTitle(R.string.delete)
+                .setMessage(R.string.translation_glossary_delete_confirm)
+                .setPositiveButton(R.string.delete) { _, _ ->
+                    val glossary = viewModel.deleteGlossaryEntry(source)
+                    onSaved(glossary)
+                    dialog.dismiss()
+                }
+                .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+                .show()
+        }
+    }
 
     override fun onColorSelected(dialog: Int, color: Int) {
         when (dialog) {
@@ -1149,6 +1527,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
+        observe(viewModel.glossaryDiscovered) { count ->
+            if (count > 0) {
+                showToast(getString(R.string.translation_glossary_discovered, count))
+            }
+        }
+
         observe(viewModel.chaptersTitles) { titles ->
             binding.readToolbar.menu.findItem(R.id.action_open_in_browser)?.isVisible = viewModel.book is QuickBook
             binding.readActionChapters.setOnClickListener {
@@ -1549,6 +1933,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         .show()
                     true
                 }
+            }
+
+            binding.readTranslationGlossary.setOnClickListener {
+                bottomSheetDialog.dismiss()
+                showTranslationGlossaryDialog()
             }
 
             binding.readFixParagraphs.apply {
