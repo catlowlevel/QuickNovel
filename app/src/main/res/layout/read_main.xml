@@ -525,7 +525,7 @@
                             android:gravity="bottom|center_horizontal"
                             android:maxLines="1"
                             android:textColor="?attr/textColor"
-                            android:textSize="16sp"
+                            android:textSize="18sp"
                             android:textStyle="bold"
                             tools:text="Very Long Novel Title That Needs Ellipsis" />
 
@@ -545,7 +545,7 @@
                                 android:gravity="center"
                                 android:maxLines="1"
                                 android:textColor="?attr/grayTextColor"
-                                android:textSize="12sp"
+                                android:textSize="14sp"
                                 tools:text="Chapter 1148 - You Will Support Me in the Future With a Very Long Title" />
 
                         <TextView
@@ -556,7 +556,7 @@
                                 android:gravity="center_vertical|end"
                                 android:maxLines="1"
                                 android:textColor="?attr/grayTextColor"
-                                android:textSize="12sp"
+                                android:textSize="14sp"
                                 tools:text="4,321 words" />
                     </LinearLayout>
                 </LinearLayout>
