@@ -21,8 +21,7 @@ class ClaudeProvider(
     )
 
     override suspend fun summarize(text: String): String {
-        val prompt = "Condense the following novel chapter to be significantly shorter while retaining all key plot points, essential character dialogue, and the overall atmosphere. The goal is a detailed reduction, not a brief summary. Provide only the condensed text. Chapter text:\n\n$text"
-        return sendMessage(prompt)
+        return sendMessage(AiPromptBuilder.summaryUserMessage(text))
     }
 
     override suspend fun translate(request: TranslationRequest): TranslationResult {
@@ -39,10 +38,20 @@ class ClaudeProvider(
         }
     }
 
+    override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
+        return estimateMessage(AiPromptBuilder.summaryUserMessage(text))
+    }
+
+    override fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate {
+        return estimateMessage(TranslationPromptBuilder.build(request))
+    }
+
+    private fun estimateMessage(prompt: String): AiTokenEstimate {
+        return AiTokenEstimator.estimateClaudeMessage(selectedModel(), prompt)
+    }
+
     private suspend fun sendMessage(prompt: String): String {
-        val selectedModel = model.ifBlank {
-            if (customUrl.isNotBlank()) "claude-haiku-4-5" else "claude-sonnet-4-6"
-        }
+        val selectedModel = selectedModel()
         val url = if (customUrl.isNotBlank()) {
             if (customUrl.endsWith("/messages")) {
                 customUrl
@@ -80,6 +89,12 @@ class ClaudeProvider(
         } catch (e: Exception) {
             logError(e)
             throw Exception("Failed to parse Claude response: ${e.message}")
+        }
+    }
+
+    private fun selectedModel(): String {
+        return model.ifBlank {
+            if (customUrl.isNotBlank()) "claude-haiku-4-5" else "claude-sonnet-4-6"
         }
     }
 

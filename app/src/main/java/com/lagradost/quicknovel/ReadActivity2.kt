@@ -99,6 +99,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
+import com.lagradost.quicknovel.ai.AiTokenEstimate
 import com.lagradost.quicknovel.ai.GlossaryCategory
 import com.lagradost.quicknovel.ai.GlossarySource
 import com.lagradost.quicknovel.ai.TranslationGlossary
@@ -193,6 +194,30 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     private fun dialogPadding(): Int = (20 * resources.displayMetrics.density).roundToInt()
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+
+    private fun runAiActionWithTokenConfirmation(
+        estimate: AiTokenEstimate?,
+        onConfirmed: () -> Unit
+    ) {
+        if (estimate == null) {
+            onConfirmed()
+            return
+        }
+
+        AlertDialog.Builder(this, R.style.AlertDialogCustom)
+            .setTitle(R.string.ai_confirm_request)
+            .setMessage(
+                getString(
+                    R.string.ai_confirm_token_count,
+                    estimate.providerName,
+                    estimate.modelName,
+                    estimate.inputTokens
+                )
+            )
+            .setPositiveButton(R.string.ok) { _, _ -> onConfirmed() }
+            .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+            .show()
+    }
 
     private fun showTranslationGlossaryDialog() {
         val root = LinearLayout(this).apply {
@@ -1887,20 +1912,21 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
 
                 setOnClickListener {
-                    viewModel.summarizeChapter(viewModel.currentIndex)
-                    bottomSheetDialog.dismiss()
+                    runAiActionWithTokenConfirmation(
+                        viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex)
+                    ) {
+                        viewModel.summarizeChapter(viewModel.currentIndex)
+                        bottomSheetDialog.dismiss()
+                    }
                 }
 
                 setOnLongClickListener {
-                    AlertDialog.Builder(context, R.style.AlertDialogCustom)
-                        .setTitle(R.string.ai_confirm_reload)
-                        .setMessage(R.string.ai_confirm_reload_msg)
-                        .setPositiveButton(R.string.download) { _, _ ->
+                    runAiActionWithTokenConfirmation(
+                        viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex, reload = true)
+                    ) {
                             viewModel.summarizeChapter(viewModel.currentIndex, reload = true)
                             bottomSheetDialog.dismiss()
-                        }
-                        .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
-                        .show()
+                    }
                     true
                 }
             }
@@ -1917,20 +1943,21 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
 
                 setOnClickListener {
-                    viewModel.aiTranslateChapter(viewModel.currentIndex)
-                    bottomSheetDialog.dismiss()
+                    runAiActionWithTokenConfirmation(
+                        viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex)
+                    ) {
+                        viewModel.aiTranslateChapter(viewModel.currentIndex)
+                        bottomSheetDialog.dismiss()
+                    }
                 }
 
                 setOnLongClickListener {
-                    AlertDialog.Builder(context, R.style.AlertDialogCustom)
-                        .setTitle(R.string.ai_confirm_reload)
-                        .setMessage(R.string.ai_confirm_reload_msg)
-                        .setPositiveButton(R.string.download) { _, _ ->
+                    runAiActionWithTokenConfirmation(
+                        viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex, reload = true)
+                    ) {
                             viewModel.aiTranslateChapter(viewModel.currentIndex, reload = true)
                             bottomSheetDialog.dismiss()
-                        }
-                        .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
-                        .show()
+                    }
                     true
                 }
             }

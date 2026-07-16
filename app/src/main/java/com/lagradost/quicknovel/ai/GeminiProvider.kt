@@ -23,8 +23,7 @@ class GeminiProvider(
     )
 
     override suspend fun summarize(text: String): String {
-        val prompt = "Condense the following novel chapter to be significantly shorter while retaining all key plot points, essential character dialogue, and the overall atmosphere. The goal is a detailed reduction, not a brief summary. Provide only the condensed text. Chapter text:\n\n$text"
-        return generateContent(prompt)
+        return generateContent(AiPromptBuilder.summaryUserMessage(text))
     }
 
     override suspend fun translate(request: TranslationRequest): TranslationResult {
@@ -41,10 +40,20 @@ class GeminiProvider(
         }
     }
 
+    override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
+        return estimateContent(AiPromptBuilder.summaryUserMessage(text))
+    }
+
+    override fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate {
+        return estimateContent(TranslationPromptBuilder.build(request))
+    }
+
+    private fun estimateContent(prompt: String): AiTokenEstimate {
+        return AiTokenEstimator.estimateGeminiContent(selectedModel(), prompt)
+    }
+
     private suspend fun generateContent(prompt: String): String {
-        val selectedModel = model.ifBlank {
-            if (customUrl.isNotBlank()) "gemini-3-flash" else "gemini-1.5-flash"
-        }
+        val selectedModel = selectedModel()
         
         val request = GeminiRequest(listOf(Content(role = "user", parts = listOf(Part(prompt)))))
 
@@ -91,6 +100,12 @@ class GeminiProvider(
         }
 
         return parseResponse(response.text)
+    }
+
+    private fun selectedModel(): String {
+        return model.ifBlank {
+            if (customUrl.isNotBlank()) "gemini-3-flash" else "gemini-1.5-flash"
+        }
     }
 
     private fun parseResponse(json: String): String {

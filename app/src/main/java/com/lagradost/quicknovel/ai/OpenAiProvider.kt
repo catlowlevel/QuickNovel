@@ -21,10 +21,9 @@ class OpenAiProvider(
     )
 
     override suspend fun summarize(text: String): String {
-        val prompt = "Condense the following novel chapter to be significantly shorter while retaining all key plot points, essential character dialogue, and the overall atmosphere. The goal is a detailed reduction, not a brief summary. Provide only the condensed text. Chapter text:\n\n$text"
         return chatCompletion(
-            systemMessage = "You are an expert editor that condenses novel chapters while preserving their essence, key dialogue, and plot progression.",
-            userMessage = prompt
+            systemMessage = AiPromptBuilder.summarySystemMessage(),
+            userMessage = AiPromptBuilder.summaryUserMessage(text)
         )
     }
 
@@ -45,10 +44,29 @@ class OpenAiProvider(
         }
     }
 
+    override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
+        return estimateChatCompletion(
+            systemMessage = AiPromptBuilder.summarySystemMessage(),
+            userMessage = AiPromptBuilder.summaryUserMessage(text)
+        )
+    }
+
+    override fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate {
+        return estimateChatCompletion(
+            systemMessage = TranslationPromptBuilder.systemMessage(request.targetLanguage),
+            userMessage = TranslationPromptBuilder.build(request)
+        )
+    }
+
+    private fun estimateChatCompletion(systemMessage: String, userMessage: String): AiTokenEstimate {
+        return AiTokenEstimator.estimateOpenAiChat(
+            selectedModel(),
+            listOf("system" to systemMessage, "user" to userMessage)
+        )
+    }
+
     private suspend fun chatCompletion(systemMessage: String, userMessage: String): String {
-        val selectedModel = model.ifBlank {
-            if (customUrl.isNotBlank()) "gpt-5-nano" else "gpt-5.4-mini"
-        }
+        val selectedModel = selectedModel()
         val baseUrl = if (customUrl.isNotBlank()) {
             if (customUrl.endsWith("/chat/completions")) {
                 customUrl
@@ -85,6 +103,12 @@ class OpenAiProvider(
         } catch (e: Exception) {
             logError(e)
             throw Exception("Failed to parse OpenAI response: ${e.message}")
+        }
+    }
+
+    private fun selectedModel(): String {
+        return model.ifBlank {
+            if (customUrl.isNotBlank()) "gpt-5-nano" else "gpt-5.4-mini"
         }
     }
 

@@ -306,6 +306,8 @@
     <string name="ai_connection_successful">Connection successful</string>
     <string name="ai_connection_failed_format" formatted="true">Connection failed: %s</string>
     <string name="ai_provider_not_configured">AI provider not configured</string>
+    <string name="ai_confirm_request">Confirm AI Request</string>
+    <string name="ai_confirm_token_count" formatted="true">Provider: %1$s\nModel: %2$s\nEstimated input tokens: %3$,d\n\nContinue?</string>
     <string name="ai_summarizing">Summarizing...</string>
     <string name="ai_translating">Translating with AI...</string>
     <string name="ai_summarize_failed">Failed to summarize</string>
