@@ -1,40 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<TextView
+        xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:tools="http://schemas.android.com/tools"
+        android:id="@+id/chapter_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clickable="false"
         android:focusable="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:fontFamily="serif"
+        android:gravity="center"
+        android:lineSpacingExtra="3sp"
         android:paddingTop="7.5dp"
-        android:paddingBottom="7.5dp">
-
-    <TextView
-            android:id="@+id/chapter_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:fontFamily="serif"
-            android:gravity="center"
-            android:lineSpacingExtra="3sp"
-            android:maxLines="2"
-            android:textColor="@color/readerTextColor"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            tools:text="Chapter 1148 - You Will Support Me in the Future With a Very Long Title" />
-
-    <TextView
-            android:id="@+id/chapter_word_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:fontFamily="serif"
-            android:gravity="center_vertical|end"
-            android:maxLines="1"
-            android:textColor="@color/readerTextColor"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            tools:text="4,321 words" />
-</LinearLayout>
+        android:paddingBottom="7.5dp"
+        android:textColor="@color/readerTextColor"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="@string/exampleTXT" />

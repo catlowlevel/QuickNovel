@@ -743,39 +743,17 @@ class ReadActivityViewModel : ViewModel() {
 
     fun saveUserGlossaryEntry(sourceText: String, translatedText: String, category: GlossaryCategory): TranslationGlossary {
         val ctx = context ?: throw IllegalStateException("Context unavailable")
-        val glossary = TranslationGlossaryRepository(ctx).addOrUpdateUserEntry(
+        return TranslationGlossaryRepository(ctx).addOrUpdateUserEntry(
             currentNovelId(),
             sourceText,
             translatedText,
             category
         )
-        invalidateAiTranslations()
-        return glossary
     }
 
     fun deleteGlossaryEntry(sourceText: String): TranslationGlossary {
         val ctx = context ?: throw IllegalStateException("Context unavailable")
-        val glossary = TranslationGlossaryRepository(ctx).deleteEntry(currentNovelId(), sourceText)
-        invalidateAiTranslations()
-        return glossary
-    }
-
-    private fun invalidateAiTranslations() {
-        for (entry in chapterData.entries) {
-            val value = entry.value
-            if (value is Resource.Success) {
-                entry.setValue(
-                    Resource.Success(
-                        value.value.copy(
-                            aiTranslatedRendered = null,
-                            aiTranslatedSpans = null,
-                            isAiTranslated = false
-                        )
-                    )
-                )
-            }
-        }
-        updateReadArea()
+        return TranslationGlossaryRepository(ctx).deleteEntry(currentNovelId(), sourceText)
     }
 
     private val _chapterData: MutableLiveData<ChapterUpdate> =
@@ -1056,7 +1034,6 @@ class ReadActivityViewModel : ViewModel() {
                                 idx,
                                 0,
                                 chaptersTitlesInternal[idx],
-                                getChapterWordCount(idx),
                                 canReload
                             )
                         )
@@ -1070,7 +1047,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, getChapterWordCount(cIndex), canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -1086,7 +1063,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, getChapterWordCount(cIndex), canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
