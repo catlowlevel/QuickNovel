@@ -3,6 +3,10 @@ package com.lagradost.quicknovel.ai
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 class GeminiProvider(
     private val apiKey: String,
@@ -26,18 +30,23 @@ class GeminiProvider(
         return generateContent(AiPromptBuilder.summaryUserMessage(text))
     }
 
+    override suspend fun summarizeStream(text: String, onPartial: (String) -> Unit): String {
+        return generateContentStream(AiPromptBuilder.summaryUserMessage(text), onPartial)
+    }
+
     override suspend fun translate(request: TranslationRequest): TranslationResult {
         val raw = generateContent(TranslationPromptBuilder.build(request))
-        return try {
-            TranslationResponseParser.parse(raw)
-        } catch (e: Exception) {
-            val fallback = if (customUrl.isNotBlank()) TranslationResponseParser.safeFallbackText(raw) else null
-            if (fallback != null) {
-                TranslationResult(fallback, emptyList())
-            } else {
-                throw e
-            }
+        return parseTranslation(raw)
+    }
+
+    override suspend fun translateStream(
+        request: TranslationRequest,
+        onPartial: (String) -> Unit
+    ): TranslationResult {
+        val raw = generateContentStream(TranslationPromptBuilder.build(request)) { partial ->
+            onPartial(TranslationResponseParser.extractPartialTranslatedText(partial) ?: partial)
         }
+        return parseTranslation(raw)
     }
 
     override suspend fun suggestGlossaryTranslations(request: GlossarySuggestionRequest): List<GlossarySuggestion> {
@@ -109,6 +118,77 @@ class GeminiProvider(
         }
 
         return parseResponse(response.text)
+    }
+
+    private suspend fun generateContentStream(prompt: String, onPartial: (String) -> Unit): String {
+        val selectedModel = selectedModel()
+        val request = GeminiRequest(listOf(Content(role = "user", parts = listOf(Part(prompt)))))
+        val url = streamUrl(selectedModel)
+        val json = app.responseParser?.writeValueAsString(request)
+            ?: throw Exception("No JSON parser configured")
+        val builder = StringBuilder()
+        val httpRequestBuilder = Request.Builder()
+            .url(url)
+            .post(json.toRequestBody("application/json".toMediaType()))
+        if (customUrl.isNotBlank()) {
+            httpRequestBuilder.header("x-goog-api-key", apiKey)
+        }
+        var lastProgressPost = 0L
+        var lastPostedLength = 0
+        app.baseClient.newBuilder().readTimeout(300L, TimeUnit.SECONDS).build()
+            .newCall(httpRequestBuilder.build()).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception("Gemini API error: ${response.code} ${response.body.string()}")
+            }
+            response.body.charStream().buffered().forEachLine { line ->
+                val data = line.removePrefix("data:").trim()
+                if (data.isBlank() || data == "[DONE]") return@forEachLine
+                val chunk = app.responseParser?.parseSafe(data, GeminiResponse::class)
+                val delta = chunk?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (!delta.isNullOrEmpty()) {
+                    builder.append(delta)
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressPost >= 250L) {
+                        onPartial(builder.toString())
+                        lastProgressPost = now
+                        lastPostedLength = builder.length
+                    }
+                }
+            }
+        }
+        if (builder.length != lastPostedLength) {
+            onPartial(builder.toString())
+        }
+        return builder.toString()
+    }
+
+    private fun streamUrl(selectedModel: String): String {
+        val base = if (customUrl.isNotBlank()) {
+            val normalized = customUrl.removeSuffix("/")
+            when {
+                normalized.contains(":streamGenerateContent") -> normalized
+                normalized.contains(":generateContent") -> normalized.replace(":generateContent", ":streamGenerateContent")
+                normalized.contains("/models/") -> "$normalized:streamGenerateContent"
+                else -> "$normalized/models/$selectedModel:streamGenerateContent"
+            }
+        } else {
+            val apiVersion = if (selectedModel.contains("preview") || selectedModel.contains("beta")) "v1beta" else "v1"
+            "https://generativelanguage.googleapis.com/$apiVersion/models/$selectedModel:streamGenerateContent?key=$apiKey"
+        }
+        return if (base.contains("?")) "$base&alt=sse" else "$base?alt=sse"
+    }
+
+    private fun parseTranslation(raw: String): TranslationResult {
+        return try {
+            TranslationResponseParser.parse(raw)
+        } catch (e: Exception) {
+            val fallback = if (customUrl.isNotBlank()) TranslationResponseParser.safeFallbackText(raw) else null
+            if (fallback != null) {
+                TranslationResult(fallback, emptyList())
+            } else {
+                throw e
+            }
+        }
     }
 
     private fun selectedModel(): String {

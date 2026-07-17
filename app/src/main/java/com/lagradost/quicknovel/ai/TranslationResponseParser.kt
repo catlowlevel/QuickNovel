@@ -67,6 +67,38 @@ object TranslationResponseParser {
         }.getOrNull()
     }
 
+    fun extractPartialTranslatedText(raw: String): String? {
+        val marker = "\"translated_text\""
+        val markerIndex = raw.indexOf(marker)
+        if (markerIndex == -1) return null
+        val colonIndex = raw.indexOf(':', markerIndex + marker.length)
+        if (colonIndex == -1) return null
+        val quoteIndex = raw.indexOf('"', colonIndex + 1)
+        if (quoteIndex == -1) return null
+        val builder = StringBuilder()
+        var escaped = false
+        for (i in quoteIndex + 1 until raw.length) {
+            val c = raw[i]
+            if (escaped) {
+                when (c) {
+                    'n' -> builder.append('\n')
+                    'r' -> builder.append('\r')
+                    't' -> builder.append('\t')
+                    '"', '\\', '/' -> builder.append(c)
+                    else -> builder.append(c)
+                }
+                escaped = false
+            } else {
+                when (c) {
+                    '\\' -> escaped = true
+                    '"' -> return builder.toString()
+                    else -> builder.append(c)
+                }
+            }
+        }
+        return builder.toString().takeIf { it.isNotBlank() }
+    }
+
     fun safeFallbackText(raw: String): String? {
         extractTranslatedTextFallback(raw)?.let { return it }
         return if (looksLikeJsonObject(raw)) null else raw

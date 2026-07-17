@@ -1633,7 +1633,8 @@ class ReadActivityViewModel : ViewModel() {
 
         ioSafe {
             try {
-                _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.ai_summarizing)))
+                val loadingLabel = context?.getString(R.string.ai_summarizing).orEmpty()
+                _loadingStatus.postValue(Resource.Loading(loadingLabel))
                 
                 val textToSummarize = chapter.originalRendered.toString()
                 val textHash = hashString(textToSummarize.toByteArray())
@@ -1664,7 +1665,9 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 // Use originalRendered to avoid summarizing translated text
-                val summary = provider.summarize(textToSummarize)
+                val summary = provider.summarizeStream(textToSummarize) { partial ->
+                    postAiStreamingProgress(loadingLabel, partial)
+                }
                 
                 safe { cacheFile?.writeText(summary) }
 
@@ -1705,6 +1708,27 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
+    private fun postAiStreamingProgress(label: String, partial: String) {
+        val wordCount = countWords(partial)
+        val progress = context?.getString(R.string.ai_stream_word_count, wordCount)
+            ?: "Responded words: $wordCount"
+        _loadingStatus.postValue(Resource.Loading("$label\n$progress"))
+    }
+
+    private fun countWords(text: String): Int {
+        var count = 0
+        var inWord = false
+        for (char in text) {
+            if (char.isWhitespace()) {
+                inWord = false
+            } else if (!inWord) {
+                count++
+                inWord = true
+            }
+        }
+        return count
+    }
+
     fun aiTranslateChapter(index: Int, reload: Boolean = false) {
         val data = chapterData[index]
         if (data == null || data !is Resource.Success) return
@@ -1737,7 +1761,8 @@ class ReadActivityViewModel : ViewModel() {
 
         ioSafe {
             try {
-                _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.ai_translating)))
+                val loadingLabel = context?.getString(R.string.ai_translating).orEmpty()
+                _loadingStatus.postValue(Resource.Loading(loadingLabel))
                 
                 val textToTranslate = chapter.originalRendered.toString()
                 val textHash = hashString(textToTranslate.toByteArray())
@@ -1830,7 +1855,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 // Use originalRendered to avoid translating already translated text.
-                val result = provider.translate(
+                val result = provider.translateStream(
                     TranslationRequest(
                         text = textToTranslate,
                         targetLanguage = aiSettings.targetLanguage,
@@ -1838,7 +1863,9 @@ class ReadActivityViewModel : ViewModel() {
                         chapterTitle = book.getChapterTitle(index).asStringNull(context),
                         glossary = glossary.entries
                     )
-                )
+                ) { partial ->
+                    postAiStreamingProgress(loadingLabel, partial)
+                }
                 val translation = result.translatedText
                 val merge = glossaryRepository?.mergeAiDiscoveries(novelId, result.discoveredEntries)
                 if ((merge?.addedCount ?: 0) > 0) {

@@ -15,25 +15,38 @@
             android:visibility="gone"
             android:clickable="true"
             android:focusable="true"
+            android:background="@color/black_overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-        <ProgressBar
-                android:id="@+id/read_loading_bar"
+        <LinearLayout
                 android:layout_gravity="center"
-                android:progressTint="@color/colorPrimary"
-                android:layout_width="50dp"
-                android:layout_height="50dp" />
-
-        <TextView
-                android:id="@+id/loading_text"
-                android:layout_marginTop="50dp"
                 android:gravity="center"
-                android:layout_gravity="center"
-                android:textColor="@color/colorPrimary"
-                tools:text="@string/delete"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:orientation="vertical"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="24dp"
+                android:background="@drawable/ai_loading_card"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+            <ProgressBar
+                    android:id="@+id/read_loading_bar"
+                    android:progressTint="@color/colorPrimary"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp" />
+
+            <TextView
+                    android:id="@+id/loading_text"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:textStyle="bold"
+                    android:textColor="@color/textColor"
+                    tools:text="@string/ai_translating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+        </LinearLayout>
     </FrameLayout>
 
     <FrameLayout
