@@ -28,6 +28,28 @@ object TranslationResponseParser {
         return TranslationResult(translated, candidates)
     }
 
+    fun parseGlossarySuggestions(raw: String): List<GlossarySuggestion> {
+        val node = readJsonObject(raw)
+        val suggestions = node.get("suggestions")
+        if (suggestions?.isArray != true) {
+            throw IllegalArgumentException("AI response did not include suggestions")
+        }
+
+        return suggestions.mapNotNull { suggestion ->
+            if (!suggestion.isObject) return@mapNotNull null
+            val text = suggestion.get("text")?.asText()?.trim().orEmpty()
+            if (text.isBlank()) return@mapNotNull null
+            if (text.length > 80 || text.lines().size > 2) return@mapNotNull null
+            val kind = suggestion.get("kind")?.asText()?.trim()?.uppercase()?.let {
+                runCatching { GlossarySuggestionKind.valueOf(it) }.getOrNull()
+            } ?: GlossarySuggestionKind.DIRECT
+            val note = suggestion.get("note")?.asText()?.trim().orEmpty().take(120)
+            GlossarySuggestion(text, kind, note)
+        }.distinctBy {
+            TranslationGlossaryRepository.comparisonKey(it.text)
+        }
+    }
+
     fun extractJson(raw: String): String {
         val trimmed = raw.trim()
         extractJsonFence(trimmed)?.let { return it }

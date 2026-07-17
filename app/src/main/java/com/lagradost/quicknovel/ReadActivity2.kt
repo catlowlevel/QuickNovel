@@ -102,9 +102,12 @@ import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_
 import com.lagradost.quicknovel.ai.AiTokenEstimate
 import com.lagradost.quicknovel.ai.GlossaryCategory
 import com.lagradost.quicknovel.ai.GlossarySource
+import com.lagradost.quicknovel.ai.GlossarySuggestion
+import com.lagradost.quicknovel.ai.GlossarySuggestionKind
 import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
 import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
+import com.lagradost.quicknovel.mvvm.logError
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -519,11 +522,36 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             )
             setSelection(GlossaryCategory.values().indexOf(entry?.category ?: GlossaryCategory.OTHER))
         }
+        val aiSuggestionsButton = com.google.android.material.button.MaterialButton(this).apply {
+            text = getString(R.string.translation_glossary_ai_suggest)
+            isAllCaps = false
+            setTextColor(colorFromAttribute(R.attr.textColor))
+            backgroundTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.iconGrayBackground))
+            strokeColor = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+            strokeWidth = dp(1)
+            cornerRadius = dp(6)
+            minHeight = dp(44)
+            insetTop = 0
+            insetBottom = 0
+        }
+        val includeGlossaryContext = android.widget.CheckBox(this).apply {
+            text = getString(R.string.translation_glossary_include_context)
+            isChecked = false
+            setTextColor(colorFromAttribute(R.attr.textColor))
+            buttonTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+        }
+        val suggestionsCache = mutableMapOf<String, List<GlossarySuggestion>>()
 
         root.addView(sourceInput)
         root.addView(targetInput)
         root.addView(TextView(this).apply { text = getString(R.string.translation_glossary_category) })
         root.addView(categorySpinner)
+        root.addView(includeGlossaryContext)
+        root.addView(
+            aiSuggestionsButton,
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
 
         val builder = AlertDialog.Builder(this, R.style.AlertDialogCustom)
             .setTitle(if (entry == null) R.string.translation_glossary_add else R.string.translation_glossary_edit)
@@ -536,6 +564,51 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         val dialog = builder.show()
+        aiSuggestionsButton.setOnClickListener {
+            val source = sourceInput.text?.toString().orEmpty().trim()
+            if (source.isBlank()) {
+                showToast(getString(R.string.translation_glossary_source_required))
+                return@setOnClickListener
+            }
+
+            val category = GlossaryCategory.values()[categorySpinner.selectedItemPosition]
+            val useGlossaryContext = includeGlossaryContext.isChecked
+            val cacheKey = listOf(
+                TranslationGlossaryRepository.comparisonKey(source),
+                category.name,
+                useGlossaryContext.toString()
+            ).joinToString("\u001f")
+            suggestionsCache[cacheKey]?.let { cached ->
+                showGlossarySuggestionPicker(cached, targetInput)
+                return@setOnClickListener
+            }
+
+            runAiActionWithTokenConfirmation(
+                viewModel.estimateGlossarySuggestionTokens(source, category, useGlossaryContext)
+            ) {
+                aiSuggestionsButton.isEnabled = false
+                aiSuggestionsButton.text = getString(R.string.translation_glossary_ai_suggest_loading)
+                ioSafe {
+                    try {
+                        val suggestions = viewModel.suggestGlossaryTranslations(source, category, useGlossaryContext)
+                        runOnUiThread {
+                            aiSuggestionsButton.isEnabled = true
+                            aiSuggestionsButton.text = getString(R.string.translation_glossary_ai_suggest)
+                            suggestionsCache[cacheKey] = suggestions
+                            showGlossarySuggestionPicker(suggestions, targetInput)
+                        }
+                    } catch (e: Exception) {
+                        logError(e)
+                        runOnUiThread {
+                            aiSuggestionsButton.isEnabled = true
+                            aiSuggestionsButton.text = getString(R.string.translation_glossary_ai_suggest)
+                            showToast(e.message ?: getString(R.string.translation_glossary_ai_suggest_failed))
+                        }
+                    }
+                }
+            }
+        }
+
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val source = sourceInput.text?.toString().orEmpty()
             val target = targetInput.text?.toString().orEmpty()
@@ -580,6 +653,37 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
                 .show()
         }
+    }
+
+    private fun showGlossarySuggestionPicker(
+        suggestions: List<GlossarySuggestion>,
+        targetInput: EditText
+    ) {
+        if (suggestions.isEmpty()) {
+            showToast(getString(R.string.translation_glossary_ai_suggest_empty))
+            return
+        }
+
+        val labels = suggestions.map { suggestion ->
+            val kind = when (suggestion.kind) {
+                GlossarySuggestionKind.DIRECT -> getString(R.string.translation_glossary_suggestion_direct)
+                GlossarySuggestionKind.STYLIZED -> getString(R.string.translation_glossary_suggestion_stylized)
+            }
+            if (suggestion.note.isBlank()) {
+                getString(R.string.translation_glossary_suggestion_label, kind, suggestion.text)
+            } else {
+                getString(R.string.translation_glossary_suggestion_label_with_note, kind, suggestion.text, suggestion.note)
+            }
+        }
+
+        AlertDialog.Builder(this, R.style.AlertDialogCustom)
+            .setTitle(R.string.translation_glossary_ai_suggestions)
+            .setItems(labels.toTypedArray()) { _, index ->
+                targetInput.setText(suggestions[index].text)
+                targetInput.setSelection(targetInput.text?.length ?: 0)
+            }
+            .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+            .show()
     }
 
     override fun onColorSelected(dialog: Int, color: Int) {

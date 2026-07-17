@@ -50,6 +50,8 @@ import com.lagradost.quicknovel.TTSHelper.ttsParseText
 import com.lagradost.quicknovel.ai.AiTranslationCacheKey
 import com.lagradost.quicknovel.ai.AiTokenEstimate
 import com.lagradost.quicknovel.ai.GlossaryCategory
+import com.lagradost.quicknovel.ai.GlossarySuggestion
+import com.lagradost.quicknovel.ai.GlossarySuggestionRequest
 import com.lagradost.quicknovel.ai.NovelIdentity
 import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
@@ -791,6 +793,29 @@ class ReadActivityViewModel : ViewModel() {
         )
     }
 
+    fun estimateGlossarySuggestionTokens(
+        sourceText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): AiTokenEstimate? {
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: return null
+        return provider.estimateGlossarySuggestionTokens(
+            glossarySuggestionRequest(sourceText, category, includeGlossaryContext)
+        )
+    }
+
+    suspend fun suggestGlossaryTranslations(
+        sourceText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): List<GlossarySuggestion> {
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings)
+            ?: throw IllegalStateException(context?.getString(R.string.ai_provider_not_configured) ?: "AI provider not configured")
+        return provider.suggestGlossaryTranslations(
+            glossarySuggestionRequest(sourceText, category, includeGlossaryContext)
+        )
+    }
+
     private fun summarizeCacheFile(text: String): File? {
         val textHash = hashString(text.toByteArray())
         val providerName = aiSettings.providerType.name
@@ -855,6 +880,25 @@ class ReadActivityViewModel : ViewModel() {
             novelTitle = book.title(),
             chapterTitle = book.getChapterTitle(index).asStringNull(context),
             glossary = glossary.entries
+        )
+    }
+
+    private fun glossarySuggestionRequest(
+        sourceText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): GlossarySuggestionRequest {
+        return GlossarySuggestionRequest(
+            sourceText = sourceText,
+            targetLanguage = aiSettings.targetLanguage,
+            novelTitle = book.title(),
+            chapterTitle = if (currentIndex in 0 until book.size()) {
+                book.getChapterTitle(currentIndex).asStringNull(context)
+            } else {
+                null
+            },
+            category = category,
+            glossary = if (includeGlossaryContext) loadTranslationGlossary().entries else emptyList()
         )
     }
 

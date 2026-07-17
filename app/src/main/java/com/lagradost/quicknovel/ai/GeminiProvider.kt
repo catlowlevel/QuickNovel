@@ -40,12 +40,21 @@ class GeminiProvider(
         }
     }
 
+    override suspend fun suggestGlossaryTranslations(request: GlossarySuggestionRequest): List<GlossarySuggestion> {
+        val raw = generateContent(GlossarySuggestionPromptBuilder.build(request))
+        return TranslationResponseParser.parseGlossarySuggestions(raw)
+    }
+
     override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
         return estimateContent(AiPromptBuilder.summaryUserMessage(text))
     }
 
     override fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate {
         return estimateContent(TranslationPromptBuilder.build(request))
+    }
+
+    override fun estimateGlossarySuggestionTokens(request: GlossarySuggestionRequest): AiTokenEstimate {
+        return estimateContent(GlossarySuggestionPromptBuilder.build(request))
     }
 
     private fun estimateContent(prompt: String): AiTokenEstimate {

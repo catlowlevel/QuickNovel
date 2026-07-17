@@ -5,6 +5,7 @@ import com.lagradost.quicknovel.ai.AiTranslationCacheKey
 import com.lagradost.quicknovel.ai.GlossaryCandidate
 import com.lagradost.quicknovel.ai.GlossaryCategory
 import com.lagradost.quicknovel.ai.GlossarySource
+import com.lagradost.quicknovel.ai.GlossarySuggestionKind
 import com.lagradost.quicknovel.ai.NovelIdentity
 import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
@@ -135,6 +136,44 @@ class TranslationGlossaryTest {
 
         assertEquals("Valid translation", result.translatedText)
         assertTrue(result.discoveredEntries.isEmpty())
+    }
+
+    @Test
+    fun parsesGlossarySuggestionsWithMarkdownFence() {
+        val raw = """```json
+            {
+              "suggestions": [
+                {"text": "Azure Cloud Sect", "kind": "DIRECT", "note": "literal"},
+                {"text": "Skyveil Order", "kind": "STYLIZED", "note": "cooler"}
+              ]
+            }
+        ```""".trimIndent()
+
+        val suggestions = TranslationResponseParser.parseGlossarySuggestions(raw)
+
+        assertEquals(2, suggestions.size)
+        assertEquals("Azure Cloud Sect", suggestions[0].text)
+        assertEquals(GlossarySuggestionKind.STYLIZED, suggestions[1].kind)
+    }
+
+    @Test
+    fun malformedGlossarySuggestionsAreIgnored() {
+        val raw = """
+            {
+              "suggestions": [
+                {"text": "", "kind": "DIRECT"},
+                {"text": "This is a very long suggestion that should be rejected because it is not a compact glossary target and keeps going", "kind": "DIRECT"},
+                {"text": "Lin Feng", "kind": "NOPE"},
+                {"text": "Lin Feng", "kind": "STYLIZED"}
+              ]
+            }
+        """.trimIndent()
+
+        val suggestions = TranslationResponseParser.parseGlossarySuggestions(raw)
+
+        assertEquals(1, suggestions.size)
+        assertEquals("Lin Feng", suggestions[0].text)
+        assertEquals(GlossarySuggestionKind.DIRECT, suggestions[0].kind)
     }
 
     @Test

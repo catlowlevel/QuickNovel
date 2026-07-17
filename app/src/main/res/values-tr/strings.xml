@@ -247,5 +247,16 @@
     <string name="translation_glossary_edit">Edit Entry</string>
     <string name="translation_glossary_delete_confirm">Delete this glossary entry?</string>
     <string name="translation_glossary_required">Source and translation are required</string>
+    <string name="translation_glossary_source_required">Source term is required</string>
     <string name="translation_glossary_discovered" formatted="true">%d glossary entries discovered</string>
+    <string name="translation_glossary_ai_suggest">AI Suggestions</string>
+    <string name="translation_glossary_include_context">Use glossary context</string>
+    <string name="translation_glossary_ai_suggest_loading">Finding suggestions...</string>
+    <string name="translation_glossary_ai_suggest_failed">Failed to fetch suggestions</string>
+    <string name="translation_glossary_ai_suggest_empty">No suggestions found</string>
+    <string name="translation_glossary_ai_suggestions">AI Translation Suggestions</string>
+    <string name="translation_glossary_suggestion_direct">Direct</string>
+    <string name="translation_glossary_suggestion_stylized">Stylized</string>
+    <string name="translation_glossary_suggestion_label" formatted="true">%1$s: %2$s</string>
+    <string name="translation_glossary_suggestion_label_with_note" formatted="true">%1$s: %2$s\n%3$s</string>
 </resources>

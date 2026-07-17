@@ -38,12 +38,21 @@ class ClaudeProvider(
         }
     }
 
+    override suspend fun suggestGlossaryTranslations(request: GlossarySuggestionRequest): List<GlossarySuggestion> {
+        val raw = sendMessage(GlossarySuggestionPromptBuilder.build(request))
+        return TranslationResponseParser.parseGlossarySuggestions(raw)
+    }
+
     override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
         return estimateMessage(AiPromptBuilder.summaryUserMessage(text))
     }
 
     override fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate {
         return estimateMessage(TranslationPromptBuilder.build(request))
+    }
+
+    override fun estimateGlossarySuggestionTokens(request: GlossarySuggestionRequest): AiTokenEstimate {
+        return estimateMessage(GlossarySuggestionPromptBuilder.build(request))
     }
 
     private fun estimateMessage(prompt: String): AiTokenEstimate {

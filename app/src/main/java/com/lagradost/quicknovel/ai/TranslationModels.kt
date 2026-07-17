@@ -53,3 +53,23 @@ data class TranslationResult(
     val translatedText: String,
     val discoveredEntries: List<GlossaryCandidate> = emptyList()
 )
+
+data class GlossarySuggestionRequest(
+    val sourceText: String,
+    val targetLanguage: String,
+    val novelTitle: String?,
+    val chapterTitle: String?,
+    val category: GlossaryCategory,
+    val glossary: List<TranslationGlossaryEntry>
+)
+
+enum class GlossarySuggestionKind {
+    DIRECT,
+    STYLIZED
+}
+
+data class GlossarySuggestion(
+    val text: String = "",
+    val kind: GlossarySuggestionKind = GlossarySuggestionKind.DIRECT,
+    val note: String = ""
+)
