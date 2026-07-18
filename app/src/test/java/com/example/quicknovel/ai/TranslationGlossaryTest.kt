@@ -177,6 +177,43 @@ class TranslationGlossaryTest {
     }
 
     @Test
+    fun parsesRawGlossaryTermCandidatesWithMarkdownFence() {
+        val raw = """```json
+            {
+              "candidates": [
+                {"text": "天剑宗", "note": "simplified"},
+                {"text": "天劍宗", "note": "traditional"}
+              ]
+            }
+        ```""".trimIndent()
+
+        val candidates = TranslationResponseParser.parseRawGlossaryTermCandidates(raw)
+
+        assertEquals(2, candidates.size)
+        assertEquals("天剑宗", candidates[0].text)
+        assertEquals("traditional", candidates[1].note)
+    }
+
+    @Test
+    fun malformedRawGlossaryTermCandidatesAreIgnored() {
+        val raw = """
+            {
+              "candidates": [
+                {"text": ""},
+                {"text": "This candidate is far too long to be a compact raw glossary term that should be searched directly"},
+                {"text": "青云宗"},
+                {"text": " 青云宗 "}
+              ]
+            }
+        """.trimIndent()
+
+        val candidates = TranslationResponseParser.parseRawGlossaryTermCandidates(raw)
+
+        assertEquals(1, candidates.size)
+        assertEquals("青云宗", candidates[0].text)
+    }
+
+    @Test
     fun fallbackCanExtractTranslatedTextWithoutRenderingWrapper() {
         val raw = """```json
             {"translated_text":"Only this text","discovered_terms":"bad"}

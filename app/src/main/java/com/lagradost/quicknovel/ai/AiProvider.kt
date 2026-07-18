@@ -15,8 +15,10 @@ interface AiProvider {
     }
 
     suspend fun suggestGlossaryTranslations(request: GlossarySuggestionRequest): List<GlossarySuggestion>
+    suspend fun suggestRawGlossaryTerms(request: RawGlossaryTermRequest): List<RawGlossaryTermCandidate>
     fun estimateSummarizeTokens(text: String): AiTokenEstimate
     fun estimateTranslateTokens(request: TranslationRequest): AiTokenEstimate
     fun estimateGlossarySuggestionTokens(request: GlossarySuggestionRequest): AiTokenEstimate
+    fun estimateRawGlossaryTermTokens(request: RawGlossaryTermRequest): AiTokenEstimate
     suspend fun getModels(): List<String>
 }

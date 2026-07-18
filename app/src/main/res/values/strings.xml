@@ -218,6 +218,7 @@
     <string name="translation_glossary_delete_confirm">Delete this glossary entry?</string>
     <string name="translation_glossary_required">Source and translation are required</string>
     <string name="translation_glossary_source_required">Source term is required</string>
+    <string name="translation_glossary_target_required">Translation is required</string>
     <string name="translation_glossary_discovered" formatted="true">%d glossary entries discovered</string>
     <string name="translation_glossary_ai_suggest">AI Suggestions</string>
     <string name="translation_glossary_include_context">Use glossary context</string>
@@ -229,6 +230,12 @@
     <string name="translation_glossary_suggestion_stylized">Stylized</string>
     <string name="translation_glossary_suggestion_label" formatted="true">%1$s: %2$s</string>
     <string name="translation_glossary_suggestion_label_with_note" formatted="true">%1$s: %2$s\n%3$s</string>
+    <string name="translation_glossary_find_source">Find Source Term</string>
+    <string name="translation_glossary_find_source_loading">Finding source terms...</string>
+    <string name="translation_glossary_find_source_failed">Failed to find source terms</string>
+    <string name="translation_glossary_find_source_empty">No source term matches found in the current raw chapter</string>
+    <string name="translation_glossary_find_source_results">Source Term Matches</string>
+    <string name="translation_glossary_source_match_label" formatted="true">%1$s\n%2$d matches\n%3$s</string>
 
     <string name="reload_chapter">Reload Chapter</string>
     <string name="provider_lang_settings">Provider Languages</string>

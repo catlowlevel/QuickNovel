@@ -69,6 +69,14 @@ class OpenAiProvider(
         return TranslationResponseParser.parseGlossarySuggestions(raw)
     }
 
+    override suspend fun suggestRawGlossaryTerms(request: RawGlossaryTermRequest): List<RawGlossaryTermCandidate> {
+        val raw = chatCompletion(
+            systemMessage = "You infer possible original glossary terms from translations. Return only valid JSON.",
+            userMessage = RawGlossaryTermPromptBuilder.build(request)
+        )
+        return TranslationResponseParser.parseRawGlossaryTermCandidates(raw)
+    }
+
     override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
         return estimateChatCompletion(
             systemMessage = AiPromptBuilder.summarySystemMessage(),
@@ -87,6 +95,13 @@ class OpenAiProvider(
         return estimateChatCompletion(
             systemMessage = "You suggest concise literary translation glossary terms. Return only valid JSON.",
             userMessage = GlossarySuggestionPromptBuilder.build(request)
+        )
+    }
+
+    override fun estimateRawGlossaryTermTokens(request: RawGlossaryTermRequest): AiTokenEstimate {
+        return estimateChatCompletion(
+            systemMessage = "You infer possible original glossary terms from translations. Return only valid JSON.",
+            userMessage = RawGlossaryTermPromptBuilder.build(request)
         )
     }
 

@@ -50,6 +50,25 @@ object TranslationResponseParser {
         }
     }
 
+    fun parseRawGlossaryTermCandidates(raw: String): List<RawGlossaryTermCandidate> {
+        val node = readJsonObject(raw)
+        val candidates = node.get("candidates")
+        if (candidates?.isArray != true) {
+            throw IllegalArgumentException("AI response did not include candidates")
+        }
+
+        return candidates.mapNotNull { candidate ->
+            if (!candidate.isObject) return@mapNotNull null
+            val text = candidate.get("text")?.asText()?.trim().orEmpty()
+            if (text.isBlank()) return@mapNotNull null
+            if (text.length > 80 || text.lines().size > 1) return@mapNotNull null
+            val note = candidate.get("note")?.asText()?.trim().orEmpty().take(120)
+            RawGlossaryTermCandidate(text, note)
+        }.distinctBy {
+            TranslationGlossaryRepository.comparisonKey(it.text)
+        }
+    }
+
     fun extractJson(raw: String): String {
         val trimmed = raw.trim()
         extractJsonFence(trimmed)?.let { return it }

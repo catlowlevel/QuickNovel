@@ -53,6 +53,9 @@ import com.lagradost.quicknovel.ai.GlossaryCategory
 import com.lagradost.quicknovel.ai.GlossarySuggestion
 import com.lagradost.quicknovel.ai.GlossarySuggestionRequest
 import com.lagradost.quicknovel.ai.NovelIdentity
+import com.lagradost.quicknovel.ai.RawGlossaryTermCandidate
+import com.lagradost.quicknovel.ai.RawGlossaryTermMatch
+import com.lagradost.quicknovel.ai.RawGlossaryTermRequest
 import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
 import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
@@ -816,6 +819,30 @@ class ReadActivityViewModel : ViewModel() {
         )
     }
 
+    fun estimateRawGlossaryTermTokens(
+        translatedText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): AiTokenEstimate? {
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: return null
+        return provider.estimateRawGlossaryTermTokens(
+            rawGlossaryTermRequest(translatedText, category, includeGlossaryContext)
+        )
+    }
+
+    suspend fun findRawGlossaryTerms(
+        translatedText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): List<RawGlossaryTermMatch> {
+        val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings)
+            ?: throw IllegalStateException(context?.getString(R.string.ai_provider_not_configured) ?: "AI provider not configured")
+        val candidates = provider.suggestRawGlossaryTerms(
+            rawGlossaryTermRequest(translatedText, category, includeGlossaryContext)
+        )
+        return matchRawGlossaryCandidates(candidates)
+    }
+
     private fun summarizeCacheFile(text: String): File? {
         val textHash = hashString(text.toByteArray())
         val providerName = aiSettings.providerType.name
@@ -899,6 +926,60 @@ class ReadActivityViewModel : ViewModel() {
             },
             category = category,
             glossary = if (includeGlossaryContext) loadTranslationGlossary().entries else emptyList()
+        )
+    }
+
+    private fun rawGlossaryTermRequest(
+        translatedText: String,
+        category: GlossaryCategory,
+        includeGlossaryContext: Boolean
+    ): RawGlossaryTermRequest {
+        return RawGlossaryTermRequest(
+            translatedText = translatedText,
+            targetLanguage = aiSettings.targetLanguage,
+            novelTitle = book.title(),
+            chapterTitle = if (currentIndex in 0 until book.size()) {
+                book.getChapterTitle(currentIndex).asStringNull(context)
+            } else {
+                null
+            },
+            category = category,
+            glossary = if (includeGlossaryContext) loadTranslationGlossary().entries else emptyList()
+        )
+    }
+
+    private suspend fun matchRawGlossaryCandidates(
+        candidates: List<RawGlossaryTermCandidate>
+    ): List<RawGlossaryTermMatch> {
+        val currentChapter = chapterMutex.withLock {
+            (chapterData[currentIndex] as? Resource.Success)?.value?.let { chapter ->
+                chapter to chapter.originalRendered.toString()
+            }
+        } ?: return emptyList()
+        val (_, rawText) = currentChapter
+
+        return candidates.mapNotNull { candidate ->
+            val term = candidate.text.trim()
+            if (term.isBlank()) return@mapNotNull null
+            val regex = Regex(Regex.escape(term), RegexOption.IGNORE_CASE)
+            val matches = regex.findAll(rawText).toList()
+            if (matches.isEmpty()) return@mapNotNull null
+            val previews = matches.map { match ->
+                val start = maxOf(0, match.range.first - 24)
+                val end = minOf(rawText.length, match.range.last + 25)
+                rawText.substring(start, end).replace(Regex("\\s+"), " ").trim()
+            }.distinctBy {
+                TranslationGlossaryRepository.comparisonKey(it)
+            }.take(4)
+
+            RawGlossaryTermMatch(
+                text = term,
+                matchCount = matches.size,
+                previews = previews
+            )
+        }.sortedWith(
+            compareByDescending<RawGlossaryTermMatch> { it.matchCount }
+                .thenBy { TranslationGlossaryRepository.comparisonKey(it.text) }
         )
     }
 

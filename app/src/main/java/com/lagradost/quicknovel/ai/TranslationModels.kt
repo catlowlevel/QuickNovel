@@ -73,3 +73,23 @@ data class GlossarySuggestion(
     val kind: GlossarySuggestionKind = GlossarySuggestionKind.DIRECT,
     val note: String = ""
 )
+
+data class RawGlossaryTermRequest(
+    val translatedText: String,
+    val targetLanguage: String,
+    val novelTitle: String?,
+    val chapterTitle: String?,
+    val category: GlossaryCategory,
+    val glossary: List<TranslationGlossaryEntry>
+)
+
+data class RawGlossaryTermCandidate(
+    val text: String = "",
+    val note: String = ""
+)
+
+data class RawGlossaryTermMatch(
+    val text: String,
+    val matchCount: Int,
+    val previews: List<String>
+)

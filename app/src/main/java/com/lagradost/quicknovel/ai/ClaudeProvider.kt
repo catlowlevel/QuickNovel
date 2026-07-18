@@ -53,6 +53,11 @@ class ClaudeProvider(
         return TranslationResponseParser.parseGlossarySuggestions(raw)
     }
 
+    override suspend fun suggestRawGlossaryTerms(request: RawGlossaryTermRequest): List<RawGlossaryTermCandidate> {
+        val raw = sendMessage(RawGlossaryTermPromptBuilder.build(request))
+        return TranslationResponseParser.parseRawGlossaryTermCandidates(raw)
+    }
+
     override fun estimateSummarizeTokens(text: String): AiTokenEstimate {
         return estimateMessage(AiPromptBuilder.summaryUserMessage(text))
     }
@@ -63,6 +68,10 @@ class ClaudeProvider(
 
     override fun estimateGlossarySuggestionTokens(request: GlossarySuggestionRequest): AiTokenEstimate {
         return estimateMessage(GlossarySuggestionPromptBuilder.build(request))
+    }
+
+    override fun estimateRawGlossaryTermTokens(request: RawGlossaryTermRequest): AiTokenEstimate {
+        return estimateMessage(RawGlossaryTermPromptBuilder.build(request))
     }
 
     private fun estimateMessage(prompt: String): AiTokenEstimate {
