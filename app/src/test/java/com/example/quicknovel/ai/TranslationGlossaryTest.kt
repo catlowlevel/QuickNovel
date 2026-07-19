@@ -100,6 +100,36 @@ class TranslationGlossaryTest {
     }
 
     @Test
+    fun promptRequiresNativeProseAndGlossaryAudit() {
+        val request = TranslationRequest(
+            "林枫说道：“青云宗到了。”",
+            "English",
+            "Novel",
+            "Chapter",
+            listOf(
+                TranslationGlossaryEntry(
+                    "青云宗",
+                    "Azure Cloud Sect",
+                    GlossaryCategory.ORGANIZATION,
+                    GlossarySource.USER,
+                    true,
+                    1,
+                    1
+                )
+            )
+        )
+
+        val prompt = TranslationPromptBuilder.build(request)
+
+        assertEquals(3, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
+        assertTrue(prompt.contains("professionally edited fiction"))
+        assertTrue(prompt.contains("Freely split, merge, reorder, or rephrase sentences"))
+        assertTrue(prompt.contains("use exactly that glossary target value every time"))
+        assertTrue(prompt.contains("Before returning, audit translated_text"))
+        assertTrue(prompt.contains("\"translation\":\"Azure Cloud Sect\""))
+    }
+
+    @Test
     fun parsesJsonWithAndWithoutMarkdownFences() {
         val json = """{"translated_text":"Hello","discovered_terms":[{"source":"林枫","translation":"Lin Feng","category":"CHARACTER"}]}"""
         val fenced = "```json\n$json\n```"
