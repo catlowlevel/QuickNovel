@@ -1948,7 +1948,11 @@ class ReadActivityViewModel : ViewModel() {
                     postAiStreamingProgress(loadingLabel, partial)
                 }
                 val translation = result.translatedText
-                val merge = glossaryRepository?.mergeAiDiscoveries(novelId, result.discoveredEntries)
+                val merge = glossaryRepository?.mergeAiDiscoveries(
+                    novelId,
+                    result.discoveredEntries,
+                    sourceText = textToTranslate
+                )
                 if ((merge?.addedCount ?: 0) > 0) {
                     _glossaryDiscovered.postValue(merge?.addedCount ?: 0)
                 }

@@ -18,9 +18,14 @@ class TranslationGlossaryRepository(private val context: Context) {
         context.setKey(EPUB_TRANSLATION_GLOSSARY, novelId, glossary.copy(entries = sortEntries(glossary.entries)))
     }
 
-    fun mergeAiDiscoveries(novelId: String, candidates: List<GlossaryCandidate>, now: Long = System.currentTimeMillis()): MergeResult {
+    fun mergeAiDiscoveries(
+        novelId: String,
+        candidates: List<GlossaryCandidate>,
+        sourceText: String? = null,
+        now: Long = System.currentTimeMillis()
+    ): MergeResult {
         val current = load(novelId)
-        val merged = mergeAiDiscoveries(current, candidates, now)
+        val merged = mergeAiDiscoveries(current, candidates, sourceText, now)
         if (merged.changed) save(novelId, merged.glossary)
         return merged
     }
@@ -82,6 +87,7 @@ class TranslationGlossaryRepository(private val context: Context) {
         fun mergeAiDiscoveries(
             glossary: TranslationGlossary,
             candidates: List<GlossaryCandidate>,
+            sourceText: String? = null,
             now: Long = System.currentTimeMillis()
         ): MergeResult {
             val entries = glossary.entries.toMutableList()
@@ -92,6 +98,7 @@ class TranslationGlossaryRepository(private val context: Context) {
                 val source = candidate.source.trim()
                 val translation = candidate.translation.trim()
                 if (!isValidTermPair(source, translation)) continue
+                if (sourceText != null && !isCandidateFromSourceText(sourceText, source)) continue
 
                 val key = comparisonKey(source)
                 if (!seenCandidates.add(key)) continue
@@ -162,6 +169,7 @@ class TranslationGlossaryRepository(private val context: Context) {
 
         fun isValidTermPair(source: String, translation: String): Boolean {
             if (source.isBlank() || translation.isBlank()) return false
+            if (comparisonKey(source).equals(comparisonKey(translation), ignoreCase = true)) return false
             if (source.length > 80 || translation.length > 120) return false
             if (source.lines().size > 1 || translation.lines().size > 1) return false
             val sourceWords = source.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
@@ -171,6 +179,12 @@ class TranslationGlossaryRepository(private val context: Context) {
             if (source.length > 24 && source.any { it in sentenceMarks }) return false
             if (translation.length > 32 && translation.any { it in sentenceMarks }) return false
             return true
+        }
+
+        fun isCandidateFromSourceText(sourceText: String, candidateSource: String): Boolean {
+            val normalizedSourceText = Normalizer.normalize(sourceText, Normalizer.Form.NFKC)
+            val normalizedCandidate = Normalizer.normalize(candidateSource.trim(), Normalizer.Form.NFKC)
+            return normalizedCandidate.isNotBlank() && normalizedSourceText.contains(normalizedCandidate)
         }
     }
 }

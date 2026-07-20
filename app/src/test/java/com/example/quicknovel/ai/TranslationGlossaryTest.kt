@@ -88,6 +88,25 @@ class TranslationGlossaryTest {
     }
 
     @Test
+    fun aiDiscoveriesRejectTranslatedSourcesAndIdenticalPairs() {
+        val result = TranslationGlossaryRepository.mergeAiDiscoveries(
+            TranslationGlossary(),
+            listOf(
+                GlossaryCandidate("Lin Feng", "Lin Feng", GlossaryCategory.CHARACTER),
+                GlossaryCandidate("Azure Cloud Sect", "Azure Cloud Sect", GlossaryCategory.ORGANIZATION),
+                GlossaryCandidate("青云宗", "Azure Cloud Sect", GlossaryCategory.ORGANIZATION)
+            ),
+            sourceText = "林枫说道：“青云宗到了。”",
+            now = 1
+        )
+
+        assertTrue(result.changed)
+        assertEquals(1, result.addedCount)
+        assertEquals("青云宗", result.glossary.entries[0].sourceText)
+        assertEquals("Azure Cloud Sect", result.glossary.entries[0].translatedText)
+    }
+
+    @Test
     fun promptGenerationIsDeterministic() {
         val entries = listOf(
             TranslationGlossaryEntry("B", "Bee", GlossaryCategory.OTHER, GlossarySource.AI, false, 1, 1),
@@ -121,11 +140,13 @@ class TranslationGlossaryTest {
 
         val prompt = TranslationPromptBuilder.build(request)
 
-        assertEquals(3, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
+        assertEquals(4, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
         assertTrue(prompt.contains("professionally edited fiction"))
         assertTrue(prompt.contains("Freely split, merge, reorder, or rephrase sentences"))
         assertTrue(prompt.contains("use exactly that glossary target value every time"))
         assertTrue(prompt.contains("Before returning, audit translated_text"))
+        assertTrue(prompt.contains("source field must be the exact original-language term copied from the chapter text"))
+        assertTrue(prompt.contains("Always check for named entities"))
         assertTrue(prompt.contains("\"translation\":\"Azure Cloud Sect\""))
     }
 
