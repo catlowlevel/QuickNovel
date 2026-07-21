@@ -29,6 +29,7 @@ import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
 import android.widget.BaseAdapter
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -243,6 +244,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, dp(8))
         }
+        val currentChapterFilter = CheckBox(this).apply {
+            text = getString(R.string.translation_glossary_current_chapter_only)
+            isSingleLine = true
+            setTextColor(colorFromAttribute(R.attr.textColor))
+            buttonTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+            setPadding(0, 0, 0, dp(8))
+        }
         fun com.google.android.material.button.MaterialButton.applyGlossaryFilterStyle() {
             setTextColor(colorFromAttribute(R.attr.textColor))
             backgroundTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.iconGrayBackground))
@@ -303,6 +311,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         root.addView(filterRow)
         sortRow.addView(sortButton, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(sortRow)
+        root.addView(currentChapterFilter, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(empty, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(list, LinearLayout.LayoutParams.MATCH_PARENT, (360 * resources.displayMetrics.density).roundToInt())
 
@@ -311,6 +320,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         var selectedCategory: GlossaryCategory? = null
         var selectedSource: GlossarySource? = null
         var sortMode = GlossarySortMode.NEWEST
+        val currentChapterText = viewModel.currentRawChapterText().orEmpty()
 
         fun sourceLabel(source: GlossarySource): String {
             return if (source == GlossarySource.USER) {
@@ -334,6 +344,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             visibleEntries = glossary.entries.filter { entry ->
                 (selectedCategory == null || entry.category == selectedCategory) &&
                         (selectedSource == null || entry.source == selectedSource) &&
+                        (!currentChapterFilter.isChecked ||
+                                TranslationGlossaryRepository.isCandidateFromSourceText(currentChapterText, entry.sourceText)) &&
                         (normalizedFilter.isBlank() ||
                         entry.sourceText.contains(normalizedFilter, ignoreCase = true) ||
                         entry.translatedText.contains(normalizedFilter, ignoreCase = true) ||
@@ -405,6 +417,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         textFilter.addTextChangedListener {
             refresh(it?.toString().orEmpty())
+        }
+
+        currentChapterFilter.setOnCheckedChangeListener { _, _ ->
+            refresh()
         }
 
         list.setOnItemClickListener { _, _, position, _ ->

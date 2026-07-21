@@ -748,6 +748,10 @@ class ReadActivityViewModel : ViewModel() {
         return TranslationGlossaryRepository(ctx).load(currentNovelId())
     }
 
+    fun currentRawChapterText(): String? {
+        return (chapterData[currentIndex] as? Resource.Success)?.value?.originalRendered?.toString()
+    }
+
     fun saveUserGlossaryEntry(sourceText: String, translatedText: String, category: GlossaryCategory): TranslationGlossary {
         val ctx = context ?: throw IllegalStateException("Context unavailable")
         return TranslationGlossaryRepository(ctx).addOrUpdateUserEntry(

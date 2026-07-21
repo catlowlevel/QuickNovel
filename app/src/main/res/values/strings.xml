@@ -206,6 +206,7 @@
     <string name="translation_glossary_category">Category</string>
     <string name="translation_glossary_all_categories">All Categories</string>
     <string name="translation_glossary_all_sources">All Sources</string>
+    <string name="translation_glossary_current_chapter_only">Current chapter only</string>
     <string name="translation_glossary_sort_newest">Sort: Newest</string>
     <string name="translation_glossary_sort_category">Sort: Category</string>
     <string name="translation_glossary_sort_source">Sort: Source</string>
