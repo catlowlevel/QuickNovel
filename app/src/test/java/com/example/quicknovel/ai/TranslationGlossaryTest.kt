@@ -140,7 +140,7 @@ class TranslationGlossaryTest {
 
         val prompt = TranslationPromptBuilder.build(request)
 
-        assertEquals(4, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
+        assertEquals(5, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
         assertTrue(prompt.contains("professionally edited fiction"))
         assertTrue(prompt.contains("Freely split, merge, reorder, or rephrase sentences"))
         assertTrue(prompt.contains("use exactly that glossary target value every time"))
@@ -148,6 +148,29 @@ class TranslationGlossaryTest {
         assertTrue(prompt.contains("source field must be the exact original-language term copied from the chapter text"))
         assertTrue(prompt.contains("Always check for named entities"))
         assertTrue(prompt.contains("\"translation\":\"Azure Cloud Sect\""))
+    }
+
+    @Test
+    fun promptListsMatchedGlossaryLongestFirstForSimilarEntries() {
+        val request = TranslationRequest(
+            "时之主缓缓睁开眼。",
+            "English",
+            "Novel",
+            "Chapter",
+            listOf(
+                TranslationGlossaryEntry("时", "Time Sage", GlossaryCategory.TITLE, GlossarySource.USER, true, 1, 1),
+                TranslationGlossaryEntry("时之主", "Master of Time", GlossaryCategory.TITLE, GlossarySource.USER, true, 1, 1),
+                TranslationGlossaryEntry("空之主", "Master of Space", GlossaryCategory.TITLE, GlossarySource.USER, true, 1, 1)
+            )
+        )
+
+        val prompt = TranslationPromptBuilder.build(request)
+        val matchedGlossary = prompt.substringAfter("Matched Glossary JSON:").substringBefore("Return exactly this JSON shape:")
+
+        assertTrue(prompt.contains("Matched Glossary JSON is sorted longest source first"))
+        assertTrue(prompt.contains("Never use a glossary entry just because it looks similar"))
+        assertTrue(matchedGlossary.indexOf("Master of Time") < matchedGlossary.indexOf("Time Sage"))
+        assertFalse(matchedGlossary.contains("Master of Space"))
     }
 
     @Test
