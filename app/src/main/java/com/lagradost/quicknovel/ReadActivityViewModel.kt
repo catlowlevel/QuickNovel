@@ -49,6 +49,7 @@ import com.lagradost.quicknovel.TTSHelper.preParseHtml
 import com.lagradost.quicknovel.TTSHelper.ttsParseText
 import com.lagradost.quicknovel.ai.AiTranslationCacheKey
 import com.lagradost.quicknovel.ai.AiTokenEstimate
+import com.lagradost.quicknovel.ai.AiTokenEstimator
 import com.lagradost.quicknovel.ai.GlossaryCategory
 import com.lagradost.quicknovel.ai.GlossarySuggestion
 import com.lagradost.quicknovel.ai.GlossarySuggestionRequest
@@ -1790,24 +1791,10 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     private fun postAiStreamingProgress(label: String, partial: String) {
-        val wordCount = countWords(partial)
-        val progress = context?.getString(R.string.ai_stream_word_count, wordCount)
-            ?: "Responded words: $wordCount"
+        val tokenCount = AiTokenEstimator.estimateTextTokens(partial)
+        val progress = context?.getString(R.string.ai_stream_token_count, tokenCount)
+            ?: "Generated tokens: $tokenCount"
         _loadingStatus.postValue(Resource.Loading("$label\n$progress"))
-    }
-
-    private fun countWords(text: String): Int {
-        var count = 0
-        var inWord = false
-        for (char in text) {
-            if (char.isWhitespace()) {
-                inWord = false
-            } else if (!inWord) {
-                count++
-                inWord = true
-            }
-        }
-        return count
     }
 
     fun aiTranslateChapter(index: Int, reload: Boolean = false) {

@@ -25,7 +25,7 @@ object AiTokenEstimator {
         return AiTokenEstimate("Claude", modelName, estimateTextTokens(prompt) + 8)
     }
 
-    private fun estimateTextTokens(text: String): Int {
+    fun estimateTextTokens(text: String): Int {
         var asciiRun = 0
         var tokens = 0
 

@@ -195,7 +195,7 @@
     <string name="ai_provider_not_configured">AI provider not configured</string>
     <string name="ai_summarizing">Summarizing...</string>
     <string name="ai_translating">Translating with AI...</string>
-    <string name="ai_stream_word_count" formatted="true">Responded words: %d</string>
+    <string name="ai_stream_token_count" formatted="true">Generated tokens: %d</string>
     <string name="ai_summarize_failed">Failed to summarize</string>
     <string name="ai_translate_failed">Failed to translate</string>
     <string name="translation_glossary">Translation Glossary</string>
