@@ -3,10 +3,9 @@ package com.lagradost.quicknovel.ai
 import com.lagradost.quicknovel.DataStore
 
 object TranslationPromptBuilder {
-    const val PROMPT_SCHEMA_VERSION = 5
+    const val PROMPT_SCHEMA_VERSION = 6
 
     fun build(request: TranslationRequest): String {
-        val glossaryJson = DataStore.mapper.writeValueAsString(TranslationGlossaryRepository.sortEntries(request.glossary).map(::entryJson))
         val matchedGlossaryJson = DataStore.mapper.writeValueAsString(matchedGlossaryEntries(request).map(::entryJson))
 
         return """
@@ -25,8 +24,8 @@ object TranslationPromptBuilder {
             10. Prefer established ${request.targetLanguage} equivalents for common titles and ranks, unless the glossary specifies otherwise.
 
             Glossary rules:
-            11. The supplied glossary is authoritative and overrides all other naming preferences.
-            12. Use Matched Glossary JSON as the exact-match glossary for this chapter.
+            11. Matched Glossary JSON is the only supplied glossary for this chapter.
+            12. It contains only exact source terms from the saved glossary that appear in the chapter text.
             13. Matched Glossary JSON is sorted longest source first; when source terms overlap or look similar, apply the longest exact source match.
             14. Never use a glossary entry just because it looks similar to a source term; the source text must match exactly.
             15. Whenever a matched glossary source term appears in the chapter text, use exactly that glossary target value every time.
@@ -43,7 +42,7 @@ object TranslationPromptBuilder {
             24. Always check for named entities: character names, aliases, place names, sects, clans, organizations, schools, factions, techniques, artifacts, species, ranks, titles, and honorifics.
             25. Include newly introduced named entities even if they appear only once in this chapter, because names often recur later.
             26. Do not add generic words, ordinary phrases, full sentences, or invented terms to discovered_terms.
-            27. Do not repeat terms that already appear in Glossary JSON.
+            27. Do not repeat terms that already appear in Matched Glossary JSON.
             28. Keep aliases separate when the source text uses a genuinely distinct alias.
             29. Return an empty discovered_terms array when there are no new glossary-worthy terms.
 
@@ -54,9 +53,6 @@ object TranslationPromptBuilder {
             Context:
             Novel title: ${request.novelTitle ?: "Unknown"}
             Chapter title: ${request.chapterTitle ?: "Unknown"}
-
-            Glossary JSON:
-            $glossaryJson
 
             Matched Glossary JSON:
             $matchedGlossaryJson

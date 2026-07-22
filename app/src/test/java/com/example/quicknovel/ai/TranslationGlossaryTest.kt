@@ -112,7 +112,7 @@ class TranslationGlossaryTest {
             TranslationGlossaryEntry("B", "Bee", GlossaryCategory.OTHER, GlossarySource.AI, false, 1, 1),
             TranslationGlossaryEntry("A", "Ay", GlossaryCategory.CHARACTER, GlossarySource.USER, true, 1, 1)
         )
-        val request = TranslationRequest("Line 1\n\"Line 2\"", "English", "Novel", "Chapter", entries)
+        val request = TranslationRequest("A Line 1\n\"Line 2\"", "English", "Novel", "Chapter", entries)
 
         assertEquals(TranslationPromptBuilder.build(request), TranslationPromptBuilder.build(request))
         assertTrue(TranslationPromptBuilder.build(request).contains("\"locked\":true"))
@@ -140,7 +140,7 @@ class TranslationGlossaryTest {
 
         val prompt = TranslationPromptBuilder.build(request)
 
-        assertEquals(5, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
+        assertEquals(6, TranslationPromptBuilder.PROMPT_SCHEMA_VERSION)
         assertTrue(prompt.contains("professionally edited fiction"))
         assertTrue(prompt.contains("Freely split, merge, reorder, or rephrase sentences"))
         assertTrue(prompt.contains("use exactly that glossary target value every time"))
@@ -167,9 +167,11 @@ class TranslationGlossaryTest {
         val prompt = TranslationPromptBuilder.build(request)
         val matchedGlossary = prompt.substringAfter("Matched Glossary JSON:").substringBefore("Return exactly this JSON shape:")
 
+        assertFalse(prompt.contains("\nGlossary JSON:\n"))
         assertTrue(prompt.contains("Matched Glossary JSON is sorted longest source first"))
         assertTrue(prompt.contains("Never use a glossary entry just because it looks similar"))
         assertTrue(matchedGlossary.indexOf("Master of Time") < matchedGlossary.indexOf("Time Sage"))
+        assertFalse(prompt.contains("Master of Space"))
         assertFalse(matchedGlossary.contains("Master of Space"))
     }
 
