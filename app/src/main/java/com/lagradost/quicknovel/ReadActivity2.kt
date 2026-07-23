@@ -29,7 +29,6 @@ import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
 import android.widget.BaseAdapter
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -55,6 +54,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
@@ -245,12 +245,21 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, dp(8))
         }
-        val currentChapterFilter = CheckBox(this).apply {
-            text = getString(R.string.translation_glossary_current_chapter_only)
-            isSingleLine = true
-            setTextColor(colorFromAttribute(R.attr.textColor))
-            buttonTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
-            setPadding(0, 0, 0, dp(8))
+        fun MaterialCheckBox.applyGlossaryCheckboxStyle(enabled: Boolean = true) {
+            isEnabled = enabled
+            isSingleLine = false
+            minHeight = dp(44)
+            setPadding(0, 0, 0, 0)
+            setTextColor(
+                colorFromAttribute(
+                    if (enabled) R.attr.textColor else R.attr.grayTextColor
+                )
+            )
+            buttonTintList = ColorStateList.valueOf(
+                colorFromAttribute(
+                    if (enabled) R.attr.textColor else R.attr.grayTextColor
+                )
+            )
         }
         fun com.google.android.material.button.MaterialButton.applyGlossaryFilterStyle() {
             setTextColor(colorFromAttribute(R.attr.textColor))
@@ -286,6 +295,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             setPadding(0, dialogPadding(), 0, dialogPadding())
             setTextColor(colorFromAttribute(R.attr.grayTextColor))
         }
+        val countText = TextView(this).apply {
+            gravity = Gravity.END
+            setPadding(0, 0, 0, dp(8))
+            setTextColor(colorFromAttribute(R.attr.grayTextColor))
+        }
         val list = ListView(this).apply {
             divider = ColorDrawable(colorFromAttribute(R.attr.primaryGrayBackground))
             dividerHeight = dp(1)
@@ -295,6 +309,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val adapter = GlossaryAdapter()
         list.adapter = adapter
         list.emptyView = empty
+        val currentChapterText = viewModel.currentRawChapterText().orEmpty()
+        val currentChapterFilter = MaterialCheckBox(this).apply {
+            text = getString(R.string.translation_glossary_current_chapter_only)
+            applyGlossaryCheckboxStyle(currentChapterText.isNotBlank())
+        }
 
         root.addView(textFilter, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         filterRow.addView(
@@ -313,6 +332,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         sortRow.addView(sortButton, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(sortRow)
         root.addView(currentChapterFilter, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        root.addView(countText, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(empty, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         root.addView(list, LinearLayout.LayoutParams.MATCH_PARENT, (360 * resources.displayMetrics.density).roundToInt())
 
@@ -321,7 +341,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         var selectedCategory: GlossaryCategory? = null
         var selectedSource: GlossarySource? = null
         var sortMode = GlossarySortMode.NEWEST
-        val currentChapterText = viewModel.currentRawChapterText().orEmpty()
+        var baseFilteredEntries = glossary.entries
+        var currentChapterEntryKeysRevision: Long? = null
+        var currentChapterEntryKeys = emptySet<String>()
 
         fun sourceLabel(source: GlossarySource): String {
             return if (source == GlossarySource.USER) {
@@ -340,40 +362,82 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-        fun refresh(filter: String = textFilter.text?.toString().orEmpty()) {
+        fun sortEntries(entries: List<TranslationGlossaryEntry>): List<TranslationGlossaryEntry> {
+            return when (sortMode) {
+                GlossarySortMode.NEWEST -> entries.sortedWith(
+                    compareByDescending<TranslationGlossaryEntry> { it.createdAt }
+                        .thenByDescending { it.updatedAt }
+                        .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                )
+
+                GlossarySortMode.CATEGORY -> TranslationGlossaryRepository.sortEntries(entries)
+                GlossarySortMode.SOURCE_TEXT -> entries.sortedWith(
+                    compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                        .thenBy { it.sourceText }
+                )
+
+                GlossarySortMode.TRANSLATION -> entries.sortedWith(
+                    compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.translatedText) }
+                        .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                )
+            }
+        }
+
+        fun currentChapterKeys(): Set<String> {
+            if (currentChapterEntryKeysRevision == glossary.revision) {
+                return currentChapterEntryKeys
+            }
+
+            currentChapterEntryKeys = if (currentChapterText.isBlank()) {
+                emptySet()
+            } else {
+                glossary.entries.asSequence()
+                    .filter {
+                        TranslationGlossaryRepository.isCandidateFromSourceText(
+                            currentChapterText,
+                            it.sourceText
+                        )
+                    }
+                    .map { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
+                    .toSet()
+            }
+            currentChapterEntryKeysRevision = glossary.revision
+            return currentChapterEntryKeys
+        }
+
+        fun applyTextFilter(filter: String = textFilter.text?.toString().orEmpty()) {
             val normalizedFilter = filter.trim()
-            visibleEntries = glossary.entries.filter { entry ->
-                (selectedCategory == null || entry.category == selectedCategory) &&
-                        (selectedSource == null || entry.source == selectedSource) &&
-                        (!currentChapterFilter.isChecked ||
-                                TranslationGlossaryRepository.isCandidateFromSourceText(currentChapterText, entry.sourceText)) &&
-                        (normalizedFilter.isBlank() ||
+            visibleEntries = if (normalizedFilter.isBlank()) {
+                baseFilteredEntries
+            } else {
+                baseFilteredEntries.filter { entry ->
                         entry.sourceText.contains(normalizedFilter, ignoreCase = true) ||
                         entry.translatedText.contains(normalizedFilter, ignoreCase = true) ||
                         entry.category.name.contains(normalizedFilter, ignoreCase = true) ||
-                        sourceLabel(entry.source).contains(normalizedFilter, ignoreCase = true))
-            }.let { filtered ->
-                when (sortMode) {
-                    GlossarySortMode.NEWEST -> filtered.sortedWith(
-                        compareByDescending<TranslationGlossaryEntry> { it.createdAt }
-                            .thenByDescending { it.updatedAt }
-                            .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
-                    )
-
-                    GlossarySortMode.CATEGORY -> TranslationGlossaryRepository.sortEntries(filtered)
-                    GlossarySortMode.SOURCE_TEXT -> filtered.sortedWith(
-                        compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
-                            .thenBy { it.sourceText }
-                    )
-
-                    GlossarySortMode.TRANSLATION -> filtered.sortedWith(
-                        compareBy<TranslationGlossaryEntry> { TranslationGlossaryRepository.comparisonKey(it.translatedText) }
-                            .thenBy { TranslationGlossaryRepository.comparisonKey(it.sourceText) }
-                    )
+                                sourceLabel(entry.source).contains(normalizedFilter, ignoreCase = true)
                 }
             }
             adapter.entries = visibleEntries
             adapter.notifyDataSetChanged()
+            countText.text = getString(
+                R.string.translation_glossary_count,
+                visibleEntries.size,
+                glossary.entries.size
+            )
+        }
+
+        fun rebuildBaseFilter() {
+            val chapterKeys = if (currentChapterFilter.isChecked) currentChapterKeys() else emptySet()
+            baseFilteredEntries = glossary.entries.asSequence()
+                .filter { selectedCategory == null || it.category == selectedCategory }
+                .filter { selectedSource == null || it.source == selectedSource }
+                .filter {
+                    !currentChapterFilter.isChecked ||
+                            chapterKeys.contains(TranslationGlossaryRepository.comparisonKey(it.sourceText))
+                }
+                .toList()
+                .let(::sortEntries)
+            applyTextFilter()
         }
 
         categoryFilter.setOnClickListener { view ->
@@ -386,7 +450,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             ) {
                 selectedCategory = categories[itemId]
                 categoryFilter.text = selectedCategory?.name ?: getString(R.string.translation_glossary_all_categories)
-                refresh()
+                rebuildBaseFilter()
             }
         }
 
@@ -400,7 +464,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             ) {
                 selectedSource = sources[itemId]
                 sourceFilter.text = selectedSource?.let(::sourceLabel) ?: getString(R.string.translation_glossary_all_sources)
-                refresh()
+                rebuildBaseFilter()
             }
         }
 
@@ -412,28 +476,28 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             ) {
                 sortMode = modes[itemId]
                 sortButton.text = sortLabel(sortMode)
-                refresh()
+                rebuildBaseFilter()
             }
         }
 
         textFilter.addTextChangedListener {
-            refresh(it?.toString().orEmpty())
+            applyTextFilter(it?.toString().orEmpty())
         }
 
         currentChapterFilter.setOnCheckedChangeListener { _, _ ->
-            refresh()
+            rebuildBaseFilter()
         }
 
         list.setOnItemClickListener { _, _, position, _ ->
             visibleEntries.getOrNull(position)?.let { entry ->
                 showGlossaryEntryDialog(entry) {
                     glossary = it
-                    refresh()
+                    rebuildBaseFilter()
                 }
             }
         }
 
-        refresh()
+        rebuildBaseFilter()
         val dialog = AlertDialog.Builder(this, R.style.AlertDialogCustom)
             .setTitle(R.string.translation_glossary)
             .setView(root)
@@ -444,7 +508,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             showGlossaryEntryDialog(null) {
                 glossary = it
-                refresh()
+                rebuildBaseFilter()
             }
         }
     }
@@ -566,9 +630,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             insetBottom = 0
             isEnabled = entry == null && targetInput.text?.toString()?.trim()?.isNotEmpty() == true
         }
-        val includeGlossaryContext = android.widget.CheckBox(this).apply {
+        val includeGlossaryContext = MaterialCheckBox(this).apply {
             text = getString(R.string.translation_glossary_include_context)
             isChecked = false
+            isSingleLine = false
+            minHeight = dp(44)
+            setPadding(0, dp(4), 0, dp(4))
             setTextColor(colorFromAttribute(R.attr.textColor))
             buttonTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
         }
