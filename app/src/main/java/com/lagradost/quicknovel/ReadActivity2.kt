@@ -110,6 +110,7 @@ import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
 import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -1473,6 +1474,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fixSystemBarsPadding(binding.readerBottomViewHolder, padTop = false, overlayCutout = false)
+        fixSystemBarsPadding(binding.readToolbarHolder, padBottom = false, overlayCutout = false)
 
         registerBattery()
 

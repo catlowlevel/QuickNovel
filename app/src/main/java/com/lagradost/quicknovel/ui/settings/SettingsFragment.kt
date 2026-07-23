@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
@@ -30,9 +31,8 @@ import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiProviderLangSettings
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
-import com.lagradost.quicknovel.util.BackupUtils.backup
-import com.lagradost.quicknovel.util.BackupUtils.restorePrompt
 import com.lagradost.quicknovel.util.BackupUtils.setupStream
+import com.lagradost.quicknovel.util.BackupUtils
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
@@ -51,6 +51,7 @@ import java.lang.System.currentTimeMillis
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 import com.lagradost.quicknovel.databinding.DialogAiSettingsBinding
 import com.lagradost.quicknovel.AiProviderType
@@ -219,6 +220,21 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
+    private val restoreFileSelector =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val context = context ?: return@registerForActivityResult
+            lifecycleScope.launch {
+                BackupUtils.restoreFromUri(context, uri).onFailure { error ->
+                    logError(error)
+                    showToast(txt(R.string.restore_failed_format, error.toString()))
+                }.onSuccess {
+                    showToast(R.string.restore_success, Toast.LENGTH_LONG)
+                    activity?.recreate()
+                }
+            }
+        }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.settings, rootKey)
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -295,12 +311,39 @@ class SettingsFragment : PreferenceFragmentCompat() {
         }
 
         getPref(R.string.backup_key)?.setOnPreferenceClickListener {
-            activity?.backup()
+            val activity = activity
+            val context = context
+            if (context != null) {
+                lifecycleScope.launch {
+                    BackupUtils.createBackupFile(context, activity).onFailure { error ->
+                        logError(error)
+                        if (error.message != null) {
+                            showToast(
+                                txt(R.string.backup_failed_error_format, error.toString()),
+                                Toast.LENGTH_LONG
+                            )
+                        } else {
+                            showToast(R.string.backup_failed, Toast.LENGTH_LONG)
+                        }
+                    }.onSuccess {
+                        showToast(R.string.backup_success, Toast.LENGTH_LONG)
+                    }
+                }
+            }
             return@setOnPreferenceClickListener true
         }
 
         getPref(R.string.restore_key)?.setOnPreferenceClickListener {
-            activity?.restorePrompt()
+            restoreFileSelector.launch(
+                arrayOf(
+                    "text/plain",
+                    "text/str",
+                    "text/x-unknown",
+                    "application/json",
+                    "unknown/unknown",
+                    "content/unknown",
+                )
+            )
             return@setOnPreferenceClickListener true
         }
 
