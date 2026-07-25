@@ -960,13 +960,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.forwardsTTS()
                     return true
                 } else if (viewModel.scrollWithVolume) {
-                    val bottomY = getBottomY()
-                    val lines = getAllLines()
-                    val line = lines.firstOrNull {
-                        it.bottom >= bottomY
-                    } ?: lines.lastOrNull() ?: return true
-                    binding.realText.scrollBy(0, line.top - getTopY())
-
+                    smoothScrollByReadableHalfPage(1)
                     return true
                 }
             }
@@ -976,22 +970,24 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.backwardsTTS()
                     return true
                 } else if (viewModel.scrollWithVolume) {
-                    binding.realText.scrollBy(0, getTopY() - getBottomY())
-                    binding.realText.post {
-                        val lines = getAllLines()
-                        val topY = getTopY()
-                        val line = lines.firstOrNull {
-                            it.top >= topY
-                        } ?: return@post
-                        binding.realText.scrollBy(0, line.top - getTopY())
-                    }
-
+                    smoothScrollByReadableHalfPage(-1)
                     return true
                 }
             }
         }
 
         return false
+    }
+
+    private fun smoothScrollByReadableHalfPage(direction: Int) {
+        val topY = getTopY()
+        val bottomY = getBottomY()
+        val centerY = (topY + bottomY) / 2
+        val delta = (bottomY - centerY) * direction
+
+        if (delta != 0 && binding.realText.canScrollVertically(delta)) {
+            binding.realText.smoothScrollBy(0, delta)
+        }
     }
 
     private fun kill() {
