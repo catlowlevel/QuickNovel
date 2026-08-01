@@ -46,7 +46,7 @@ class WebViewActivity : AppCompatActivity() {
         setSupportActionBar(binding.webviewToolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.webviewToolbar.setNavigationOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
+            finish()
         }
         fixPaddingStatusbar(binding.webviewToolbarHolder)
 
