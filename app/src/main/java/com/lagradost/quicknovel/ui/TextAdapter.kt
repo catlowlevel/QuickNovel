@@ -10,6 +10,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.text.getSpans
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
@@ -826,7 +827,7 @@ class TextAdapter(
             }
 
             is SingleFinishedChapterBinding -> {
-                config.setArgs(binding.root, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                config.setArgs(binding.root, CONFIG_FONT or CONFIG_FONT_BOLD)
                 binding.root.minimumHeight = config.toolbarHeight
             }
 
@@ -870,6 +871,16 @@ class TextAdapter(
         if (binding !is SingleFinishedChapterBinding) return
 
         binding.root.setText(obj.name)
+        binding.root.setTextColor(
+            when (obj.aiStatus) {
+                ReadActivityViewModel.AiChapterStatus.AI_TRANSLATED ->
+                    ContextCompat.getColor(binding.root.context, R.color.colorPrimaryGreen)
+                ReadActivityViewModel.AiChapterStatus.SUMMARIZED ->
+                    ContextCompat.getColor(binding.root.context, R.color.colorPrimaryBanana)
+                ReadActivityViewModel.AiChapterStatus.NONE ->
+                    ContextCompat.getColor(binding.root.context, R.color.readerTextColor)
+            }
+        )
         binding.root.setOnClickListener {
             viewModel.switchVisibility()
         }
@@ -919,7 +930,9 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                    newItem.id == oldItem.id &&
+                            oldItem.name == newItem.name &&
+                            oldItem.aiStatus == newItem.aiStatus
                 }
 
                 is ChapterLoadSpanned -> {

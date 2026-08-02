@@ -738,6 +738,10 @@ class ReadActivityViewModel : ViewModel() {
         get() = getKey<AiSettings>(EPUB_AI_SETTINGS) ?: AiSettings()
         set(value) = setKey(EPUB_AI_SETTINGS, value)
 
+    fun isAiProviderConfigured(): Boolean {
+        return com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) != null
+    }
+
     fun currentNovelId(): String = NovelIdentity.stableId(book)
 
     fun loadTranslationGlossary(): TranslationGlossary {
@@ -1006,6 +1010,16 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<UiText>(null)
     val chapterTile: LiveData<UiText> = _chapterTile
 
+    enum class AiChapterStatus {
+        NONE,
+        SUMMARIZED,
+        AI_TRANSLATED
+    }
+
+    private val _chapterAiStatus: MutableLiveData<AiChapterStatus> =
+        MutableLiveData<AiChapterStatus>(AiChapterStatus.NONE)
+    val chapterAiStatus: LiveData<AiChapterStatus> = _chapterAiStatus
+
     private val _chapterWordCount: MutableLiveData<Int?> =
         MutableLiveData<Int?>(null)
     val chapterWordCount: LiveData<Int?> = _chapterWordCount
@@ -1092,12 +1106,121 @@ class ReadActivityViewModel : ViewModel() {
     private fun postChapterTitle(index: Int) {
         _chapterTile.postValue(chaptersTitlesInternal.getOrNull(index) ?: UiText.DynamicString(""))
         _chapterWordCount.postValue(getChapterWordCount(index))
+        _chapterAiStatus.postValue(activeAiChapterStatus(index))
+    }
+
+    private fun activeAiChapterStatus(index: Int): AiChapterStatus {
+        val chapter = (chapterData[index] as? Resource.Success)?.value ?: return AiChapterStatus.NONE
+        return when {
+            chapter.isAiTranslated -> AiChapterStatus.AI_TRANSLATED
+            chapter.isSummarized -> AiChapterStatus.SUMMARIZED
+            else -> AiChapterStatus.NONE
+        }
+    }
+
+    fun availableAiChapterStatus(index: Int): AiChapterStatus {
+        val chapter = (chapterData[index] as? Resource.Success)?.value ?: return AiChapterStatus.NONE
+        if (chapter.isAiTranslated || chapter.aiTranslatedRendered != null) {
+            return AiChapterStatus.AI_TRANSLATED
+        }
+        if (chapter.isSummarized || chapter.summarizedRendered != null) {
+            return AiChapterStatus.SUMMARIZED
+        }
+
+        val text = chapter.originalRendered.toString()
+        if (text.isBlank()) return AiChapterStatus.NONE
+        val novelId = currentNovelId()
+        val glossaryRepository = context?.let { TranslationGlossaryRepository(it) }
+        val glossary = glossaryRepository?.load(novelId) ?: TranslationGlossary()
+        if (translationCacheFile(text, novelId, glossary)?.exists() == true ||
+            hasCompatibleTranslationCache(text, novelId, glossary)
+        ) {
+            return AiChapterStatus.AI_TRANSLATED
+        }
+        if (summarizeCacheFile(text)?.exists() == true) {
+            return AiChapterStatus.SUMMARIZED
+        }
+        return AiChapterStatus.NONE
     }
 
     private val hasExpanded: HashSet<Int> = hashSetOf()
 
     var currentIndex = Int.MIN_VALUE
         private set
+
+    private enum class ContinuousAiMode {
+        SUMMARIZE,
+        TRANSLATE
+    }
+
+    @Volatile
+    private var continuousAiMode: ContinuousAiMode? = null
+    @Volatile
+    private var continuousAiStartIndex: Int = Int.MAX_VALUE
+    private val continuousAiLock = Any()
+    private val continuousAiRequested: HashSet<Pair<ContinuousAiMode, Int>> = hashSetOf()
+    private var continuousAiProcessing: Pair<ContinuousAiMode, Int>? = null
+
+    fun isKeepSummarizingEnabled(): Boolean = continuousAiMode == ContinuousAiMode.SUMMARIZE
+
+    fun isKeepAiTranslatingEnabled(): Boolean = continuousAiMode == ContinuousAiMode.TRANSLATE
+
+    fun setKeepSummarizingEnabled(enabled: Boolean) {
+        setContinuousAiMode(if (enabled) ContinuousAiMode.SUMMARIZE else null)
+    }
+
+    fun setKeepAiTranslatingEnabled(enabled: Boolean) {
+        setContinuousAiMode(if (enabled) ContinuousAiMode.TRANSLATE else null)
+    }
+
+    private fun setContinuousAiMode(mode: ContinuousAiMode?) {
+        synchronized(continuousAiLock) {
+            continuousAiMode = mode
+            continuousAiStartIndex = if (mode == null) Int.MAX_VALUE else currentIndex
+            continuousAiRequested.clear()
+            continuousAiProcessing = null
+        }
+        if (mode != null) {
+            applyNextContinuousAiIfIdle()
+        }
+    }
+
+    private fun applyNextContinuousAiIfIdle() {
+        val request = synchronized(continuousAiLock) {
+            val mode = continuousAiMode ?: return
+            if (continuousAiProcessing != null) return
+
+            val nextIndex = chapterData.keys
+                .filter { it >= continuousAiStartIndex }
+                .sorted()
+                .firstOrNull { index ->
+                    val chapter = (chapterData[index] as? Resource.Success)?.value ?: return@firstOrNull false
+                    val alreadyApplied =
+                        (mode == ContinuousAiMode.SUMMARIZE && chapter.isSummarized) ||
+                                (mode == ContinuousAiMode.TRANSLATE && chapter.isAiTranslated)
+                    !alreadyApplied && !continuousAiRequested.contains(mode to index)
+                } ?: return
+
+            val key = mode to nextIndex
+            continuousAiRequested.add(key)
+            continuousAiProcessing = key
+            key
+        }
+
+        when (request.first) {
+            ContinuousAiMode.SUMMARIZE -> summarizeChapter(request.second)
+            ContinuousAiMode.TRANSLATE -> aiTranslateChapter(request.second)
+        }
+    }
+
+    private fun completeContinuousAiRequest(mode: ContinuousAiMode, index: Int) {
+        synchronized(continuousAiLock) {
+            if (continuousAiProcessing == mode to index) {
+                continuousAiProcessing = null
+            }
+        }
+        applyNextContinuousAiIfIdle()
+    }
 
 
 
@@ -1263,7 +1386,8 @@ class ReadActivityViewModel : ViewModel() {
                                 idx,
                                 0,
                                 chaptersTitlesInternal[idx],
-                                canReload
+                                canReload,
+                                activeAiChapterStatus(idx)
                             )
                         )
                     chapters.addAll(chapterIdxToSpanDisplay(idx))
@@ -1276,7 +1400,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload, activeAiChapterStatus(cIndex)))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -1292,7 +1416,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload, activeAiChapterStatus(cIndex)))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -1480,6 +1604,7 @@ class ReadActivityViewModel : ViewModel() {
                 if (notify) notifyChapterUpdate(index)
             }
         }
+        applyNextContinuousAiIfIdle()
     }
 
     private fun hashString(text: ByteArray): String {
@@ -1706,11 +1831,13 @@ class ReadActivityViewModel : ViewModel() {
             if (index == currentIndex) {
                 postChapterTitle(index)
             }
+            completeContinuousAiRequest(ContinuousAiMode.SUMMARIZE, index)
             return
         }
 
         val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
             showToast(R.string.ai_provider_not_configured)
+            completeContinuousAiRequest(ContinuousAiMode.SUMMARIZE, index)
             return
         }
 
@@ -1787,6 +1914,7 @@ class ReadActivityViewModel : ViewModel() {
                 updateReadArea()
             } finally {
                 _loadingStatus.postValue(null)
+                completeContinuousAiRequest(ContinuousAiMode.SUMMARIZE, index)
             }
         }
     }
@@ -1820,11 +1948,13 @@ class ReadActivityViewModel : ViewModel() {
             if (index == currentIndex) {
                 postChapterTitle(index)
             }
+            completeContinuousAiRequest(ContinuousAiMode.TRANSLATE, index)
             return
         }
 
         val provider = com.lagradost.quicknovel.ai.AiManager.getProvider(aiSettings) ?: run {
             showToast(R.string.ai_provider_not_configured)
+            completeContinuousAiRequest(ContinuousAiMode.TRANSLATE, index)
             return
         }
 
@@ -1995,6 +2125,7 @@ class ReadActivityViewModel : ViewModel() {
                 updateReadArea()
             } finally {
                 _loadingStatus.postValue(null)
+                completeContinuousAiRequest(ContinuousAiMode.TRANSLATE, index)
             }
         }
     }

@@ -369,6 +369,7 @@ data class ChapterStartSpanned(
     override val innerIndex: Int,
     val name: UiText,
     val canReload: Boolean,
+    val aiStatus: ReadActivityViewModel.AiChapterStatus = ReadActivityViewModel.AiChapterStatus.NONE,
 ) : SpanDisplay() {
     override fun id(): Long {
         return generateId(1, index, 0, 0)

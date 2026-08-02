@@ -201,27 +201,103 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     private fun dialogPadding(): Int = (20 * resources.displayMetrics.density).roundToInt()
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
+    private fun colorForAiChapterStatus(
+        status: ReadActivityViewModel.AiChapterStatus,
+        defaultColor: Int
+    ): Int {
+        return when (status) {
+            ReadActivityViewModel.AiChapterStatus.AI_TRANSLATED ->
+                ContextCompat.getColor(this, R.color.colorPrimaryGreen)
+            ReadActivityViewModel.AiChapterStatus.SUMMARIZED ->
+                ContextCompat.getColor(this, R.color.colorPrimaryBanana)
+            ReadActivityViewModel.AiChapterStatus.NONE -> defaultColor
+        }
+    }
+
     private fun runAiActionWithTokenConfirmation(
         estimate: AiTokenEstimate?,
+        message: String,
+        chapterTitle: String? = null,
+        onCancelled: () -> Unit = {},
+        keepOptionText: String? = null,
+        onKeepConfirmed: ((keepEnabled: Boolean) -> Unit)? = null,
         onConfirmed: () -> Unit
     ) {
         if (estimate == null) {
-            onConfirmed()
-            return
+            if (keepOptionText == null) {
+                onConfirmed()
+                return
+            }
+        }
+
+        val promptMessage = if (estimate == null) {
+            if (chapterTitle.isNullOrBlank()) {
+                getString(R.string.ai_confirm_no_token_count_no_chapter, message)
+            } else {
+                getString(R.string.ai_confirm_no_token_count, message, chapterTitle)
+            }
+        } else if (chapterTitle.isNullOrBlank()) {
+            getString(
+                R.string.ai_confirm_token_count_no_chapter,
+                message,
+                estimate.providerName,
+                estimate.modelName,
+                estimate.inputTokens
+            )
+        } else {
+            getString(
+                R.string.ai_confirm_token_count,
+                message,
+                chapterTitle,
+                estimate.providerName,
+                estimate.modelName,
+                estimate.inputTokens
+            )
+        }
+        var keepOption: MaterialCheckBox? = null
+        val promptView = keepOptionText?.let { optionText ->
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dialogPadding(), dp(8), dialogPadding(), 0)
+                addView(
+                    TextView(this@ReadActivity2).apply {
+                        text = promptMessage
+                        setTextColor(colorFromAttribute(R.attr.textColor))
+                    },
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                keepOption = MaterialCheckBox(this@ReadActivity2).apply {
+                    text = optionText
+                    setTextColor(colorFromAttribute(R.attr.textColor))
+                    buttonTintList = ColorStateList.valueOf(colorFromAttribute(R.attr.textColor))
+                    setPadding(0, dp(10), 0, 0)
+                }
+                addView(
+                    keepOption,
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
         }
 
         AlertDialog.Builder(this, R.style.AlertDialogCustom)
             .setTitle(R.string.ai_confirm_request)
-            .setMessage(
-                getString(
-                    R.string.ai_confirm_token_count,
-                    estimate.providerName,
-                    estimate.modelName,
-                    estimate.inputTokens
-                )
-            )
-            .setPositiveButton(R.string.ok) { _, _ -> onConfirmed() }
-            .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
+            .apply {
+                if (promptView == null) {
+                    setMessage(promptMessage)
+                } else {
+                    setView(promptView)
+                }
+            }
+            .setPositiveButton(R.string.ok) { _, _ ->
+                onKeepConfirmed?.invoke(keepOption?.isChecked == true) ?: onConfirmed()
+            }
+            .setNegativeButton(R.string.cancel) { d, _ ->
+                onCancelled()
+                d.dismiss()
+            }
+            .setOnCancelListener { onCancelled() }
             .show()
     }
 
@@ -700,7 +776,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
 
             runAiActionWithTokenConfirmation(
-                viewModel.estimateGlossarySuggestionTokens(source, category, useGlossaryContext)
+                viewModel.estimateGlossarySuggestionTokens(source, category, useGlossaryContext),
+                "${getString(R.string.translation_glossary_ai_suggest)}..."
             ) {
                 aiSuggestionsLoading = true
                 updateGlossaryAiButtons()
@@ -748,7 +825,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
 
             runAiActionWithTokenConfirmation(
-                viewModel.estimateRawGlossaryTermTokens(translated, category, useGlossaryContext)
+                viewModel.estimateRawGlossaryTermTokens(translated, category, useGlossaryContext),
+                "${getString(R.string.translation_glossary_ai_suggest)}..."
             ) {
                 rawTermLoading = true
                 updateGlossaryAiButtons()
@@ -1843,6 +1921,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             binding.readToolbarChapterTitle.text = title.asString(binding.readToolbar.context)
         }
 
+        observe(viewModel.chapterAiStatus) { status ->
+            binding.readToolbarChapterTitle.setTextColor(
+                colorForAiChapterStatus(
+                    status,
+                    colorFromAttribute(R.attr.grayTextColor)
+                )
+            )
+        }
+
         observeNullable(viewModel.chapterWordCount) { count ->
             binding.readToolbarWordCount.isGone = count == null
             binding.readToolbarWordCount.text = count?.let {
@@ -1879,7 +1966,22 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     override fun toString(): String = name
                 }
 
-                val arrayAdapter = ArrayAdapter<IndexedChapter>(this, R.layout.chapter_select_dialog)
+                val arrayAdapter = object : ArrayAdapter<IndexedChapter>(
+                    this,
+                    R.layout.chapter_select_dialog
+                ) {
+                    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                        val view = super.getView(position, convertView, parent)
+                        (view as? TextView)?.setTextColor(
+                            colorForAiChapterStatus(
+                                getItem(position)?.let { viewModel.availableAiChapterStatus(it.index) }
+                                    ?: ReadActivityViewModel.AiChapterStatus.NONE,
+                                colorFromAttribute(R.attr.textColor)
+                            )
+                        )
+                        return view
+                    }
+                }
                 arrayAdapter.addAll(titles.mapIndexed { index, uiText ->
                     IndexedChapter(uiText.asString(this), index)
                 })
@@ -2197,30 +2299,70 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             val binding = ReadBottomSettingsBinding.inflate(layoutInflater, null, false)
             bottomSheetDialog.setContentView(binding.root)
+            val currentChapterTitle =
+                viewModel.chapterTile.value?.asString(this)
+                    ?: viewModel.chapterData[viewModel.currentIndex]?.let {
+                        (it as? Resource.Success)?.value?.title?.asString(this)
+                    }
 
             binding.readSummarize.apply {
-                // Initial text
                 val data = viewModel.chapterData[viewModel.currentIndex]
-                if (data is Resource.Success) {
-                    text = if (data.value.isSummarized) {
+                text = when {
+                    viewModel.isKeepSummarizingEnabled() ->
+                        context.getString(R.string.ai_stop_summarizing)
+                    data is Resource.Success && data.value.isSummarized ->
                         context.getString(R.string.restore_original)
-                    } else {
+                    else ->
                         context.getString(R.string.summarize_chapter)
-                    }
                 }
 
                 setOnClickListener {
-                    runAiActionWithTokenConfirmation(
-                        viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex)
-                    ) {
+                    if (viewModel.isKeepSummarizingEnabled()) {
+                        viewModel.setKeepSummarizingEnabled(false)
+                        bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    if (data is Resource.Success && data.value.isSummarized) {
                         viewModel.summarizeChapter(viewModel.currentIndex)
                         bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    val estimate = viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex)
+                    if (estimate == null && !viewModel.isAiProviderConfigured()) {
+                        viewModel.summarizeChapter(viewModel.currentIndex)
+                        bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    runAiActionWithTokenConfirmation(
+                        estimate,
+                        "${context.getString(R.string.summarize_chapter)}...",
+                        chapterTitle = currentChapterTitle,
+                        keepOptionText = context.getString(R.string.ai_keep_summarizing),
+                        onKeepConfirmed = { keepEnabled ->
+                            if (keepEnabled) {
+                                viewModel.setKeepSummarizingEnabled(true)
+                            } else {
+                                viewModel.summarizeChapter(viewModel.currentIndex)
+                            }
+                            bottomSheetDialog.dismiss()
+                        }
+                    ) {
                     }
                 }
 
                 setOnLongClickListener {
+                    if (viewModel.isKeepSummarizingEnabled()) {
+                        viewModel.setKeepSummarizingEnabled(false)
+                        bottomSheetDialog.dismiss()
+                        return@setOnLongClickListener true
+                    }
                     runAiActionWithTokenConfirmation(
-                        viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex, reload = true)
+                        viewModel.estimateSummarizeRequestTokens(viewModel.currentIndex, reload = true),
+                        "${context.getString(R.string.summarize_chapter)}...",
+                        chapterTitle = currentChapterTitle
                     ) {
                             viewModel.summarizeChapter(viewModel.currentIndex, reload = true)
                             bottomSheetDialog.dismiss()
@@ -2230,28 +2372,63 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
 
             binding.readAiTranslate.apply {
-                // Initial text
                 val data = viewModel.chapterData[viewModel.currentIndex]
-                if (data is Resource.Success) {
-                    text = if (data.value.isAiTranslated) {
+                text = when {
+                    viewModel.isKeepAiTranslatingEnabled() ->
+                        context.getString(R.string.ai_stop_translating)
+                    data is Resource.Success && data.value.isAiTranslated ->
                         context.getString(R.string.restore_original)
-                    } else {
+                    else ->
                         context.getString(R.string.ai_translate_chapter)
-                    }
                 }
 
                 setOnClickListener {
-                    runAiActionWithTokenConfirmation(
-                        viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex)
-                    ) {
+                    if (viewModel.isKeepAiTranslatingEnabled()) {
+                        viewModel.setKeepAiTranslatingEnabled(false)
+                        bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    if (data is Resource.Success && data.value.isAiTranslated) {
                         viewModel.aiTranslateChapter(viewModel.currentIndex)
                         bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    val estimate = viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex)
+                    if (estimate == null && !viewModel.isAiProviderConfigured()) {
+                        viewModel.aiTranslateChapter(viewModel.currentIndex)
+                        bottomSheetDialog.dismiss()
+                        return@setOnClickListener
+                    }
+
+                    runAiActionWithTokenConfirmation(
+                        estimate,
+                        "${context.getString(R.string.ai_translate_chapter)}...",
+                        chapterTitle = currentChapterTitle,
+                        keepOptionText = context.getString(R.string.ai_keep_translating),
+                        onKeepConfirmed = { keepEnabled ->
+                            if (keepEnabled) {
+                                viewModel.setKeepAiTranslatingEnabled(true)
+                            } else {
+                                viewModel.aiTranslateChapter(viewModel.currentIndex)
+                            }
+                            bottomSheetDialog.dismiss()
+                        }
+                    ) {
                     }
                 }
 
                 setOnLongClickListener {
+                    if (viewModel.isKeepAiTranslatingEnabled()) {
+                        viewModel.setKeepAiTranslatingEnabled(false)
+                        bottomSheetDialog.dismiss()
+                        return@setOnLongClickListener true
+                    }
                     runAiActionWithTokenConfirmation(
-                        viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex, reload = true)
+                        viewModel.estimateAiTranslateRequestTokens(viewModel.currentIndex, reload = true),
+                        "${context.getString(R.string.ai_translate_chapter)}...",
+                        chapterTitle = currentChapterTitle
                     ) {
                             viewModel.aiTranslateChapter(viewModel.currentIndex, reload = true)
                             bottomSheetDialog.dismiss()

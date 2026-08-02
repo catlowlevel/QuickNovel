@@ -175,12 +175,19 @@
     <string name="home_expanded_hide">Hide</string>
     <string name="summarize_chapter">Summarize Chapter</string>
     <string name="ai_translate_chapter">AI Translate Chapter</string>
+    <string name="ai_keep_summarizing">Keep summarizing current and later chapters</string>
+    <string name="ai_keep_translating">Keep AI translating current and later chapters</string>
+    <string name="ai_stop_summarizing">Stop Summarizing Chapters</string>
+    <string name="ai_stop_translating">Stop AI Translating Chapters</string>
     <string name="fix_paragraphs">Fix Paragraph Formatting</string>
     <string name="ai_target_language">AI Target Language</string>
     <string name="ai_confirm_reload">Confirm Reload</string>
     <string name="ai_confirm_reload_msg">Are you sure you want to redo the API call? This will consume tokens.</string>
     <string name="ai_confirm_request">Confirm AI Request</string>
-    <string name="ai_confirm_token_count" formatted="true">Provider: %1$s\nModel: %2$s\nEstimated input tokens: %3$,d\n\nContinue?</string>
+    <string name="ai_confirm_token_count" formatted="true">%1$s\n\nChapter: %2$s\nProvider: %3$s\nModel: %4$s\nEstimated input tokens: %5$,d\n\nContinue?</string>
+    <string name="ai_confirm_token_count_no_chapter" formatted="true">%1$s\n\nProvider: %2$s\nModel: %3$s\nEstimated input tokens: %4$,d\n\nContinue?</string>
+    <string name="ai_confirm_no_token_count" formatted="true">%1$s\n\nChapter: %2$s\nNo new AI request is needed for the current chapter.\n\nContinue?</string>
+    <string name="ai_confirm_no_token_count_no_chapter" formatted="true">%1$s\n\nNo new AI request is needed for the current chapter.\n\nContinue?</string>
     <string name="restore_original">Restore Original</string>
     <string name="ai_settings">AI Settings</string>
     <string name="ai_provider">AI Provider</string>
