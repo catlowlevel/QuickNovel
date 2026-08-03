@@ -1301,7 +1301,7 @@ class ReadActivityViewModel : ViewModel() {
 
         val current = currentIndex
 
-        val save = visibility.firstFullyVisible ?: visibility.firstInMemory
+        val save = visibility.centerVisible ?: visibility.firstFullyVisible ?: visibility.firstInMemory
         desiredTTSIndex = visibility.firstFullyVisibleUnderLine?.toScroll()
         changeIndex(save.toScroll())
 

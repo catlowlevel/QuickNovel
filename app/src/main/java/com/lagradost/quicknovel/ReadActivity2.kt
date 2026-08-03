@@ -1157,6 +1157,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         val topY = getTopY()
         val bottomY = getBottomY()
+        val centerY = (topY + bottomY) / 2
 
         viewModel.onScroll(
             ScrollVisibilityIndex(
@@ -1167,6 +1168,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 },
                 firstFullyVisibleUnderLine = lines.firstOrNull {
                     it.top >= topBarHeight
+                },
+                centerVisible = lines.firstOrNull {
+                    it.top <= centerY && it.bottom >= centerY
+                } ?: lines.firstOrNull {
+                    it.bottom >= centerY
                 },
                 lastHalfVisible = lines.firstOrNull {
                     it.bottom >= bottomY

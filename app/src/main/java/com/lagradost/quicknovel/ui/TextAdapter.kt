@@ -103,6 +103,9 @@ data class ScrollVisibilityIndex(
     // first line after the bottom bar you can see clearly
     val firstFullyVisibleUnderLine: TextVisualLine?,
 
+    // line closest to the readable viewport center
+    val centerVisible: TextVisualLine?,
+
     val visibleIndices: List<Int>,
 )
 
