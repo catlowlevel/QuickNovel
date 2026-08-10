@@ -30,7 +30,6 @@ import coil3.request.transformations
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
-import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.BookDownloader2.downloadProgress
 import com.lagradost.quicknovel.BookDownloader2Helper
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
@@ -55,6 +54,7 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
+import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.util.BlurTransformation
 import com.lagradost.quicknovel.util.ResultCached
@@ -109,25 +109,80 @@ enum class SearchResponseOperation {
 
     /** Resume the download of the item */
     Resume,
+
+    /** No operation */
+    NoOp,
 }
 
 @Immutable
-data class ImmutableChapterData(
+data class ImmutableChapterData @OptIn(ExperimentalUuidApi::class) constructor(
     val name: String,
     val url: String,
     val dateOfRelease: String? = null,
     val views: Int? = null,
+    val randomUuid: Uuid = Uuid.random(),
+    val index: Int,
 ) {
     companion object {
-        fun from(chapter: ChapterData): ImmutableChapterData =
+        @OptIn(ExperimentalUuidApi::class)
+        fun from(chapter: ChapterData, index: Int): ImmutableChapterData =
             ImmutableChapterData(
                 name = chapter.name,
                 url = chapter.url,
                 dateOfRelease = chapter.dateOfRelease,
-                views = chapter.views
+                views = chapter.views,
+                index = index,
             )
 
     }
+
+}
+
+@Immutable
+data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
+    val content: String,
+    val title: String? = null,
+    val username: String? = null,
+    val date: String? = null,
+    val avatarUrl: String? = null,
+    val avatarHeaders: PersistentMap<String, String>? = null,
+    val rating: Int? = null,
+    val ratings: PersistentList<Pair<Int, String>>? = null,
+    val randomUuid: Uuid = Uuid.random()
+) {
+    companion object {
+        @OptIn(ExperimentalUuidApi::class)
+        fun from(review: UserReview): ImmutableReview =
+            ImmutableReview(
+                content = review.review,
+                title = review.reviewTitle,
+                username = review.username,
+                date = review.reviewDate,
+                avatarUrl = review.avatarUrl,
+                avatarHeaders = review.avatarHeaders?.toPersistentMap(),
+                rating = review.rating,
+                ratings = review.ratings?.toPersistentList(),
+            )
+    }
+
+    val imageRequest
+        get() = @Composable {
+            val context = LocalContext.current
+            remember(context) {
+                ImageRequest(context)
+            }
+        }
+
+    fun ImageRequest(context: Context): ImageRequest =
+        ImageRequest.Builder(context)
+            .data(avatarUrl)
+            .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+                avatarHeaders?.forEach { (key, value) ->
+                    headerBuilder[key] = value
+                }
+            }.build())
+            .crossfade(true)
+            .build()
 
 }
 
@@ -136,8 +191,8 @@ data class ImmutableLoadData(
     val related: PersistentList<ImmutableSearchResponse>?,
     val status: ReleaseStatus?,
     val chapters: PersistentList<ImmutableChapterData>?,
-    val views : Int?,
-    val peopleVoted : Int?,
+    val views: Int?,
+    val peopleVoted: Int?,
 
     // TODO make this better
     var downloadLinks: PersistentList<DownloadLink>?,
@@ -198,7 +253,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
     val epubSize: Int? = null,
     /** How many chapters we have read with the built-in reader */
     val chaptersRead: Int,
-
     val loadData: ImmutableLoadData? = null,
 ) {
 
@@ -261,6 +315,54 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
 
 
     companion object {
+
+        @OptIn(ExperimentalUuidApi::class)
+        fun preview(): ImmutableSearchResponse = ImmutableSearchResponse(
+            name = "hello world",
+            apiName = "hello world",
+            author = "author",
+            url = "url",
+            posterUrl = "https://www.royalroadcdn.com/public/covers-full/36735-the-perfect-run.jpg?time=${System.currentTimeMillis()}",
+            posterHeaders = null,
+            loadData = ImmutableLoadData(
+                related = persistentListOf(),
+                status = ReleaseStatus.Ongoing,
+                chapters = persistentListOf(),
+                views = 1337,
+                peopleVoted = 42,
+                downloadLinks = null,
+                downloadExtractLinks = null,
+            ),
+            tags = persistentListOf(
+                "tag 1",
+                "tag 2",
+                "tag 3",
+                "tag 4",
+                "tag 5",
+                "tag 6",
+                "tag 7",
+                "tag 8",
+                "tag 9",
+                "Hello World",
+                "More tags"
+            ),
+            synopsis = "synopsis",
+            id = 0,
+            rating = 123,
+            latestChapterName = "hello world chapters",
+            generating = false,
+            chaptersRead = 0,
+            timeOfCached = 0,
+            downloadState = ImmutableDownloadState(
+                status = DownloadState.Nothing,
+                progress = 123,
+                downloaded = 50,
+                total = 200,
+                lastUpdatedMs = System.currentTimeMillis(),
+                etaMs = 65240
+            )
+        )
+
         fun chaptersRead(name: String): Int =
             getKey<Int>(EPUB_CURRENT_POSITION, name)?.let { it + 1 } ?: 0
 
@@ -332,6 +434,7 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 }
 
             return ImmutableSearchResponse(
+                id = id,
                 name = response.name,
                 url = response.url,
                 posterUrl = response.posterUrl,
@@ -342,16 +445,17 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 loadData = ImmutableLoadData(
                     related = response.related?.map { from(it) }?.toPersistentList(),
                     status = response.status,
-                    chapters = streamResponse?.data?.map {
+                    chapters = streamResponse?.data?.mapIndexed { index, data ->
                         ImmutableChapterData.from(
-                            it
+                            data, index
                         )
                     }?.toPersistentList(),
                     downloadLinks = epubResponse?.downloadLinks?.toPersistentList(),
                     downloadExtractLinks = epubResponse?.downloadExtractLinks?.toPersistentList(),
                     views = response.views,
-                    peopleVoted = response.peopleVoted
+                    peopleVoted = response.peopleVoted,
                 ),
+                tags = response.tags?.toPersistentList(),
                 posterHeaders = response.posterHeaders?.toImmutableMap(),
                 timeOfCached = System.currentTimeMillis(),
                 chaptersRead = chaptersRead(response.name),
@@ -411,6 +515,7 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 MainActivity.loadPreviewPage(this)
             }
 
+            SearchResponseOperation.NoOp -> {}
             else -> throw NotImplementedError()
         }
     }
@@ -461,6 +566,20 @@ data class ImmutableDownloadState(
             etaMs = state.etaMs
         )
     }
+
+    /** Get the associated action */
+    val operation
+        get() =
+            when (status) {
+                DownloadState.IsDownloading -> SearchResponseOperation.Pause
+                DownloadState.IsPaused -> SearchResponseOperation.Resume
+                DownloadState.IsStopped -> SearchResponseOperation.Download
+                DownloadState.IsFailed -> SearchResponseOperation.Download
+                DownloadState.IsDone -> SearchResponseOperation.Download
+                DownloadState.IsPending -> SearchResponseOperation.NoOp
+                DownloadState.Nothing -> SearchResponseOperation.Download
+            }
+
 }
 
 /**

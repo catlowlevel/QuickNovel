@@ -238,7 +238,8 @@ class  WtrLabProvider : MainAPI() {
         val chapter = nextData.props.pageProps.serie
 
         val root = app.post(
-            "$mainUrl/api/reader/get", data = mapOf(
+            url = "$mainUrl/api/reader/get",
+            data = mapOf(
                 "chapter_id" to chapter.chapter.id.toString(),
                 "chapter_no" to (chapter.chapter.slug ?: chapter.serieData.slug),
                 "force_retry" to "false",
