@@ -72,9 +72,6 @@ import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.collections.immutable.toPersistentSet
 import me.xdrop.fuzzywuzzy.FuzzySearch
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 
@@ -110,12 +107,15 @@ enum class SearchResponseOperation {
     /** Resume the download of the item */
     Resume,
 
+    /** Stop the download of this item */
+    Stop,
+
     /** No operation */
     NoOp,
 }
 
 @Immutable
-data class ImmutableChapterData @OptIn(ExperimentalUuidApi::class) constructor(
+data class ImmutableChapterData constructor(
     val name: String,
     val url: String,
     val dateOfRelease: String? = null,
@@ -124,7 +124,6 @@ data class ImmutableChapterData @OptIn(ExperimentalUuidApi::class) constructor(
     val index: Int,
 ) {
     companion object {
-        @OptIn(ExperimentalUuidApi::class)
         fun from(chapter: ChapterData, index: Int): ImmutableChapterData =
             ImmutableChapterData(
                 name = chapter.name,
@@ -133,13 +132,11 @@ data class ImmutableChapterData @OptIn(ExperimentalUuidApi::class) constructor(
                 views = chapter.views,
                 index = index,
             )
-
     }
-
 }
 
 @Immutable
-data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
+data class ImmutableReview constructor(
     val content: String,
     val title: String? = null,
     val username: String? = null,
@@ -148,10 +145,10 @@ data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
     val avatarHeaders: PersistentMap<String, String>? = null,
     val rating: Int? = null,
     val ratings: PersistentList<Pair<Int, String>>? = null,
+    val containsSpoilers: Boolean = false,
     val randomUuid: Uuid = Uuid.random()
 ) {
     companion object {
-        @OptIn(ExperimentalUuidApi::class)
         fun from(review: UserReview): ImmutableReview =
             ImmutableReview(
                 content = review.review,
@@ -162,6 +159,7 @@ data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
                 avatarHeaders = review.avatarHeaders?.toPersistentMap(),
                 rating = review.rating,
                 ratings = review.ratings?.toPersistentList(),
+                containsSpoilers = review.containsSpoilers
             )
     }
 
@@ -190,6 +188,7 @@ data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
 data class ImmutableLoadData(
     val related: PersistentList<ImmutableSearchResponse>?,
     val status: ReleaseStatus?,
+    /** TODO add RoaringBitmap for immutable download status, bookmark status and read status */
     val chapters: PersistentList<ImmutableChapterData>?,
     val views: Int?,
     val peopleVoted: Int?,
@@ -212,7 +211,7 @@ data class ImmutableLoadData(
  * The other main field is downloadState which is only non-null on the downloaded "page".
  * */
 @Immutable
-data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
+data class ImmutableSearchResponse(
     /** Name of the item */
     val name: String,
     /** API used for accessing the item */
@@ -254,7 +253,7 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
     /** How many chapters we have read with the built-in reader */
     val chaptersRead: Int,
     val loadData: ImmutableLoadData? = null,
-    val reviewData : String? = null,
+    val reviewData: String? = null,
 ) {
 
     fun matchesQuery(query: String): Boolean =
@@ -316,8 +315,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
 
 
     companion object {
-
-        @OptIn(ExperimentalUuidApi::class)
         fun preview(): ImmutableSearchResponse = ImmutableSearchResponse(
             name = "hello world",
             apiName = "hello world",
@@ -388,7 +385,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
             )
         }
 
-        @OptIn(ExperimentalUuidApi::class)
         fun from(response: SearchResponse): ImmutableSearchResponse =
             ImmutableSearchResponse(
                 name = response.name,
@@ -402,7 +398,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 chaptersRead = chaptersRead(response.name)
             )
 
-        @OptIn(ExperimentalUuidApi::class)
         fun from(response: LoadResponse): ImmutableSearchResponse {
             val id = generateId(response, response.apiName)
             val epubResponse = (response as? EpubResponse)
@@ -466,7 +461,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
         }
 
 
-        @OptIn(ExperimentalUuidApi::class)
         fun from(cache: ResultCached): ImmutableSearchResponse =
             ImmutableSearchResponse(
                 name = cache.name,
@@ -484,7 +478,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 chaptersRead = chaptersRead(cache.name)
             )
 
-        @OptIn(ExperimentalUuidApi::class)
         fun from(
             id: Int,
             cache: DownloadFragment.DownloadData,
@@ -570,10 +563,17 @@ data class ImmutableDownloadState(
     }
 
     /** Get the associated action */
+    val action: DownloadStateAction get() = DownloadStateAction(status)
+}
+
+@Immutable
+data class DownloadStateAction(
+    val status: DownloadState
+) {
     val operation
         get() =
             when (status) {
-                DownloadState.IsDownloading -> SearchResponseOperation.Pause
+                DownloadState.IsDownloading -> SearchResponseOperation.Stop
                 DownloadState.IsPaused -> SearchResponseOperation.Resume
                 DownloadState.IsStopped -> SearchResponseOperation.Download
                 DownloadState.IsFailed -> SearchResponseOperation.Download
@@ -582,6 +582,39 @@ data class ImmutableDownloadState(
                 DownloadState.Nothing -> SearchResponseOperation.Download
             }
 
+    val operationName
+        get() =
+            when (status) {
+                DownloadState.IsDownloading -> R.string.stop
+                DownloadState.IsPaused -> R.string.resume
+                DownloadState.IsStopped -> R.string.stopped
+                DownloadState.IsFailed -> R.string.failed
+                DownloadState.IsDone -> R.string.downloaded
+                DownloadState.IsPending -> R.string.loading
+                DownloadState.Nothing -> R.string.download
+            }
+
+    val icon
+        get() = when (status) {
+            DownloadState.IsDownloading -> R.drawable.stop_circle_24px
+            DownloadState.IsPaused -> R.drawable.netflix_play
+            DownloadState.IsStopped -> R.drawable.arrow_circle_down_24px
+            DownloadState.IsFailed -> R.drawable.arrow_circle_down_24px
+            DownloadState.IsDone -> R.drawable.ic_baseline_check_24
+            DownloadState.IsPending -> R.drawable.nothing
+            DownloadState.Nothing -> R.drawable.arrow_circle_down_24px
+        }
+
+    val iconBig
+        get() = when (status) {
+            DownloadState.IsDownloading -> R.drawable.ic_baseline_stop_24
+            DownloadState.IsPaused -> R.drawable.netflix_play
+            DownloadState.IsStopped -> R.drawable.ic_sharp_clear_24
+            DownloadState.IsFailed -> R.drawable.ic_sharp_clear_24
+            DownloadState.IsDone -> R.drawable.ic_baseline_check_24
+            DownloadState.IsPending -> R.drawable.nothing
+            DownloadState.Nothing -> R.drawable.netflix_download
+        }
 }
 
 /**

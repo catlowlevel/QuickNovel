@@ -86,7 +86,6 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.GoogleTranslateOnline
-import com.lagradost.safefile.closeQuietly
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonConfiguration
@@ -2132,9 +2131,11 @@ class ReadActivityViewModel : ViewModel() {
 
     private suspend fun initMLFromSettings(settings: MLSettings, allowDownload: Boolean) {
         try {
-            mlTranslator?.closeQuietly()
-            mlTranslator = null
+            mlTranslator?.close()
+        } catch (_ : Throwable) {}
+        mlTranslator = null
 
+        try {
             if (settings.isInvalid() || settings.useOnlineTranslation) {
                 mlSettings = settings
                 return
@@ -2157,7 +2158,9 @@ class ReadActivityViewModel : ViewModel() {
             mlSettings = settings
         } catch (_: TimeoutException) {
             showToast(R.string.unable_to_download_language)
-            mlTranslator?.closeQuietly()
+            try {
+                mlTranslator?.close()
+            } catch (_ : Throwable) {}
             mlTranslator = null
         } catch (t: Throwable) {
             logError(t)
