@@ -10,6 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -44,11 +48,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.currentRecomposeScope
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,6 +78,7 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.R
@@ -85,10 +93,12 @@ import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
 import com.lagradost.quicknovel.mvvm.safe
+import com.lagradost.quicknovel.providers.RoyalRoadProvider
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.DownloadStateAction
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
+import com.lagradost.quicknovel.ui.common.ImmutableChapterList
 import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableReview
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
@@ -103,6 +113,7 @@ import com.lagradost.quicknovel.ui.common.SearchResponseOperation
 import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
+import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
@@ -110,47 +121,15 @@ import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
 import com.lagradost.quicknovel.util.toPx
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.coroutines.launch
 
 
 @Composable
 fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
     Scaffold(
-        floatingActionButton = {
-            if (state.response != null) {
-                ExtendedFloatingActionButton(
-                    modifier = Modifier,
-                    onClick = {
-                        action(
-                            ResultPageAction.ResultAction(
-                                SearchResponseAction(state.response, SearchResponseOperation.Stream)
-                            )
-                        )
-                    },
-                    // Elevation actually changes the color, because who wanted a sane framework
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp
-                    ),
-                    containerColor = colors.onBackground,
-                    contentColor = colors.surfaceVariant,
-                    text = {
-                        Text(stringResource(R.string.stream_read))
-                    },
-                    icon = {
-                        Icon(
-                            modifier = Modifier.size(24.dp),
-                            painter = painterResource(R.drawable.netflix_play),
-                            contentDescription = stringResource(R.string.stream_read)
-                        )
-                    },
-                    expanded = false
-                )
-            }
-        }
     ) { innerPadding ->
         if (state.loadingResponse) {
             LoadingScreen(Modifier.padding(innerPadding))
@@ -195,14 +174,66 @@ fun ResultScreenImpl(
     val isPosterShown = remember { mutableStateOf(false) }
 
     val tabNames = persistentListOf(
-        R.string.novel, R.string.reviews, R.string.related, R.string.chapters
-    )
+        R.string.novel
+    ).mutate { list ->
+        if (!state.loadingResponse && state.api.hasReviews) {
+            list.add(R.string.reviews)
+        }
+        if (!response.loadData?.related.isNullOrEmpty()) {
+            list.add(R.string.related)
+        }
+        if (state.chapters != null) {
+            list.add(R.string.chapters)
+        }
+    }
     val pagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { tabNames.size }
     )
 
     val outerListState = rememberLazyListState()
+    val novelScroll = rememberLazyListState()
+    val reviewScroll = rememberLazyListState()
+    val relatedScroll = rememberLazyGridState()
+    val chapterScroll = rememberLazyListState()
+
+    val scope = rememberCoroutineScope()
+
+    // The back button is overridden to scroll up, or scroll to novel
+    val backEnabled = remember {
+        derivedStateOf(policy = structuralEqualityPolicy()) {
+            pagerState.currentPage != 0 || outerListState.firstVisibleItemIndex > 0
+        }
+    }
+    BackHandler(enabled = backEnabled.value) {
+        scope.launch {
+            // If we are on the wrong page, but full scrolled up, then scroll to the first page
+            if (outerListState.firstVisibleItemIndex <= 0) {
+                pagerState.animateScrollToPage(0)
+                return@launch
+            }
+            // Otherwise scroll up
+            outerListState.animateScrollToItem(0)
+            // This is needed as otherwise you get weird nested scroll behavior
+            when (tabNames.getOrNull(pagerState.currentPage)) {
+                R.string.novel -> {
+                    novelScroll.animateScrollToItem(0)
+                }
+
+                R.string.reviews -> {
+                    reviewScroll.animateScrollToItem(0)
+                }
+
+                R.string.related -> {
+                    relatedScroll.animateScrollToItem(0)
+                }
+
+                R.string.chapters -> {
+                    chapterScroll.animateScrollToItem(0)
+                }
+            }
+        }
+    }
 
     val scrollAlpha = remember {
         derivedStateOf {
@@ -289,7 +320,7 @@ fun ResultScreenImpl(
         }
 
         LazyColumn(modifier = Modifier.fillMaxSize(), state = outerListState) {
-            item {
+            item(key = "top spacer") {
                 Spacer(
                     Modifier
                         .height(170.dp + padding.calculateTopPadding())
@@ -302,7 +333,7 @@ fun ResultScreenImpl(
                             })
                 )
             }
-            item {
+            item(key = "bookmark holder") {
                 Column(
                     modifier = Modifier
                         .clip(RoundedCornerShape(15.dp, 15.dp))
@@ -344,15 +375,18 @@ fun ResultScreenImpl(
                     }
                 }
             }
-            item {
-                HorizontalTab(
-                    edgePadding = 15.dp,
-                    pagerState = pagerState,
-                    names = tabNames,
-                    containerColor = colors.background
-                )
+            if (tabNames.size > 1) {
+                item(key = "tab layout") {
+                    HorizontalTab(
+                        edgePadding = 15.dp,
+                        pagerState = pagerState,
+                        names = tabNames,
+                        containerColor = colors.background
+                    )
+                }
             }
-            item {
+
+            item(key = "content") {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier
@@ -360,35 +394,41 @@ fun ResultScreenImpl(
                         .background(colors.background),
                     verticalAlignment = Alignment.Top
                 ) { page ->
-                    when (page) {
-                        0 -> {
-                            NovelPage(state, action)
+                    when (tabNames[page]) {
+                        R.string.novel -> {
+                            NovelPage(state, action, novelScroll)
                         }
 
-                        1 -> {
+                        R.string.reviews -> {
                             ReviewsPage(
                                 loadingReviews = state.reviews.loading,
                                 reviews = state.reviews.items,
                                 nestedScrollConnection = parentFirstScrollConnection,
-                                action = action
+                                action = action,
+                                innerListState = reviewScroll,
                             )
                         }
 
-                        2 -> {
+                        R.string.related -> {
                             RelatedPage(
                                 nestedScrollConnection = parentFirstScrollConnection,
                                 related = response.loadData?.related ?: persistentListOf(),
-                                action = action
+                                action = action,
+                                innerListState = relatedScroll
                             )
                         }
 
-                        3 -> {
-                            ChapterPage(
-                                response = response,
-                                chapters = response.loadData?.chapters ?: persistentListOf(),
-                                action = action,
-                                nestedScrollConnection = parentFirstScrollConnection
-                            )
+                        R.string.chapters -> {
+                            val chapters = state.chapters
+                            if (chapters != null) {
+                                ChapterPage(
+                                    response = response,
+                                    chapters = chapters,
+                                    action = action,
+                                    nestedScrollConnection = parentFirstScrollConnection,
+                                    innerListState = chapterScroll
+                                )
+                            }
                         }
 
                         else -> {
@@ -435,22 +475,63 @@ fun ResultScreenImpl(
 }
 
 @Composable
+fun BoxScope.FloatingStreamRead(
+    response: ImmutableSearchResponse,
+    action: (ResultPageAction) -> Unit
+) {
+    ExtendedFloatingActionButton(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(16.dp),
+        onClick = {
+            action(
+                ResultPageAction.ResultAction(
+                    SearchResponseAction(response, SearchResponseOperation.Stream)
+                )
+            )
+        },
+        // Elevation actually changes the color, because who wanted a sane framework
+        elevation = FloatingActionButtonDefaults.elevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp
+        ),
+        containerColor = colors.onBackground,
+        contentColor = colors.surfaceVariant,
+        text = {
+            Text(stringResource(R.string.stream_read))
+        },
+        icon = {
+            Icon(
+                modifier = Modifier.size(24.dp),
+                painter = painterResource(R.drawable.netflix_play),
+                contentDescription = stringResource(R.string.stream_read)
+            )
+        },
+        expanded = false
+    )
+}
+
+@Composable
 fun ChapterPage(
     response: ImmutableSearchResponse,
-    chapters: PersistentList<ImmutableChapterData>,
+    chapters: ImmutableChapterList,
     action: (ResultPageAction) -> Unit,
-    nestedScrollConnection: NestedScrollConnection
+    nestedScrollConnection: NestedScrollConnection,
+    innerListState: LazyListState,
 ) {
     LazyColumn(
+        state = innerListState,
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
             .background(colors.background),
     ) {
-        items(chapters, key = { item ->
+        items(chapters.sorted, key = { item ->
             item.randomUuid
-        }) { review ->
-            ChapterItem(response, review, action = action, modifier = Modifier.animateItem())
+        }) { chapter ->
+            ChapterItem(response, chapter, action = action, modifier = Modifier.animateItem())
         }
     }
 }
@@ -500,10 +581,10 @@ fun ReviewsPage(
     reviews: PersistentList<ImmutableReview>,
     nestedScrollConnection: NestedScrollConnection,
     action: (ResultPageAction) -> Unit,
+    innerListState: LazyListState,
 ) {
-    val listState = rememberLazyListState()
     LazyColumn(
-        state = listState,
+        state = innerListState,
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
@@ -518,8 +599,9 @@ fun ReviewsPage(
 
     val shouldLoadMore = remember {
         derivedStateOf {
-            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val totalItems = listState.layoutInfo.totalItemsCount
+            val lastVisibleIndex =
+                innerListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalItems = innerListState.layoutInfo.totalItemsCount
             lastVisibleIndex >= totalItems - 5
         }
     }
@@ -664,13 +746,15 @@ fun ReviewItem(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NovelPage(
-    state: ResultState, action: (ResultPageAction) -> Unit
+    state: ResultState,
+    action: (ResultPageAction) -> Unit,
+    innerListState: LazyListState,
 ) {
     val expanded = rememberSaveable { mutableStateOf(false) }
     val textInteractionSource = remember { MutableInteractionSource() }
     val response = state.response ?: return
 
-    LazyColumn {
+    LazyColumn(state = innerListState) {
         item(key = "infobar") {
             Row(
                 modifier = Modifier
@@ -920,16 +1004,18 @@ fun Tags(tags: ImmutableList<String>) {
 fun RelatedPage(
     nestedScrollConnection: NestedScrollConnection,
     related: ImmutableList<ImmutableSearchResponse>,
-    action: (ResultPageAction) -> Unit
+    action: (ResultPageAction) -> Unit,
+    innerListState: LazyGridState
 ) {
     SearchList(
+        lazyGridState = innerListState,
         isRow = false,
         items = related,
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
             .background(colors.background),
-        searchAction = { value ->
+        searchAction = { value: SearchResponseAction ->
             action(ResultPageAction.ResultAction(value))
         })
 }
@@ -1040,7 +1126,8 @@ fun LoadingPreview() {
                 state = ResultState(
                     loadingResponse = false,
                     responseError = null,
-                    response = ImmutableSearchResponse.preview()
+                    response = ImmutableSearchResponse.preview(),
+                    api = APIRepository(RoyalRoadProvider())
                 )
             ) { }
         }

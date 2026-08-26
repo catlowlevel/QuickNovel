@@ -182,7 +182,7 @@ class SettingScreen : SearchableSettings {
                         icon = painterResource(R.drawable.ic_baseline_cloud_24),
                         title = stringResource(R.string.search_providers),
                         pref = store.searchProvidersList(),
-                        entries = apis.associate { it.name to it.name }.toPersistentMap(),
+                        entries = apis.associate { it.name to "${SubtitleHelper.getFlagFromIso(it.lang) ?: "🌐"} ${it.name}" }.toPersistentMap(),
                         subtitleProvider = { v, _ ->
                             stringResource(R.string.active_providers, v.size)
                         }),
@@ -373,7 +373,9 @@ class SettingScreen : SearchableSettings {
                             true,
                         ),
                     ),
-                    Preference.PreferenceItem.SwitchPreference(
+                    // Removed as the actual bloat filtering is shit and not very useful,
+                    // but can increase the time too much
+                    /*Preference.PreferenceItem.SwitchPreference(
                         icon = painterResource(R.drawable.ic_baseline_edit_24),
                         title = stringResource(R.string.remove_bloat),
                         subtitle = stringResource(R.string.remove_bloat_desc),
@@ -381,7 +383,7 @@ class SettingScreen : SearchableSettings {
                             stringResource(R.string.remove_external_key),
                             true,
                         ),
-                    ),
+                    ),*/
                     downloads,
                 )
             ),

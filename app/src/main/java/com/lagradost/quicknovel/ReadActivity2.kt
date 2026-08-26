@@ -110,7 +110,9 @@ import com.lagradost.quicknovel.ai.TranslationGlossary
 import com.lagradost.quicknovel.ai.TranslationGlossaryEntry
 import com.lagradost.quicknovel.ai.TranslationGlossaryRepository
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.util.SubtitleHelper
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
+import kotlin.collections.map
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -2646,8 +2648,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 val items = ReadActivityViewModel.MLSettings.mapList
 
                 context.showDialog(
-                    items.map {
-                        it.second
+                    items.map { (key,value) ->
+                        "${SubtitleHelper.getFlagFromIso(key)} $value"
                     },
                     items.map { it.first }.indexOf(viewModel.mlToLanguage),
                     context.getString(R.string.translate_to), false, {}
@@ -2679,8 +2681,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 )
 
                 context.showDialog(
-                    items.map { item ->
-                        item.second
+                    items.map { (key,value) ->
+                       "${SubtitleHelper.getFlagFromIso(key)} $value"
                     },
                     items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
                     context.getString(R.string.translate_from), false, {}

@@ -97,6 +97,7 @@ import me.ag2s.epublib.epub.EpubWriter
 import me.ag2s.epublib.util.zip.AndroidZipFile
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import org.jsoup.nodes.Entities
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -681,32 +682,38 @@ object BookDownloader2Helper {
         stripAuthorNotes: Boolean
     ): LoadedChapter? {
         val rFile = File(filepath)
-        if (rFile.exists()) {
-            val text = rFile.readText()
-            val firstChar = text.indexOf('\n')
-            if (firstChar == -1) {
-                return null
-            } // Invalid File
+        if (!rFile.exists()) return null
 
-            val title = text.substring(0, firstChar)
-            val data = text.substring(firstChar + 1)
-            val document = Jsoup.parse(data)
+        val text = rFile.readText()
+        val firstChar = text.indexOf('\n')
+        if (firstChar == -1) {
+            return null
+        } // Invalid File
 
-            document.outputSettings().apply {
-                //translate <br> to <br />, <img> to <img... /> etc.
-                syntax(Document.OutputSettings.Syntax.xml)
-                //translate special characters to their Unicode equivalent in xhtml
-                escapeMode(Entities.EscapeMode.xhtml)
-            }
-            val html = if (!stripHtml) document.html() else stripHtml(
-                document,
-                title,
-                index,
-                stripAuthorNotes
-            )
-            return LoadedChapter(title, html)
+        val title = text.substring(0, firstChar)
+        val data = text.substring(firstChar + 1)
+        val document = Jsoup.parse(data)
+
+        document.outputSettings().apply {
+            //translate <br> to <br />, <img> to <img... /> etc.
+            syntax(Document.OutputSettings.Syntax.xml)
+            //translate special characters to their Unicode equivalent in xhtml
+            escapeMode(Entities.EscapeMode.xhtml)
         }
-        return null
+
+        if (stripAuthorNotes) {
+            document.select("div.qnauthornotecontainer").remove()
+        }
+
+        // We do not want to create a nested <body> will cause some readers to fail
+        val body: Element = document.selectFirst("body") ?: document
+
+        /*val html = if (!stripHtml) body.html() else stripHtml(
+            document,
+            title,
+            index,
+        )*/
+        return LoadedChapter(title, body.html())
     }
 
     suspend fun downloadIndividualChapter(
@@ -790,7 +797,6 @@ object BookDownloader2Helper {
                 }
                 setKey(DOWNLOAD_EPUB_SIZE, id.toString(), 1)
             } else {
-
                 val book = EpubBook()
                 val metadata = book.metadata
                 if (author != null) {
@@ -1131,6 +1137,7 @@ object BookDownloader2 {
 
     private val streamMutex = Mutex()
 
+    // TODO refactor to use immutable
     @WorkerThread
     suspend fun stream(res: LoadResponse, apiName: String) {
         when (res) {
@@ -1207,6 +1214,13 @@ object BookDownloader2 {
             val data = api.load(card.url)
 
             if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                val response = ImmutableSearchResponse.from(data.value)
+                ImmutableSearchResponse.addToHistory(response)
+                response.id?.let {
+                    ImmutableSearchResponse.setTimeOfPageOpened(it, System.currentTimeMillis())
+                    openChanged.invoke(it)
+                }
+
                 stream(data.value, card.apiName)
             } else {
                 showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
@@ -1315,6 +1329,27 @@ object BookDownloader2 {
     }
 
     private val readEpubMutex = Mutex()
+
+    suspend fun readEpub(response: ImmutableSearchResponse, generating: () -> Unit = {}) {
+        val id = response.id ?: return
+        val downloadedCount = response.downloadState?.progress?.toInt() ?: return
+        ImmutableSearchResponse.addToHistory(response)
+        ImmutableSearchResponse.setTimeOfPageOpened(id, System.currentTimeMillis())
+        openChanged.invoke(id)
+
+        readEpub(
+            id,
+            downloadedCount,
+            response.author,
+            response.name,
+            response.apiName,
+            response.synopsis,
+            generating
+        )
+
+        // Update epub size
+        chapterReadChanged(response.name)
+    }
 
     @WorkerThread
     suspend fun readEpub(
@@ -2095,6 +2130,7 @@ object BookDownloader2 {
             val book = EpubBook().apply {
                 metadata.addTitle(sName)
                 metadata.addAuthor(Author(sAuthor))
+               // TODO add apiname in metadata.otherProperties = ?
             }
 
             //Necessary so the system recognizes the existing book
@@ -2346,9 +2382,10 @@ object BookDownloader2 {
             name = name,
             apiName = apiName,
             downloadLinks = emptyList(),
-            downloadExtractLinks = emptyList()
+            downloadExtractLinks = emptyList(),
         ).apply {
             this.author = author
+            this.synopsis = book.metadata.descriptions?.firstOrNull { description -> description != null && description.isNotBlank() }
         }
 
         try {

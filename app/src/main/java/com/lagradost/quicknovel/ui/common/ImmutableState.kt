@@ -46,6 +46,7 @@ import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
 import com.lagradost.quicknovel.EpubResponse
+import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity
@@ -115,7 +116,7 @@ enum class SearchResponseOperation {
 }
 
 @Immutable
-data class ImmutableChapterData constructor(
+data class ImmutableChapterData(
     val name: String,
     val url: String,
     val dateOfRelease: String? = null,
@@ -133,10 +134,12 @@ data class ImmutableChapterData constructor(
                 index = index,
             )
     }
+    fun matchesQuery(query: String): Boolean =
+        FuzzySearch.partialRatio(name.lowercase(), query) > 50
 }
 
 @Immutable
-data class ImmutableReview constructor(
+data class ImmutableReview(
     val content: String,
     val title: String? = null,
     val username: String? = null,
@@ -188,7 +191,6 @@ data class ImmutableReview constructor(
 data class ImmutableLoadData(
     val related: PersistentList<ImmutableSearchResponse>?,
     val status: ReleaseStatus?,
-    /** TODO add RoaringBitmap for immutable download status, bookmark status and read status */
     val chapters: PersistentList<ImmutableChapterData>?,
     val views: Int?,
     val peopleVoted: Int?,
@@ -246,7 +248,7 @@ data class ImmutableSearchResponse(
     val timeOfCached: Long,
     /** The time a "new" chapter got downloaded, also known as "Recently updated" */
     val timeOfChapterDownloaded: Long? = null,
-    /** The time we actually read the item or opened the view, also known as "Recently opened" */
+    /** The time we opened the item in the full results view or read it, also known as "Recently opened" */
     val timeOfPageOpened: Long? = null,
     /** The size of the last written epub in chapters, aka how many chapters have we actually might have read */
     val epubSize: Int? = null,
@@ -313,6 +315,24 @@ data class ImmutableSearchResponse(
         }
     }
 
+    fun toResultCached(
+        id: Int,
+    ): ResultCached {
+        return ResultCached(
+            source = url,
+            name = name,
+            apiName = apiName,
+            id = id,
+            author = author,
+            poster = posterUrl,
+            tags = tags,
+            rating = rating,
+            totalChapters = loadData?.chapters?.size ?: downloadState?.total?.toInt() ?: 1,
+            cachedTime = System.currentTimeMillis(),
+            synopsis = synopsis,
+            posterHeaders = posterHeaders
+        )
+    }
 
     companion object {
         fun preview(): ImmutableSearchResponse = ImmutableSearchResponse(
@@ -363,6 +383,14 @@ data class ImmutableSearchResponse(
 
         fun chaptersRead(name: String): Int =
             getKey<Int>(EPUB_CURRENT_POSITION, name)?.let { it + 1 } ?: 0
+
+        fun addToHistory(response: ImmutableSearchResponse) {
+            val id = response.id ?: return
+            // we won't add it to history from cache
+            setKey(
+                HISTORY_FOLDER, id.toString(), response.toResultCached(id)
+            )
+        }
 
         fun timeOfPageOpened(id: Int): Long = getKey<Long>(
             DOWNLOAD_EPUB_LAST_ACCESS,
@@ -505,7 +533,11 @@ data class ImmutableSearchResponse(
 
     fun doAction(operation: SearchResponseOperation) {
         when (operation) {
-            SearchResponseOperation.Open -> loadResult(url, apiName)
+            SearchResponseOperation.Open ->{
+                if(!isImported) {
+                    loadResult(url, apiName)
+                }
+            }
             SearchResponseOperation.Metadata -> {
                 MainActivity.loadPreviewPage(this)
             }
@@ -682,6 +714,47 @@ enum class SortingMethodType(val id: Int) {
     }
 }
 
+@Immutable
+enum class ChapterSortingMethodType(val id: Int) {
+    /** Default */
+    Default(0),
+
+    /** Ordering by index */
+    Ascending(1),
+    RevAscending(2),
+
+    /** Ordering on the name */
+    Alphabetical(3),
+    RevAlphabetical(4);
+
+    companion object {
+        fun from(value: Int): ChapterSortingMethodType {
+            return entries.firstOrNull { it.id == value } ?: Default
+        }
+    }
+}
+
+@Immutable
+enum class ChapterFilterMethodType(val id: Int) {
+    /** Filter by download status */
+    Downloaded(1),
+    UnDownloaded(2),
+
+    /** Filter by read */
+    Read(3),
+    UnRead(4),
+
+    /** Filter by bookmark status */
+    Bookmark(5),
+    UnBookmark(6);
+
+    companion object {
+        fun from(value: Int): ChapterFilterMethodType? {
+            return entries.firstOrNull { it.id == value }
+        }
+    }
+}
+
 /**
  * UI
  *
@@ -749,6 +822,11 @@ val normalSortingMethods = persistentListOf(
         SortingMethodType.LastOpened,
         SortingMethodType.RevLastOpened
     ),
+    /*SortingMethodPair(
+        R.string.recently_visisted_sort,
+        SortingMethodType.LastCached,
+        SortingMethodType.RevLastCached
+    ),*/
     SortingMethodPair(
         R.string.alpha_sort,
         SortingMethodType.Alphabetical,
@@ -758,6 +836,7 @@ val normalSortingMethods = persistentListOf(
         R.string.chapters, SortingMethodType.ChapterCount,
         SortingMethodType.RevChapterCount
     ),
+
 )
 
 /**
@@ -806,6 +885,93 @@ fun <T> PersistentList<T>.updateRows(
     return this.mapIndexed { index, t -> t.update(index) }.toPersistentList()
 }
 
+/**
+ * Contrary to the SearchList, the chapter data will be truly immutable
+ * therefore we use the PersistentList<ImmutableChapterData> instead of passing by index/id
+ *
+ * TODO bitset for downloads
+ * TODO bitset for read status
+ * */
+@Immutable
+data class ImmutableChapterList(
+    private val data: PersistentList<ImmutableChapterData>,
+    private val filtered: PersistentList<ImmutableChapterData> = persistentListOf(),
+    val sorted: PersistentList<ImmutableChapterData> = persistentListOf(),
+    val query: String = "",
+    val sortingMethod: ChapterSortingMethodType = ChapterSortingMethodType.Default,
+    //val filterMethod: EnumSet<ChapterFilterMethodType> = EnumSet.allOf<ChapterFilterMethodType>(), // TODO
+) {
+
+    @CheckResult
+    fun search(
+        query: String = this.query,
+        sortingMethod: ChapterSortingMethodType = this.sortingMethod
+    ): ImmutableChapterList {
+        val sameQuery = this.query == query
+        val sameSorting = this.sortingMethod == sortingMethod
+
+        val filtered = if (sameQuery) {
+            filtered
+        } else {
+            filterList(data, query)
+        }
+        val sorted = if (sameSorting && sameQuery) {
+            sorted
+        } else {
+            sortList(filtered, sortingMethod)
+        }
+
+        return this.copy(
+            filtered = filtered,
+            sorted = sorted,
+            query = query,
+            sortingMethod = sortingMethod,
+        )
+    }
+
+    companion object {
+        @CheckResult
+        fun filterList(
+            data: PersistentList<ImmutableChapterData>,
+            query: String
+        ): PersistentList<ImmutableChapterData> {
+            if (query.trim().length < 2) return data
+            return data.removingAll { item -> !item.matchesQuery(query) }
+        }
+
+        @CheckResult
+        fun sortList(
+            list: PersistentList<ImmutableChapterData>,
+            method: ChapterSortingMethodType
+        ): PersistentList<ImmutableChapterData> {
+            val sorted = when (method) {
+                ChapterSortingMethodType.Default, ChapterSortingMethodType.Ascending -> list
+                ChapterSortingMethodType.RevAscending -> list.asReversed().toPersistentList()
+                ChapterSortingMethodType.Alphabetical -> list.sortedBy { it.name }.toPersistentList()
+                ChapterSortingMethodType.RevAlphabetical -> list.sortedByDescending { it.name }.toPersistentList()
+            }
+
+            return sorted
+        }
+
+        @CheckResult
+        fun new(
+            items: PersistentList<ImmutableChapterData>,
+            query: String,
+            sortingMethod: ChapterSortingMethodType
+        ): ImmutableChapterList {
+            val filtered = filterList(items, query)
+            val sorted = sortList(filtered, sortingMethod)
+            return ImmutableChapterList(
+                data = items,
+                filtered = filtered,
+                sorted = sorted,
+                query = query,
+                sortingMethod = sortingMethod
+            )
+        }
+    }
+}
 /**
  * Viewmodel -> UI
  *
