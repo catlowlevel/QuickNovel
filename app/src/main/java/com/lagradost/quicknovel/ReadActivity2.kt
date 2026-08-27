@@ -192,6 +192,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
+    private var readerDescendantFocusability: Int? = null
+    private var readerFocusable: Boolean? = null
 
     private var _imageHolder: WeakReference<LinearLayout>? = null
     var imageHolder
@@ -1024,11 +1026,82 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
+    private fun handleTTSKeyEvent(event: KeyEvent): Boolean {
+        if (viewModel.currentTTSStatus == TTSHelper.TTSStatus.IsStopped || currentFocus is EditText) {
+            return false
+        }
+
+        return when (event.keyCode) {
+            KeyEvent.KEYCODE_SPACE -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    viewModel.pausePlayTTS()
+                }
+                true
+            }
+
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    viewModel.forwardsTTS()
+                }
+                true
+            }
+
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    viewModel.backwardsTTS()
+                }
+                true
+            }
+
+            else -> false
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (handleTTSKeyEvent(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun setTTSControlsFocusable(focusable: Boolean) {
+        listOf(
+            binding.ttsActionBack,
+            binding.ttsActionStop,
+            binding.ttsActionPausePlay,
+            binding.ttsActionForward,
+            binding.ttsFloatingPausePlay,
+            binding.ttsFloatingBack,
+            binding.ttsFloatingForward,
+        ).forEach {
+            it.isFocusable = focusable
+            if (!focusable) it.clearFocus()
+        }
+
+        if (!focusable) {
+            if (readerDescendantFocusability == null) {
+                readerDescendantFocusability = binding.realText.descendantFocusability
+                readerFocusable = binding.realText.isFocusable
+            }
+            binding.realText.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            binding.realText.isFocusable = false
+            binding.realText.clearFocus()
+        } else {
+            readerDescendantFocusability?.let {
+                binding.realText.descendantFocusability = it
+            }
+            readerFocusable?.let {
+                binding.realText.isFocusable = it
+            }
+            readerDescendantFocusability = null
+            readerFocusable = null
+        }
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             kill()
             return true
         }
+
         if ((keyCode != KeyEvent.KEYCODE_VOLUME_DOWN && keyCode != KeyEvent.KEYCODE_VOLUME_UP)) return false
 
         // if we have the bottom bar up then we ignore the override functionality
@@ -2042,6 +2115,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.ttsStatus) { status ->
             val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
+            setTTSControlsFocusable(!isTTSRunning)
             updateOverlayVisibility()
 
             /*if (isTTSRunning) {
