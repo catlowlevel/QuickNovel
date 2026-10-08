@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.ui.search
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -28,10 +29,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,25 +50,67 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lagradost.cloudstream4.compose.MultiSelectDialog
+import com.lagradost.cloudstream4.compose.Screen
+import com.lagradost.cloudstream4.compose.rounded
+import com.lagradost.cloudstream4.rememberAppSettings
+import com.lagradost.cloudstream4.state.ObserveEffect
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
+import com.lagradost.quicknovel.CommonActivity
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.BaseSearchBar
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
-import com.lagradost.quicknovel.compose.MultiSelectDialog
 import com.lagradost.quicknovel.compose.isLandscape
-import com.lagradost.quicknovel.compose.ripple
-import com.lagradost.quicknovel.compose.rounded
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseItem
+import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.mainpage.SearchResponseDialog
+import com.lagradost.quicknovel.ui.settings.searchLangList
 import com.lagradost.quicknovel.ui.settings.searchProvidersList
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.SubtitleHelper
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.collectAsState
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.collections.immutable.toPersistentSet
+
+object SearchScreen : Screen {
+    @Composable
+    override fun Content() {
+        val viewModel = viewModel<HomeViewModel2>()
+        //val viewModel: HomeViewModel2 =
+        //     viewModel(factory = HomeViewModel2.provideFactory(store.searchProvidersList()))
+        val state by viewModel.state.collectAsStateWithLifecycle()
+
+        val store = rememberAppSettings()
+        val selectionState by store.provider.searchProvidersList.collectAsState()
+        LaunchedEffect(selectionState) {
+            viewModel.onAction(HomeAction.ConfigureApisNames(selectionState.toPersistentSet()))
+        }
+
+        val selectionLangState by store.provider.searchLangList.collectAsState()
+        LaunchedEffect(selectionLangState) {
+            viewModel.onAction(HomeAction.ConfigureApisLanguages(selectionLangState.toPersistentSet()))
+        }
+
+        ObserveEffect(viewModel.effect) { effect ->
+            when (effect) {
+                is HomeEffect.NavigateToMainPage -> {
+                    CommonActivity.activity?.navigate(
+                        R.id.global_to_navigation_mainpage,
+                        MainPageFragment.newInstance(effect.api, effect.filter)
+                    )
+                }
+            }
+        }
+
+        SearchScreen(state, viewModel::onAction)
+    }
+}
 
 @Composable
 fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
@@ -107,14 +153,14 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
                     if (state.isLoading && state.isQueryOpen) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
-                            color = colors.onBackground
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     } else {
                         IconButton(onClick = { action(HomeAction.ConfigureApis) }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_baseline_tune_24),
                                 contentDescription = stringResource(R.string.search_providers),
-                                tint = colors.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     }
@@ -229,7 +275,6 @@ fun MainAPIItem(
     modifier: Modifier = Modifier,
     action: (HomeAction) -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -237,11 +282,10 @@ fun MainAPIItem(
             .fillMaxWidth()
             .height(100.dp)
             .rounded()
-            .background(colors.surfaceContainer)
-            .combinedClickable(interactionSource = interactionSource, indication = null, onClick = {
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = {
                 action(HomeAction.Open(api))
-            }, onLongClick = {})
-            .ripple(interactionSource)
+            })
     ) {
         Image(
             painter = painterResource(api.iconId ?: R.drawable.fiber_new_24px),
@@ -254,7 +298,7 @@ fun MainAPIItem(
         )
         Text(
             text = api.name,
-            color = colors.onBackground,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
             lineHeight = 15.sp,
             textAlign = TextAlign.Center
@@ -265,7 +309,7 @@ fun MainAPIItem(
 @PreviewLightDark
 @Composable
 private fun SettingsScreenPreview() {
-    CloudStreamTheme {
+    CloudStreamPreviewTheme {
         SearchScreen(state = HomeViewModelState(), action = {})
     }
 }
@@ -281,7 +325,6 @@ private fun SearchRow(
         }
     }
 
-    val interactionSource = remember { MutableInteractionSource() }
     Column {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -289,22 +332,21 @@ private fun SearchRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
-                .ripple(interactionSource)
-                .combinedClickable(interactionSource = interactionSource, onClick = {
+                .clickable(onClick = {
                     action(HomeAction.OpenRow(row))
                 })
         ) {
             Text(
                 row.name,
                 modifier = Modifier.padding(10.dp),
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp
             )
             Icon(
                 modifier = Modifier.padding(10.dp),
                 painter = painterResource(R.drawable.ic_baseline_arrow_forward_24),
                 contentDescription = null,
-                tint = colors.onBackground
+                tint = MaterialTheme.colorScheme.onBackground
             )
         }
         LazyRow(

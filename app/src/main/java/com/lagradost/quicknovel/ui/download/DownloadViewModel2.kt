@@ -3,6 +3,10 @@ package com.lagradost.quicknovel.ui.download
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream4.state.ActionHandler
+import com.lagradost.cloudstream4.state.DebounceQuery
+import com.lagradost.cloudstream4.state.DefaultStateContainer
+import com.lagradost.cloudstream4.state.StateContainer
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
@@ -24,10 +28,6 @@ import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
-import com.lagradost.quicknovel.compose.ActionHandler
-import com.lagradost.quicknovel.compose.DebounceQuery
-import com.lagradost.quicknovel.compose.DefaultStateContainer
-import com.lagradost.quicknovel.compose.StateContainer
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableSearchList
@@ -134,15 +134,7 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
             is DownloadPageAction.SelectPage -> {
                 setKey(DOWNLOAD_SETTINGS, CURRENT_TAB, action.page)
                 updateState {
-                    val activeQuery = query
-                    copy(
-                        activePage = action.page,
-                        pages = pages.updateRows { index ->
-                            search(
-                                query = activeQuery,
-                                sortingMethod = if (index == 0) downloadSortingMethod else sortingMethod
-                            )
-                        })
+                    copy(activePage = action.page)
                 }
             }
 

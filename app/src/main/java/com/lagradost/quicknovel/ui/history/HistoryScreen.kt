@@ -17,6 +17,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -34,15 +35,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lagradost.cloudstream4.compose.ActionDialog
+import com.lagradost.cloudstream4.compose.Screen
+import com.lagradost.cloudstream4.compose.SinglePairSelectDialog
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.ActionDialog
 import com.lagradost.quicknovel.compose.BaseSearchBar
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.IsScrolling
-import com.lagradost.quicknovel.compose.SinglePairSelectDialog
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.collectAsState
 import com.lagradost.quicknovel.ui.common.SearchList
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseOperation
@@ -55,6 +56,17 @@ import com.lagradost.quicknovel.ui.history.HistoryAction.ResultAction
 import com.lagradost.quicknovel.ui.history.HistoryAction.Search
 import com.lagradost.quicknovel.ui.history.HistoryAction.SelectSortingMethod
 import com.lagradost.quicknovel.ui.history.HistoryAction.ShowSorting
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.collectAsState
+
+object HistoryScreen : Screen {
+    @Composable
+    override fun Content() {
+        val viewModel = viewModel<HistoryViewModel2>()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        HistoryScreen(state, viewModel::onAction)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,8 +99,8 @@ fun HistoryScreen(
                 onClick = {
                     action(ShowSorting)
                 },
-                containerColor = colors.surfaceVariant,
-                contentColor = colors.onBackground,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onBackground,
                 // Elevation actually changes the color, because who wanted a sane framework
                 elevation = FloatingActionButtonDefaults.elevation(
                     defaultElevation = 0.dp,
@@ -125,7 +137,7 @@ fun HistoryScreen(
                             Icon(
                                 painter = painterResource(R.drawable.clear_all_24px),
                                 contentDescription = stringResource(R.string.history_more_options),
-                                tint = colors.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                         IconButton(onClick = {
@@ -135,7 +147,7 @@ fun HistoryScreen(
                                 painter = painterResource(if (historyIsRowState) R.drawable.ic_baseline_grid_view_24 else R.drawable.ic_baseline_list_24),
                                 contentDescription = stringResource(if (historyIsRowState) R.string.grid_view else R.string.list_view),
                                 modifier = Modifier.size(24.dp),
-                                tint = colors.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     }
@@ -248,7 +260,7 @@ fun HistoryDialog(
 @PreviewLightDark
 @Composable
 private fun SettingsScreenPreview() {
-    CloudStreamTheme {
+    CloudStreamPreviewTheme {
         HistoryScreen(state = HistoryState(), action = {})
     }
 }

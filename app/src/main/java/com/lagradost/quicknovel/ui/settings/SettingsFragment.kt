@@ -1,64 +1,32 @@
 package com.lagradost.quicknovel.ui.settings
 
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
-import android.os.Environment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
+import com.lagradost.cloudstream4.BaseComposeFragment
 import com.lagradost.quicknovel.APIRepository.Companion.providersActive
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.LaunchedEffectSkipFirst
-import com.lagradost.quicknovel.compose.loadPrimaryColor
-import com.lagradost.quicknovel.compose.loadThemeMode
-import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.SearchableSettings
-import com.lagradost.quicknovel.tachiyomi.collectAsState
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showMultiDialog
 import com.lagradost.quicknovel.util.SubtitleHelper
-import com.anggrayudi.storage.*
-import com.anggrayudi.storage.file.CreateMode
-import com.anggrayudi.storage.file.PublicDirectory
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.SearchableSettings
+import com.mihon.presentation.settings.collectAsState
 
-// TODO logcat! and reorganize
-class SettingsFragment : Fragment(), SearchableSettings by SettingScreen() {
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View = ComposeView(inflater.context).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-
-        setContent {
-            CloudStreamTheme(
-                mode = LocalContext.current.loadThemeMode(),
-                primaryColor = LocalContext.current.loadPrimaryColor(),
-            ) {
-                this@SettingsFragment.Content()
-            }
-        }
-    }
-
+class SettingsFragment : BaseComposeFragment(), SearchableSettings by SettingScreen {
     @Composable
     override fun Content() {
         val store = AndroidPreferenceStore(LocalContext.current)

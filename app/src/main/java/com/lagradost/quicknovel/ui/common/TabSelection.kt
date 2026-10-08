@@ -1,20 +1,16 @@
 package com.lagradost.quicknovel.ui.common
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -27,11 +23,9 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.lagradost.cloudstream4.compose.circle
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
-import com.lagradost.quicknovel.compose.circle
-import com.lagradost.quicknovel.ui.download.DownloadRow
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -66,7 +60,7 @@ fun HorizontalTab(
                             .fillMaxSize()
                             .padding(5.dp)
                             .circle()
-                            .background(colors.onBackground)
+                            .background(MaterialTheme.colorScheme.onBackground)
                     )
                 }
             }, divider = {}
@@ -83,9 +77,9 @@ fun HorizontalTab(
                     }, text = {
                         Text(
                             stringResource(row), color = if (selected) {
-                                colors.background
+                                MaterialTheme.colorScheme.background
                             } else {
-                                colors.onBackground
+                                MaterialTheme.colorScheme.onBackground
                             }
                         )
                     })
@@ -97,7 +91,7 @@ fun HorizontalTab(
 @PreviewLightDark
 @Composable
 fun Preview() {
-    CloudStreamTheme {
+    CloudStreamPreviewTheme {
         val list = persistentListOf(
             R.string.downloaded,
             R.string.type_reading,

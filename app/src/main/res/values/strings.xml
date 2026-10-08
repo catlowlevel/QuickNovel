@@ -16,6 +16,8 @@
     <string name="search_chapters_hint">Search Chapters…</string>
     <string name="synopsis">Synopsis</string>
     <string name="no_data">No Data</string>
+    <string name="none">@string/type_none</string>
+    <string name="action_bar_up_description">Navigate up</string>
     <string name="no_author">Author not found</string>
     <string name="no_chapters">No Chapters</string>
     <string name="error_outside_chapter">Invalid skip</string>
@@ -279,10 +281,14 @@
     <string name="theme">Theme</string>
     <string name="primary_color_key">primary_color_key</string>
     <string name="primary_color_settings">Main Color</string>
+    <string name="color">Color</string>
+    <string name="transparency">Transparency</string>
+    <string name="luminance">Luminance</string>
     <string name="library_display_mode">Library Display Mode</string>
     <string name="rating_format">Rating Format</string>
     <string name="cancel">Cancel</string>
     <string name="remove">Remove</string>
+    <string name="color_wheel">Color wheel</string>
     <string name="remove_from_history_format">This remove %s from your history.\nAre you sure?</string>
     <string name="permanently_delete_format">This will permanently delete %s.\nAre you sure?</string>
     <string name="remove_from_bookmarks_format">This remove %s from your bookmarks.\nAre you sure?</string>
@@ -324,6 +330,7 @@
 
     <string name="default_sort">Default</string>
     <string name="recently_sort">Recently opened</string>
+    <string name="refresh">Refresh</string>
     <string name="recently_checked_sort">Recently refreshed</string>
     <string name="recently_visisted_sort">Recently read</string>
     <string name="alpha_sort">Alphabetical</string>
@@ -340,7 +347,7 @@
     <string name="download_perc_lh">Download percentage (low to high)</string>
 
     <string name="reload_chapter_format">Reloading chapter %s</string>
-    <string name="ok">OK</string>
+    <string name="ok">Ok</string>
     <string name="more_info">More Info</string>
     <string name="download_path_key">download_path_key</string>
     <string name="download_path_visual">Download path</string>

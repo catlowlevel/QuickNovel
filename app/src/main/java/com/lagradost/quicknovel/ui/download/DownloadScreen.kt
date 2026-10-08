@@ -1,7 +1,9 @@
 package com.lagradost.quicknovel.ui.download
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,10 +28,12 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,18 +53,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lagradost.cloudstream4.compose.ActionDialog
+import com.lagradost.cloudstream4.compose.Screen
+import com.lagradost.cloudstream4.compose.SinglePairSelectDialog
+import com.lagradost.cloudstream4.compose.rounded
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.ActionDialog
 import com.lagradost.quicknovel.compose.BaseSearchBar
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.IsScrolling
-import com.lagradost.quicknovel.compose.SinglePairSelectDialog
-import com.lagradost.quicknovel.compose.ripple
-import com.lagradost.quicknovel.compose.rounded
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.collectAsState
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableSearchList
 import com.lagradost.quicknovel.ui.common.SearchList
@@ -70,22 +73,34 @@ import com.lagradost.quicknovel.ui.common.SortingMethodPair
 import com.lagradost.quicknovel.ui.common.SortingMethodType
 import com.lagradost.quicknovel.ui.common.normalSortingMethods
 import com.lagradost.quicknovel.ui.common.sortingMethods
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.collectAsState
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+object DownloadScreen : Screen {
+    @Composable
+    override fun Content() {
+        val viewModel = viewModel<DownloadViewModel2>()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        DownloadScreen(state, viewModel::onAction)
+    }
+}
+
+
 @Composable
 fun DownloadScreen(
     state: DownloadPageState,
-    action: (DownloadPageAction) -> Unit
+    onAction: (DownloadPageAction) -> Unit
 ) {
     DownloadSort(
-        state.downloadSortingMethod,
-        state.regularSortingMethod,
-        state.dialog,
-        action
+        downloadSortingMethod = state.downloadSortingMethod,
+        regularSortingMethod = state.regularSortingMethod,
+        sortingMethodDialog = state.dialog,
+        onAction = onAction
     )
 
     val pagesNames = persistentListOf(
@@ -110,7 +125,7 @@ fun DownloadScreen(
             ExtendedFloatingActionButton(
                 modifier = Modifier.padding(bottom = 40.dp),
                 onClick = {
-                    action(DownloadPageAction.ShowSorting)
+                    onAction(DownloadPageAction.ShowSorting)
                 },
                 // Elevation actually changes the color, because who wanted a sane framework
                 elevation = FloatingActionButtonDefaults.elevation(
@@ -119,8 +134,8 @@ fun DownloadScreen(
                     focusedElevation = 0.dp,
                     hoveredElevation = 0.dp
                 ),
-                containerColor = colors.surfaceVariant,
-                contentColor = colors.onBackground,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onBackground,
                 text = {
                     Text(stringResource(R.string.filter_dialog_sort_by))
                 },
@@ -139,10 +154,10 @@ fun DownloadScreen(
                     Spacer(modifier = Modifier.height(5.dp))
                 },
                 onQueryChange = { query ->
-                    action(DownloadPageAction.Search(query))
+                    onAction(DownloadPageAction.Search(query))
                 },
                 onSearch = { query ->
-                    action(DownloadPageAction.Search(query))
+                    onAction(DownloadPageAction.Search(query))
                 },
                 scrollBehavior = scrollBehavior,
                 leadingIcon = {
@@ -163,7 +178,7 @@ fun DownloadScreen(
                                 painter = painterResource(R.drawable.ic_baseline_add_24),
                                 contentDescription = stringResource(R.string.import_epub),
                                 modifier = Modifier.size(24.dp),
-                                tint = colors.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
 
@@ -185,6 +200,13 @@ fun DownloadScreen(
                                     MainActivity.importEpubs()
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.refresh)) },
+                                onClick = {
+                                    expanded = false
+                                    onAction(DownloadPageAction.Refresh)
+                                }
+                            )
                         }
 
                         IconButton(onClick = {
@@ -194,7 +216,7 @@ fun DownloadScreen(
                                 painter = painterResource(if (downloadIsRowState) R.drawable.ic_baseline_grid_view_24 else R.drawable.ic_baseline_list_24),
                                 contentDescription = stringResource(if (downloadIsRowState) R.string.grid_view else R.string.list_view),
                                 modifier = Modifier.size(24.dp),
-                                tint = colors.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     }
@@ -214,7 +236,7 @@ fun DownloadScreen(
 
         val currentPage = pagerState.currentPage
         LaunchedEffect(currentPage) {
-            action(DownloadPageAction.SelectPage(currentPage))
+            onAction(DownloadPageAction.SelectPage(currentPage))
         }
 
         Column {
@@ -234,13 +256,17 @@ fun DownloadScreen(
                     isRow = downloadIsRowState,
                     page,
                     state.pages.getOrNull(page) ?: ImmutableSearchList(),
-                    action,
+                    onAction,
                     scrollingChange = { isScrollingUp ->
                         fabExpanded = isScrollingUp
                     })
             }
 
-            HorizontalTab(pagerState, pagesNames, containerColor = colors.surfaceVariant)
+            HorizontalTab(
+                pagerState,
+                pagesNames,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         }
     }
 }
@@ -250,7 +276,7 @@ fun DownloadSort(
     downloadSortingMethod: SortingMethodType,
     regularSortingMethod: SortingMethodType,
     sortingMethodDialog: DownloadDialog?,
-    action: (DownloadPageAction) -> Unit,
+    onAction: (DownloadPageAction) -> Unit,
 ) {
     when (sortingMethodDialog) {
         is DownloadDialog.DeleteBookmark -> {
@@ -263,11 +289,11 @@ fun DownloadSort(
                 confirmText = stringResource(R.string.remove),
                 dismissText = stringResource(R.string.cancel),
                 dismiss = {
-                    action(DownloadPageAction.DismissDialog)
+                    onAction(DownloadPageAction.DismissDialog)
                 },
                 confirm = {
-                    action(DownloadPageAction.DismissDialog)
-                    action(
+                    onAction(DownloadPageAction.DismissDialog)
+                    onAction(
                         DownloadPageAction.ResultAction(
                             SearchResponseAction(
                                 sortingMethodDialog.item,
@@ -289,11 +315,11 @@ fun DownloadSort(
                 confirmText = stringResource(R.string.delete),
                 dismissText = stringResource(R.string.cancel),
                 dismiss = {
-                    action(DownloadPageAction.DismissDialog)
+                    onAction(DownloadPageAction.DismissDialog)
                 },
                 confirm = {
-                    action(DownloadPageAction.DismissDialog)
-                    action(
+                    onAction(DownloadPageAction.DismissDialog)
+                    onAction(
                         DownloadPageAction.ResultAction(
                             SearchResponseAction(
                                 sortingMethodDialog.item,
@@ -310,20 +336,20 @@ fun DownloadSort(
                 items = normalSortingMethods,
                 sortingMethod = regularSortingMethod,
                 dismiss = {
-                    action(DownloadPageAction.DismissDialog)
+                    onAction(DownloadPageAction.DismissDialog)
                 },
                 select = { key ->
-                    action(DownloadPageAction.DismissDialog)
-                    action(DownloadPageAction.SelectSortingMethod(regularSortingMethod = key))
+                    onAction(DownloadPageAction.DismissDialog)
+                    onAction(DownloadPageAction.SelectSortingMethod(regularSortingMethod = key))
                 })
         }
 
         DownloadDialog.SortDownloads -> {
             SortDialog(items = sortingMethods, sortingMethod = downloadSortingMethod, dismiss = {
-                action(DownloadPageAction.DismissDialog)
+                onAction(DownloadPageAction.DismissDialog)
             }, select = { key ->
-                action(DownloadPageAction.DismissDialog)
-                action(DownloadPageAction.SelectSortingMethod(downloadSortingMethod = key))
+                onAction(DownloadPageAction.DismissDialog)
+                onAction(DownloadPageAction.SelectSortingMethod(downloadSortingMethod = key))
             })
         }
 
@@ -386,14 +412,14 @@ fun DownloadRow(
     isRow: Boolean,
     index: Int,
     row: ImmutableSearchList?,
-    action: (DownloadPageAction) -> Unit,
+    onAction: (DownloadPageAction) -> Unit,
     scrollingChange: (Boolean) -> Unit
 ) {
     if (row == null) return
 
-    val searchAction = remember<(SearchResponseAction) -> Unit>(action) {
+    val searchAction = remember<(SearchResponseAction) -> Unit>(onAction) {
         { item ->
-            action(DownloadPageAction.ResultAction(item))
+            onAction(DownloadPageAction.ResultAction(item))
         }
     }
     var refreshing by remember { mutableStateOf(false) }
@@ -409,7 +435,7 @@ fun DownloadRow(
         isRefreshing = refreshing,
         onRefresh = {
             refreshing = true
-            action(DownloadPageAction.Refresh)
+            onAction(DownloadPageAction.Refresh)
             scope.launch {
                 delay(200.milliseconds)
                 refreshing = false
@@ -438,7 +464,6 @@ fun DownloadRow(
 
 @Composable
 fun RowFooter() {
-    val interactionSource = remember { MutableInteractionSource() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -446,29 +471,24 @@ fun RowFooter() {
             .fillMaxWidth()
             .height(100.dp)
             .rounded()
-            .background(colors.surfaceContainer)
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(
                 onClick = {
                     MainActivity.importEpub()
                 },
-                onLongClick = {
-                }
             )
-            .ripple(interactionSource)
     ) {
         Icon(
             modifier = Modifier.size(30.dp),
             painter = painterResource(R.drawable.ic_baseline_add_24),
             contentDescription = stringResource(R.string.import_epub),
-            tint = colors.onBackground
+            tint = MaterialTheme.colorScheme.onBackground
         )
 
         Text(
             modifier = Modifier.padding(start = 15.dp),
             text = stringResource(R.string.import_epub),
-            color = colors.onBackground,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 13.sp,
             lineHeight = 14.sp,
             maxLines = 2,
@@ -495,14 +515,14 @@ fun BoxFooter() {
                 .fillMaxWidth()
                 .aspectRatio(0.68f)
                 .rounded()
-                .ripple(interactionSource),
+                .indication(interactionSource = interactionSource, indication = ripple()),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 modifier = Modifier.size(40.dp),
                 painter = painterResource(R.drawable.ic_baseline_add_24),
                 contentDescription = stringResource(R.string.import_epub),
-                tint = colors.onBackground
+                tint = MaterialTheme.colorScheme.onBackground
             )
         }
 
@@ -515,7 +535,7 @@ fun BoxFooter() {
         ) {
             Text(
                 text = stringResource(R.string.import_epub),
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 13.sp,
                 lineHeight = 14.sp,
                 maxLines = 2,
@@ -529,8 +549,7 @@ fun BoxFooter() {
 @Composable
 @PreviewLightDark
 fun DownloadScreenPreview() {
-    CloudStreamTheme {
-        DownloadScreen(
-            state = DownloadPageState(), action = {})
+    CloudStreamPreviewTheme {
+        DownloadScreen(state = DownloadPageState(), onAction = {})
     }
 }

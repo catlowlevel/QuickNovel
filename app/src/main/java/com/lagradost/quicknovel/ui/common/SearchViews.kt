@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +29,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,17 +52,15 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.cloudstream4.compose.RoundedShape
+import com.lagradost.cloudstream4.compose.circle
+import com.lagradost.cloudstream4.compose.rounded
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
-import com.lagradost.quicknovel.compose.RoundedImageShape
 import com.lagradost.quicknovel.compose.animatedOutline
-import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.isLandscape
-import com.lagradost.quicknovel.compose.ripple
-import com.lagradost.quicknovel.compose.rounded
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -131,7 +133,8 @@ fun SearchListRow(
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         items(
-            items = items, key = { item -> item.randomUuid
+            items = items, key = { item ->
+                item.randomUuid
             }) { item ->
             SearchResponseRow(
                 response = item, action = searchAction, modifier = Modifier.animateItem()
@@ -152,7 +155,7 @@ fun SearchListRow(
         columns = GridCells.Fixed(if (isLandscape) 2 else 1),
         state = lazyState,
         modifier = modifier,
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         items(
@@ -177,11 +180,6 @@ fun SearchResponseRow(
     action: (SearchResponseAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val streamInteractionSource = remember { MutableInteractionSource() }
-    val deleteInteractionSource = remember { MutableInteractionSource() }
-    val openInteractionSource = remember { MutableInteractionSource() }
-
     val imageRequest = response.imageRequest()
 
     Row(
@@ -191,8 +189,8 @@ fun SearchResponseRow(
             .fillMaxWidth()
             .height(100.dp)
             .rounded()
-            .background(colors.surfaceContainer)
-            .combinedClickable(interactionSource = interactionSource, indication = null, onClick = {
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .combinedClickable(onClick = {
                 action(
                     SearchResponseAction(
                         response, if (response.downloadState != null) {
@@ -204,9 +202,24 @@ fun SearchResponseRow(
                 )
             }, onLongClick = {
                 action(SearchResponseAction(response, SearchResponseOperation.Metadata))
-            })
-            .downloadOutline(if (response.generating) DownloadState.IsDownloading else response.downloadState?.status)
-            .ripple(interactionSource)
+            }).let { modifier ->
+                /** For stub, we always show an outline */
+                if (
+                    !response.generating
+                    && response.downloadState != null
+                    && response.downloadState.progress > response.downloadState.total
+                    && (response.downloadState.status == DownloadState.Nothing || response.downloadState.status == DownloadState.IsDone)
+                ) {
+                    modifier.border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedShape()
+                    )
+                } else {
+                    modifier.downloadOutline(if (response.generating) DownloadState.IsDownloading else response.downloadState?.status)
+                }
+            }
+
     ) {
         AsyncImage(
             contentScale = ContentScale.Crop,
@@ -217,15 +230,12 @@ fun SearchResponseRow(
                 .fillMaxHeight()
                 .rounded()
                 .combinedClickable(
-                    interactionSource = openInteractionSource,
-                    indication = null,
                     onClick = {
                         action(SearchResponseAction(response, SearchResponseOperation.Open))
                     },
                     onLongClick = {
                         action(SearchResponseAction(response, SearchResponseOperation.Metadata))
                     })
-                .ripple(openInteractionSource)
         )
 
         Column(
@@ -238,7 +248,7 @@ fun SearchResponseRow(
             Text(
                 response.name,
                 maxLines = 2,
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 14.sp,
                 lineHeight = 15.sp,
                 overflow = TextOverflow.Ellipsis
@@ -291,7 +301,7 @@ fun SearchResponseRow(
             if (text != null) {
                 Text(
                     text,
-                    color = colors.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     lineHeight = 15.sp,
                 )
@@ -309,12 +319,12 @@ fun SearchResponseRow(
                 modifier = Modifier
                     .padding(horizontal = 5.dp)
                     .circle()
-                    .background(colors.primary)
+                    .background(MaterialTheme.colorScheme.primary)
                     .padding(vertical = 3.dp, horizontal = 13.dp)
             ) {
                 Text(
                     text = "+${(response.downloadState.progress - response.epubSize)}",
-                    color = colors.background
+                    color = MaterialTheme.colorScheme.background
                 )
             }
         }
@@ -323,40 +333,34 @@ fun SearchResponseRow(
             RefreshButton(response, action)
         } else {
             if (response.id != null) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_baseline_delete_outline_24),
-                    contentDescription = stringResource(R.string.remove_history),
-                    modifier = Modifier
-                        .size(54.dp)
-                        .combinedClickable(
-                            interactionSource = deleteInteractionSource,
-                            indication = null,
-                            onClick = {
-                                action(
-                                    SearchResponseAction(
-                                        response, SearchResponseOperation.AskDelete
-                                    )
-                                )
-                            })
-                        .circle()
-                        .ripple(deleteInteractionSource)
-                        .padding(15.dp)
-                )
+                IconButton(
+                    onClick = {
+                        action(
+                            SearchResponseAction(
+                                response, SearchResponseOperation.AskDelete
+                            )
+                        )
+                    },
+                    modifier = Modifier.size(54.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.delete_24px),
+                        contentDescription = stringResource(R.string.remove_history),
+                    )
+                }
             }
 
-            Icon(
-                painter = painterResource(R.drawable.netflix_play),
-                contentDescription = stringResource(R.string.stream_read),
-                modifier = Modifier
-                    .size(54.dp)
-                    .combinedClickable(
-                        interactionSource = streamInteractionSource, indication = null, onClick = {
-                            action(SearchResponseAction(response, SearchResponseOperation.Stream))
-                        })
-                    .circle()
-                    .ripple(streamInteractionSource)
-                    .padding(15.dp)
-            )
+            IconButton(
+                onClick = {
+                    action(SearchResponseAction(response, SearchResponseOperation.Stream))
+                },
+                modifier = Modifier.size(54.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.play_arrow_24px),
+                    contentDescription = stringResource(R.string.stream_read),
+                )
+            }
         }
 
         Spacer(Modifier.width(10.dp))
@@ -372,8 +376,6 @@ fun RefreshButton(
     if (response.isImported) {
         return
     }
-    val refreshInteractionSource = remember { MutableInteractionSource() }
-
 
     if (response.downloadState.status == DownloadState.IsPending) {
         Spacer(Modifier.width(54.dp))
@@ -382,23 +384,21 @@ fun RefreshButton(
 
     val action = response.downloadState.action
 
-    Icon(
-        painter = painterResource(action.icon),
-        contentDescription = stringResource(R.string.download),
-        modifier = Modifier
-            .size(54.dp)
-            .combinedClickable(
-                interactionSource = refreshInteractionSource, indication = null, onClick = {
-                    action(
-                        SearchResponseAction(
-                            response, action.operation
-                        )
-                    )
-                })
-            .circle()
-            .ripple(refreshInteractionSource)
-            .padding(15.dp)
-    )
+    IconButton(
+        onClick = {
+            action(
+                SearchResponseAction(
+                    response, action.operation
+                )
+            )
+        },
+        modifier = Modifier.size(54.dp)
+    ) {
+        Icon(
+            painter = painterResource(action.icon),
+            contentDescription = stringResource(R.string.download),
+        )
+    }
 }
 
 
@@ -419,16 +419,18 @@ fun Modifier.downloadOutline(downloadState: DownloadState?): Modifier {
             animatedOutline(
                 defaultPalette = listOf(
                     Color.Transparent,
-                    colors.primary.copy(alpha = alpha),
+                    MaterialTheme.colorScheme.primary.copy(alpha = alpha),
                     Color.Transparent,
-                    colors.primary.copy(alpha = alpha),
+                    MaterialTheme.colorScheme.primary.copy(alpha = alpha),
                 )
             )
         }
 
         DownloadState.IsPaused -> {
             border(
-                width = 1.5.dp, color = colors.onBackground, shape = RoundedImageShape()
+                width = 1.5.dp,
+                color = MaterialTheme.colorScheme.onBackground,
+                shape = RoundedShape()
             )
         }
 
@@ -440,8 +442,8 @@ fun Modifier.downloadOutline(downloadState: DownloadState?): Modifier {
             if (alpha > 0f) {
                 border(
                     width = 1.5.dp,
-                    color = colors.primary.copy(alpha = alpha),
-                    shape = RoundedImageShape()
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+                    shape = RoundedShape()
                 )
             } else {
                 this
@@ -450,7 +452,7 @@ fun Modifier.downloadOutline(downloadState: DownloadState?): Modifier {
 
         DownloadState.IsFailed -> {
             border(
-                width = 1.5.dp, color = Color.Red, shape = RoundedImageShape()
+                width = 1.5.dp, color = Color.Red, shape = RoundedShape()
             )
         }
 
@@ -492,7 +494,7 @@ fun SearchResponseItem(
                 .rounded()
                 // We do the funny and assign generating = downloading
                 .downloadOutline(if (response.generating) DownloadState.IsDownloading else response.downloadState?.status)
-                .ripple(interactionSource),
+                .indication(interactionSource = interactionSource, indication = ripple()),
             contentAlignment = Alignment.BottomStart
         ) {
             AsyncImage(
@@ -521,12 +523,12 @@ fun SearchResponseItem(
                         Box(
                             modifier = Modifier
                                 .rounded()
-                                .background(colors.primary)
+                                .background(MaterialTheme.colorScheme.primary)
                                 .padding(4.dp)
                         ) {
                             Text(
                                 text = "+${(response.downloadState.progress - response.epubSize)}",
-                                color = colors.background,
+                                color = MaterialTheme.colorScheme.background,
                                 fontSize = 12.sp, lineHeight = 12.sp
                             )
                         }
@@ -546,7 +548,7 @@ fun SearchResponseItem(
                 text = response.name,
                 fontSize = 13.sp,
                 lineHeight = 14.sp,
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis
@@ -568,7 +570,7 @@ fun SearchResponseGrid(
         columns = GridCells.Fixed(if (isLandscape) 6 else 3),
         state = listState,
         modifier = modifier,
-        contentPadding = PaddingValues(4.dp),
+        contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -629,19 +631,15 @@ fun SearchResponseGrid(
 @PreviewLightDark
 @Composable
 private fun RowPreview() {
-    CloudStreamTheme {
-        Surface {
-            SearchResponseRow(response = ImmutableSearchResponse.preview(), action = {})
-        }
+    CloudStreamPreviewTheme {
+        SearchResponseRow(response = ImmutableSearchResponse.preview(), action = {})
     }
 }
 
 @PreviewLightDark
 @Composable
 private fun GridPreview() {
-    CloudStreamTheme {
-        Surface {
-            SearchResponseItem(response = ImmutableSearchResponse.preview(), action = {})
-        }
+    CloudStreamPreviewTheme {
+        SearchResponseItem(response = ImmutableSearchResponse.preview(), action = {})
     }
 }

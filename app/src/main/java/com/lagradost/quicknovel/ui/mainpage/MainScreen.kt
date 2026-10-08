@@ -1,7 +1,7 @@
 package com.lagradost.quicknovel.ui.mainpage
 
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,19 +45,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lagradost.cloudstream4.compose.Colors
+import com.lagradost.cloudstream4.compose.SingleSelectDialog
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.BackHandler
 import com.lagradost.quicknovel.compose.BaseSearchBar
-import com.lagradost.quicknovel.compose.BaseStyles.blackButtonColors
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
-import com.lagradost.quicknovel.compose.SingleSelectDialog
-import com.lagradost.quicknovel.compose.ripple
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.collectAsState
 import com.lagradost.quicknovel.ui.common.SearchList
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.search.SearchRow
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.collectAsState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -178,12 +176,11 @@ fun SearchResponseDialog(
     action: (SearchResponseAction) -> Unit,
     dismiss: () -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     ModalBottomSheet(
         sheetState = sheetState,
-        containerColor = colors.background,
+        containerColor = MaterialTheme.colorScheme.background,
         onDismissRequest = dismiss,
         modifier = Modifier.fillMaxSize(),
         dragHandle = { },
@@ -195,8 +192,7 @@ fun SearchResponseDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
-                .combinedClickable(
-                    interactionSource = interactionSource,
+                .clickable(
                     onClick = {
                         scope.launch {
                             sheetState.hide()
@@ -205,24 +201,23 @@ fun SearchResponseDialog(
                         }
                     }
                 )
-                .ripple(interactionSource)
                 .padding(horizontal = 10.dp)
         ) {
             Text(
                 text = dialog.name,
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
             )
             Icon(
                 painter = painterResource(R.drawable.arrow_drop_down_24px),
-                tint = colors.onBackground,
+                tint = MaterialTheme.colorScheme.onBackground,
                 contentDescription = null,
             )
         }
 
         if (dialog.error != null) {
             Text(
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 14.sp,
                 lineHeight = 15.sp,
                 text = dialog.error.toString(),
@@ -231,7 +226,7 @@ fun SearchResponseDialog(
             )
         } else if (dialog.items.isEmpty()) {
             Text(
-                color = colors.onBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 14.sp,
                 lineHeight = 15.sp,
                 text = stringResource(R.string.no_data),
@@ -301,7 +296,7 @@ fun MainPageSearchBar(
                         modifier = Modifier
                             .size(34.dp)
                             .padding(5.dp),
-                        color = colors.onBackground, strokeWidth = 3.0.dp
+                        color = MaterialTheme.colorScheme.onBackground, strokeWidth = 3.0.dp
                     )
                 } else if (!openQuery) {
                     IconButton(onClick = {
@@ -310,7 +305,7 @@ fun MainPageSearchBar(
                         Icon(
                             painter = painterResource(R.drawable.ic_baseline_public_24),
                             contentDescription = stringResource(R.string.open_in_browser),
-                            tint = colors.onBackground
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
@@ -322,7 +317,7 @@ fun MainPageSearchBar(
                         painter = painterResource(if (searchIsRowState) R.drawable.ic_baseline_grid_view_24 else R.drawable.ic_baseline_list_24),
                         contentDescription = stringResource(if (searchIsRowState) R.string.grid_view else R.string.list_view),
                         modifier = Modifier.size(24.dp),
-                        tint = colors.onBackground
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -363,7 +358,7 @@ fun RowScope.SelectButton(text: String, onClick: () -> Unit) {
         Modifier
             .weight(1.0f)
             .padding(horizontal = 5.dp),
-        colors = blackButtonColors,
+        colors = Colors.blackButton,
     ) {
         Text(text)
         Spacer(Modifier.width(10.dp))
@@ -376,7 +371,7 @@ fun RowScope.SelectButton(text: String, onClick: () -> Unit) {
 @PreviewLightDark
 @Composable
 private fun SettingsScreenPreview() {
-    CloudStreamTheme {
+    CloudStreamPreviewTheme {
         MainPageScreen(
             state = MainPageState(apiName = "hello world"),
             action = {})

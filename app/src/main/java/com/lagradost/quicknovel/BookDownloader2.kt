@@ -4,6 +4,7 @@ import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.READ_EXTERNAL_STORAGE
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.app.Activity
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -18,6 +19,7 @@ import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -79,15 +81,20 @@ import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripperByArea
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import me.ag2s.epublib.domain.Author
 import me.ag2s.epublib.domain.EpubBook
 import me.ag2s.epublib.domain.MediaTypes
@@ -106,6 +113,7 @@ import java.io.IOException
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 enum class DownloadActionType {
@@ -166,6 +174,21 @@ data class QuickStreamData(
     val poster: String?,
     val data: MutableList<ChapterData>,
 )
+
+data class WaitOrCancel(
+    val channel: Channel<Unit> = Channel<Unit>(capacity = 1, BufferOverflow.DROP_OLDEST),
+) {
+    /** Returns true if we recived a cancel message */
+    suspend fun delay(time: Duration): Boolean {
+        return withTimeoutOrNull(time) {
+            channel.receive()
+        } != null
+    }
+
+    fun notifyEvent() {
+        channel.trySend(Unit)
+    }
+}
 
 object BookDownloader2Helper {
     const val IMPORT_SOURCE = "Download"
@@ -629,7 +652,10 @@ object BookDownloader2Helper {
         forceReload: Boolean
     ): LoadedChapter? {
         val path = getFilePath(meta, index)
-        downloadIndividualChapter(path, getApiFromName(meta.apiName), chapter, forceReload)
+        downloadIndividualChapter(
+            path, getApiFromName(meta.apiName), chapter, forceReload,
+            worker = WaitOrCancel()
+        )
         return getChapter(path, index, getStripHtml(), false)
     }
 
@@ -675,6 +701,9 @@ object BookDownloader2Helper {
         return externalReader && !authorsNotes
     }
 
+    val chapterRegex = Regex("Chapter \\d+", RegexOption.IGNORE_CASE)
+    val translatorRegex = Regex("Translator:.*?Editor:.*", RegexOption.IGNORE_CASE)
+
     private fun getChapter(
         filepath: String,
         index: Int,
@@ -708,12 +737,34 @@ object BookDownloader2Helper {
         // We do not want to create a nested <body> will cause some readers to fail
         val body: Element = document.selectFirst("body") ?: document
 
-        /*val html = if (!stripHtml) body.html() else stripHtml(
-            document,
-            title,
-            index,
-        )*/
+        // Strip the first line if it is useless
+        val trimTitle = title.trim()
+        for (first in arrayOf("p", "h1", "h2", "h3", "h4", "h5")) {
+            val firstText = body.selectFirst(first) ?: continue
+            val text = firstText.text().trim()
+
+            // Do not apply filtering on multiline text as that might contain other info
+            if (text.contains('\n')) {
+                continue
+            }
+
+            if (
+                text.equals(trimTitle, true)
+                || text.matches(chapterRegex)
+                || text.matches(translatorRegex)
+            ) {
+                firstText.remove()
+                break
+            }
+        }
+
         return LoadedChapter(title, body.html())
+    }
+
+    enum class DownloadResult {
+        Cancel,
+        Failure,
+        Success
     }
 
     suspend fun downloadIndividualChapter(
@@ -721,54 +772,69 @@ object BookDownloader2Helper {
         api: APIRepository,
         data: ChapterData,
         forceReload: Boolean = false,
-        maxTries: Int = 5
-    ): Boolean = withContext(Dispatchers.IO) {
+        maxTries: Int = 5,
+        worker: WaitOrCancel,
+    ): DownloadResult = withContext(Dispatchers.IO) {
         val rFile = File(filepath)
         if (rFile.exists() && rFile.length() > 0 && !forceReload) {
-            return@withContext true
+            return@withContext DownloadResult.Success
         }
         rFile.parentFile?.mkdirs()
         if (rFile.isDirectory) rFile.delete()
         val rateLimit = api.rateLimitTime > 0
+        val rateTime = if (api.rateLimitTime > 0) {
+            api.rateLimitTime.milliseconds
+        } else {
+            Duration.ZERO
+        }
         for (i in 0..maxTries) {
-            if (rateLimit) {
-                api.api.rateLimitMutex.lock()
-            }
-            try {
-                val page = api.loadHtml(data.url)
+            val work = async {
+                try {
+                    if (rateLimit) {
+                        api.api.rateLimitMutex.lock()
+                    }
+                    val page = api.loadHtml(data.url)
 
-                if (!page.isNullOrBlank()) {
-                    rFile.createNewFile() // only create the file when actually needed
-                    rFile.writeText("${data.name}\n${page}")
-                    
-                    val delayTime = context?.let { ctx ->
-                        PreferenceManager.getDefaultSharedPreferences(ctx).getString(ctx.getString(R.string.download_delay_key), "0")?.toLongOrNull()
-                    } ?: 0L
-                    val totalDelay = maxOf(api.rateLimitTime, delayTime)
-                    if (totalDelay > 0) {
-                        delay(totalDelay)
+                    if (!page.isNullOrBlank()) {
+                        rFile.createNewFile() // only create the file when actually needed
+                        rFile.writeText("${data.name}\n${page}")
+                        if (api.rateLimitTime > 0) {
+                            worker.delay(rateTime)
+                        }
+                        return@async DownloadResult.Success
+                    } else {
+                        if (worker.delay((1000L * (i + 1)).milliseconds + rateTime)) {
+                            return@async DownloadResult.Cancel
+                        }
                     }
-                    return@withContext true
-                } else {
-                    delay(5000L * (i + 1)) // ERROR
-                    val delayTime = context?.let { ctx ->
-                        PreferenceManager.getDefaultSharedPreferences(ctx).getString(ctx.getString(R.string.download_delay_key), "0")?.toLongOrNull()
-                    } ?: 0L
-                    val totalDelay = maxOf(api.rateLimitTime, delayTime)
-                    if (totalDelay > 0) {
-                        delay(totalDelay)
+                } catch (_: CancellationException) {
+                    return@async DownloadResult.Cancel
+                } catch (e: Exception) {
+                    logError(e)
+                    if (worker.delay((1000L * (i + 1)).milliseconds)) {
+                        return@async DownloadResult.Cancel
+                    }
+                } finally {
+                    if (rateLimit) {
+                        api.api.rateLimitMutex.unlock()
                     }
                 }
-            } catch (e: Exception) {
-                logError(e)
-                delay(5000L * (i + 1))
-            } finally {
-                if (rateLimit) {
-                    api.api.rateLimitMutex.unlock()
+                return@async DownloadResult.Failure
+            }
+            val exit: DownloadResult = select {
+                work.onAwait { x -> x }
+                worker.channel.onReceive {
+                    work.cancel()
+                    return@onReceive DownloadResult.Cancel
                 }
+            }
+            when (exit) {
+                DownloadResult.Cancel -> return@withContext DownloadResult.Cancel
+                DownloadResult.Failure -> continue
+                DownloadResult.Success -> return@withContext DownloadResult.Success
             }
         }
-        return@withContext false
+        return@withContext DownloadResult.Failure
     }
 
     @WorkerThread
@@ -922,7 +988,7 @@ object NotificationHelper {
     // The id is fixed so the foreground notification is replaced, not stacked, per worker
     const val FOREGROUND_NOTIFICATION_ID = 6660
 
-    fun buildForegroundNotification(context: Context): android.app.Notification {
+    fun buildForegroundNotification(context: Context): Notification {
         if (!hasCreatedNotChanel) {
             context.createNotificationChannel()
         }
@@ -1153,7 +1219,7 @@ object BookDownloader2 {
 
     @WorkerThread
     suspend fun stream(res: EpubResponse, apiName: String) {
-        downloadWorkThread(res, getApiFromName(apiName), context ?: return)
+        downloadWorkThread(res, getApiFromName(apiName), context ?: return, worker = WaitOrCancel())
         readEpub(
             author = res.author,
             name = res.name,
@@ -1542,6 +1608,18 @@ object BookDownloader2 {
     val currentDownloads: ConcurrentHashMap<Int, Unit> = ConcurrentHashMap()
 
     private val pendingAction: ConcurrentHashMap<Int, DownloadActionType> = ConcurrentHashMap()
+    private val workerNotification: ConcurrentHashMap<Int, WaitOrCancel> = ConcurrentHashMap()
+
+    suspend fun doWorkWithCancel(id: Int, block: suspend (WaitOrCancel) -> Unit) {
+        val worker = WaitOrCancel()
+        workerNotification[id] = worker
+        try {
+            block(worker)
+        } finally {
+            pendingAction.remove(id)
+            workerNotification.remove(id, worker)
+        }
+    }
 
     fun addPendingAction(id: Int, action: DownloadActionType) {
         addPendingActionAsync(id, action)
@@ -1551,8 +1629,8 @@ object BookDownloader2 {
         if (!currentDownloads.containsKey(id)) {
             return
         }
-
         pendingAction[id] = action
+        workerNotification[id]?.notifyEvent()
     }
 
     private suspend fun createNotification(
@@ -1703,17 +1781,19 @@ object BookDownloader2 {
                     }
                 }
 
-                when (res) {
-                    is EpubResponse -> {
-                        downloadWorkThread(
-                            res, api, context
-                        )
-                    }
+                doWorkWithCancel(newId) { worker ->
+                    when (res) {
+                        is EpubResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
 
-                    is StreamResponse -> {
-                        downloadWorkThread(
-                            res, api, context
-                        )
+                        is StreamResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
                     }
                 }
             } else {
@@ -1781,17 +1861,19 @@ object BookDownloader2 {
                     }
                 }
 
-                when (res) {
-                    is EpubResponse -> {
-                        downloadWorkThread(
-                            res, api, context
-                        )
-                    }
+                doWorkWithCancel(newId) { worker ->
+                    when (res) {
+                        is EpubResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
 
-                    is StreamResponse -> {
-                        downloadWorkThread(
-                            res, api, context
-                        )
+                        is StreamResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
                     }
                 }
             } else {
@@ -2130,7 +2212,7 @@ object BookDownloader2 {
             val book = EpubBook().apply {
                 metadata.addTitle(sName)
                 metadata.addAuthor(Author(sAuthor))
-               // TODO add apiname in metadata.otherProperties = ?
+                // TODO add apiname in metadata.otherProperties = ?
             }
 
             //Necessary so the system recognizes the existing book
@@ -2301,7 +2383,7 @@ object BookDownloader2 {
     }
 
     fun preloadPartialImportedPdf(bk: ImmutableSearchResponse) {
-        val context = BaseApplication.context ?: return
+        val context = context ?: return
         try {
             val finalBook = File(
                 File(context.filesDir, getDirectory(bk.apiName, bk.author ?: "", bk.name)),
@@ -2364,7 +2446,7 @@ object BookDownloader2 {
         val name = if (book.coverImage?.data != null) book.metadata.firstTitle
         else {
             contentResolver.query(data, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (cursor.moveToFirst())
                     cursor.getString(nameIndex).substringBeforeLast(".")
                 else null
@@ -2385,7 +2467,8 @@ object BookDownloader2 {
             downloadExtractLinks = emptyList(),
         ).apply {
             this.author = author
-            this.synopsis = book.metadata.descriptions?.firstOrNull { description -> description != null && description.isNotBlank() }
+            this.synopsis =
+                book.metadata.descriptions?.firstOrNull { description -> description != null && description.isNotBlank() }
         }
 
         try {
@@ -2408,7 +2491,7 @@ object BookDownloader2 {
                         }?.let { entry ->
                             val rawBytes = zipFile.getInputStream(entry).use { it.readBytes() }
                             // Downsample the image before assigning it to coverBytes
-                            coverBytes = BookDownloader2Helper.getSafeByteArray(rawBytes)
+                            coverBytes = getSafeByteArray(rawBytes)
                         }
                 }
 
@@ -2457,7 +2540,10 @@ object BookDownloader2 {
 
     //this is for complete epubs like from anna's archive
     @WorkerThread
-    suspend fun downloadWorkThread(load: EpubResponse, api: APIRepository, context: Context) {
+    suspend fun downloadWorkThread(
+        load: EpubResponse, api: APIRepository, context: Context,
+        worker: WaitOrCancel,
+    ) {
         val filesDir = context.filesDir
         val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
         val sAuthor = BookDownloader2Helper.sanitizeFilename(load.author ?: "")
@@ -2521,7 +2607,7 @@ object BookDownloader2 {
                         if (currentState != DownloadState.IsPaused) {
                             break
                         }
-                        delay(200.milliseconds)
+                        worker.delay(5000.milliseconds)
                     }
 
                     if (currentState == DownloadState.IsStopped) {
@@ -2533,14 +2619,14 @@ object BookDownloader2 {
                 val stream = try {
                     link.get().body
                 } catch (e: Exception) {
-                    delay((api.rateLimitTime + 1000).milliseconds)
+                    worker.delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
 
                 val length = stream.contentLength()
 
                 if (length <= LOCAL_EPUB_MIN_SIZE) {
-                    delay((api.rateLimitTime + 1000).milliseconds)
+                    worker.delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
                 var progress = 0L
@@ -2694,14 +2780,17 @@ object BookDownloader2 {
     }
 
     @WorkerThread
-    suspend fun downloadWorkThread(load: StreamResponse, api: APIRepository, context: Context) {
+    suspend fun downloadWorkThread(
+        load: StreamResponse, api: APIRepository, context: Context,
+        worker: WaitOrCancel,
+    ) {
         val id = generateId(load, api.name)
         val desiredStart = (
                 getKey<Int>(
                     DOWNLOAD_OFFSET, id.toString(),
                 ) ?: 0
                 ).coerceIn(0, load.data.size)
-        downloadWorkThread(load, api, desiredStart until load.data.size, context)
+        downloadWorkThread(load, api, desiredStart until load.data.size, context, worker)
     }
 
     @WorkerThread
@@ -2709,7 +2798,8 @@ object BookDownloader2 {
         load: StreamResponse,
         api: APIRepository,
         range: ClosedRange<Int>,
-        context: Context
+        context: Context,
+        worker: WaitOrCancel,
     ) {
         val filesDir = context.filesDir
         val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
@@ -2739,31 +2829,6 @@ object BookDownloader2 {
             for (index in range.start..range.endInclusive) {
                 val data = load.data.getOrNull(index) ?: continue
 
-                // consume any action and wait until not paused
-                while (true) {
-                    when (consumeAction(id)) {
-                        DownloadActionType.Pause -> {
-                            DownloadState.IsPaused
-                        }
-
-                        DownloadActionType.Resume -> DownloadState.IsDownloading
-                        DownloadActionType.Stop -> DownloadState.IsStopped
-                        else -> null
-                    }?.let { newState ->
-                        // if a new state is consumed then push that data instantly
-                        changeDownload(id) {
-                            state = newState
-                        }?.let { progressState ->
-                            createNotification(context, id, load, progressState)
-                        }
-                        currentState = newState
-                    }
-                    if (currentState != DownloadState.IsPaused) {
-                        break
-                    }
-                    delay(200)
-                }
-
                 val filepath =
                     filesDir.toString() + BookDownloader2Helper.getFilename(
                         sApiName,
@@ -2778,8 +2843,48 @@ object BookDownloader2 {
                 }
 
                 val beforeDownloadTime = System.currentTimeMillis()
-                val hasDownloadedChapter =
-                    BookDownloader2Helper.downloadIndividualChapter(filepath, api, data)
+                val hasDownloadedChapter: Boolean
+                while (true) {
+                    // consume any action and wait until not paused
+                    while (true) {
+                        when (consumeAction(id)) {
+                            DownloadActionType.Pause -> {
+                                DownloadState.IsPaused
+                            }
+
+                            DownloadActionType.Resume -> DownloadState.IsDownloading
+                            DownloadActionType.Stop -> DownloadState.IsStopped
+                            else -> null
+                        }?.let { newState ->
+                            // if a new state is consumed then push that data instantly
+                            changeDownload(id) {
+                                state = newState
+                            }?.let { progressState ->
+                                createNotification(context, id, load, progressState)
+                            }
+                            currentState = newState
+                        }
+                        if (currentState != DownloadState.IsPaused) {
+                            break
+                        }
+                        worker.delay(5000.milliseconds)
+                    }
+
+                    val result =
+                        BookDownloader2Helper.downloadIndividualChapter(
+                            filepath,
+                            api,
+                            data,
+                            worker = worker
+                        )
+
+                    /* It may be canceled by an action */
+                    if (result == BookDownloader2Helper.DownloadResult.Cancel) {
+                        continue
+                    }
+                    hasDownloadedChapter = (result == BookDownloader2Helper.DownloadResult.Success)
+                    break
+                }
 
                 if (hasDownloadedChapter) {
                     downloadedTotal += 1
@@ -2836,7 +2941,10 @@ object BookDownloader2 {
             }
 
             changeDownload(id) {
-                this.progress = totalItems.toLong()
+                /** Only modify progress if we have made any, as this fixes stubs */
+                if (downloadedTotal > 0) {
+                    this.progress = totalItems.toLong()
+                }
                 this.downloaded = range.endInclusive + 1 - range.start + alreadyDownloaded
                 state = DownloadState.IsDone
             }?.let { progressState ->

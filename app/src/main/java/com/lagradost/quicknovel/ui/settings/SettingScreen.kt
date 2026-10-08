@@ -9,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -24,7 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,28 +42,24 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import com.lagradost.cloudstream4.compose.BlackButton
+import com.lagradost.cloudstream4.compose.WhiteButton
+import com.lagradost.cloudstream4.compose.circle
+import com.lagradost.cloudstream4.compose.rounded
+import com.lagradost.cloudstream4.rememberAppSettings
+import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
+import com.lagradost.cloudstream4.theme.CloudStreamPrimaryColor
+import com.lagradost.cloudstream4.theme.modeToTheme
+import com.lagradost.cloudstream4.theme.perfToColor
+import com.lagradost.cloudstream4.theme.perfToMode
+import com.lagradost.quicknovel.BuildConfig
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.FileHelper
 import com.lagradost.quicknovel.FileStorage
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.compose.BaseStyles.blackButtonColors
-import com.lagradost.quicknovel.compose.BaseStyles.whiteButtonColors
-import com.lagradost.quicknovel.compose.CloudStreamPrimaryColor
-import com.lagradost.quicknovel.compose.CloudStreamTheme
-import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
-import com.lagradost.quicknovel.compose.circle
-import com.lagradost.quicknovel.compose.modeToTheme
-import com.lagradost.quicknovel.compose.perfToColor
-import com.lagradost.quicknovel.compose.perfToMode
-import com.lagradost.quicknovel.compose.ripple
-import com.lagradost.quicknovel.compose.rounded
 import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.Preference
-import com.lagradost.quicknovel.tachiyomi.SearchableSettings
-import com.lagradost.quicknovel.tachiyomi.TextPreferenceWidget
 import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
@@ -72,6 +67,10 @@ import com.lagradost.quicknovel.util.BackupUtils
 import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
 import com.lagradost.quicknovel.util.SubtitleHelper
 import com.lagradost.quicknovel.util.UIHelper.clipboardHelper
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.Preference
+import com.mihon.presentation.settings.SearchableSettings
+import com.mihon.presentation.settings.widget.TextPreferenceWidget
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
@@ -83,16 +82,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class SettingScreen : SearchableSettings {
+object SettingScreen : SearchableSettings {
     @Composable
     override fun getTitleRes(): String = stringResource(R.string.title_settings)
 
     @Composable
     fun getFilePreference(
-        storage : FileStorage,
-        store : AndroidPreferenceStore,
-        name : String,
-    ) : Preference.PreferenceItem<String> {
+        storage: FileStorage,
+        store: AndroidPreferenceStore,
+        name: String,
+    ): Preference.PreferenceItem.ListPreference<String> {
         val context = LocalContext.current
         val epubPathStore = storage.toPreference(context, store)
 
@@ -113,8 +112,8 @@ class SettingScreen : SearchableSettings {
             }
         return Preference.PreferenceItem.ListPreference(
             title = name,
-            icon = painterResource(R.drawable.netflix_download),
-            pref = epubPathStore,
+            icon = painterResource(R.drawable.folder_24px),
+            preference = epubPathStore,
             subtitleProvider = { _, _ ->
                 storage.getVisualLocation(context)
             },
@@ -128,11 +127,12 @@ class SettingScreen : SearchableSettings {
                     "Custom" -> {
                         try {
                             pathPicker.launch(Uri.EMPTY)
-                        } catch (t : Throwable) {
+                        } catch (t: Throwable) {
                             logError(t)
                             showToast(t.toString())
                         }
                     }
+
                     else -> storage.setLocation(context, null)
                 }
                 return@ListPreference false
@@ -145,15 +145,14 @@ class SettingScreen : SearchableSettings {
         val context = LocalContext.current
         val store = AndroidPreferenceStore(context)
         val scope = rememberCoroutineScope()
+        val settings = rememberAppSettings()
 
-        /*val backupPathStore = FileHelper.backup.toPreference(context, store)
-        val backupPath = backupPathStore.collectAsState()
-        val logcatPathStore = FileHelper.logcat.toPreference(context, store)
-        val logcatPath = backupPathStore.collectAsState()*/
-
-        val logcat = getFilePreference(FileHelper.logcat, store, stringResource(R.string.log_cat_location))
-        val backup = getFilePreference(FileHelper.backup, store, stringResource(R.string.backup_location))
-        val downloads = getFilePreference(FileHelper.epub, store, stringResource(R.string.download_path_pref))
+        val logcat =
+            getFilePreference(FileHelper.logcat, store, stringResource(R.string.log_cat_location))
+        val backup =
+            getFilePreference(FileHelper.backup, store, stringResource(R.string.backup_location))
+        val downloads =
+            getFilePreference(FileHelper.epub, store, stringResource(R.string.download_path_pref))
 
         val restoreFileSelector =
             rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -178,21 +177,10 @@ class SettingScreen : SearchableSettings {
             Preference.PreferenceGroup(
                 title = stringResource(R.string.general_settings),
                 preferenceItems = persistentListOf(
-                    Preference.PreferenceItem.MultiSelectListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_cloud_24),
-                        title = stringResource(R.string.search_providers),
-                        pref = store.searchProvidersList(),
-                        entries = apis.associate { it.name to "${SubtitleHelper.getFlagFromIso(it.lang) ?: "🌐"} ${it.name}" }.toPersistentMap(),
-                        subtitleProvider = { v, _ ->
-                            stringResource(R.string.active_providers, v.size)
-                        }),
                     Preference.PreferenceItem.ListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_language_24),
+                        icon = painterResource(R.drawable.language_korean_latin_24px),
                         title = stringResource(R.string.locale_settings),
-                        pref = store.getString(
-                            stringResource(R.string.locale_key),
-                            "en",
-                        ),
+                        preference = settings.ui.locale,
                         entries = arrayListOf(
                             /* begin language list */
                             ("en" to "English"),
@@ -206,9 +194,9 @@ class SettingScreen : SearchableSettings {
                         }.associate { it }.toPersistentMap(),
                     ),
                     Preference.PreferenceItem.MultiSelectListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_language_24),
+                        icon = painterResource(R.drawable.plugin_lang),
                         title = stringResource(R.string.provider_lang_settings),
-                        pref = store.searchLangList(),
+                        preference = settings.provider.searchLangList,
                         entries = apis.map { api ->
                             val lang = api.lang
                             val langName = SubtitleHelper.fromTwoLettersToLanguage(lang)!!
@@ -218,18 +206,24 @@ class SettingScreen : SearchableSettings {
                             code to "$flag $name"
                         }.associate { it }.toPersistentMap(),
                     ),
+                    Preference.PreferenceItem.MultiSelectListPreference(
+                        icon = painterResource(R.drawable.extension_24px),
+                        title = stringResource(R.string.search_providers),
+                        preference = settings.provider.searchProvidersList,
+                        entries = apis.associate { it.name to "${SubtitleHelper.getFlagFromIso(it.lang) ?: "🌐"} ${it.name}" }
+                            .toPersistentMap(),
+                        subtitleProvider = { v, _ ->
+                            stringResource(R.string.active_providers, v.size)
+                        }),
                 )
             ),
             Preference.PreferenceGroup(
                 title = stringResource(R.string.theme),
                 preferenceItems = persistentListOf(
                     Preference.PreferenceItem.ListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_color_lens_24),
+                        icon = painterResource(R.drawable.palette_24px),
                         title = stringResource(R.string.theme),
-                        pref = store.getString(
-                            stringResource(R.string.theme_key),
-                            "AmoledLight",
-                        ),
+                        preference = settings.ui.theme,
                         entries = stringArrayResource(R.array.themes_names_values).zip(
                             stringArrayResource(R.array.themes_names)
                         ).associate { it }.toPersistentMap().let { mapping ->
@@ -245,12 +239,9 @@ class SettingScreen : SearchableSettings {
                         }
                     ),
                     Preference.PreferenceItem.ListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_color_lens_24),
+                        icon = painterResource(R.drawable.colors_24px),
                         title = stringResource(R.string.primary_color_settings),
-                        pref = store.getString(
-                            stringResource(R.string.primary_color_key),
-                            "Normal",
-                        ),
+                        preference = settings.ui.primaryColor,
                         entries = stringArrayResource(R.array.themes_overlay_names_values).zip(
                             stringArrayResource(R.array.themes_overlay_names)
                         ).associate { it }.toPersistentMap().let { mapping ->
@@ -266,12 +257,9 @@ class SettingScreen : SearchableSettings {
                         }
                     ),
                     Preference.PreferenceItem.ListPreference(
-                        icon = painterResource(R.drawable.ic_baseline_star_24),
+                        icon = painterResource(R.drawable.star_24px),
                         title = stringResource(R.string.rating_format),
-                        pref = store.getString(
-                            stringResource(R.string.rating_format_key),
-                            "star",
-                        ),
+                        preference = settings.ui.ratingFormat,
                         entries = stringArrayResource(R.array.RatingFormatData).zip(
                             stringArrayResource(R.array.RatingFormat)
                         ).associate { it }.toPersistentMap()
@@ -282,8 +270,9 @@ class SettingScreen : SearchableSettings {
                 title = stringResource(R.string.app_settings),
                 preferenceItems = persistentListOf(
                     Preference.PreferenceItem.TextPreference(
-                        icon = painterResource(R.drawable.ic_baseline_system_update_24),
+                        icon = painterResource(R.drawable.mobile_arrow_down_24px),
                         title = stringResource(R.string.check_for_update),
+                        subtitle = BuildConfig.VERSION_NAME,
                         onClick = {
                             // Todo refactor
                             scope.launch {
@@ -296,16 +285,13 @@ class SettingScreen : SearchableSettings {
                         }
                     ),
                     Preference.PreferenceItem.SwitchPreference(
-                        icon = painterResource(R.drawable.ic_baseline_notifications_active_24),
+                        icon = painterResource(R.drawable.notifications_active_24px),
                         title = stringResource(R.string.show_app_updates),
                         subtitle = stringResource(R.string.show_app_updates_desc),
-                        pref = store.getBoolean(
-                            stringResource(R.string.auto_update_key),
-                            true,
-                        ),
+                        preference = settings.download.autoUpdate,
                     ),
                     Preference.PreferenceItem.TextPreference(
-                        icon = painterResource(R.drawable.baseline_save_as_24),
+                        icon = painterResource(R.drawable.save_as_24px),
                         title = stringResource(R.string.backup_settings),
                         subtitle = null,
                         onClick = {
@@ -339,7 +325,7 @@ class SettingScreen : SearchableSettings {
                     ),
                     backup,
                     Preference.PreferenceItem.TextPreference(
-                        icon = painterResource(R.drawable.baseline_restore_page_24),
+                        icon = painterResource(R.drawable.restore_page_24px),
                         title = stringResource(R.string.restore_settings),
                         onClick = {
                             try {
@@ -368,10 +354,7 @@ class SettingScreen : SearchableSettings {
                         icon = painterResource(R.drawable.ic_baseline_menu_book_24),
                         title = stringResource(R.string.external_reader),
                         subtitle = stringResource(R.string.external_reader_desc),
-                        pref = store.getBoolean(
-                            stringResource(R.string.external_reader_key),
-                            true,
-                        ),
+                        preference = settings.reader.externalReader,
                     ),
                     // Removed as the actual bloat filtering is shit and not very useful,
                     // but can increase the time too much
@@ -397,7 +380,7 @@ class SettingScreen : SearchableSettings {
                             TextPreferenceWidget(
                                 title = stringResource(R.string.show_log_cat),
                                 subtitle = null,
-                                icon = painterResource(R.drawable.baseline_description_24),
+                                icon = painterResource(R.drawable.article_24px),
                                 onPreferenceClick = {
                                     showDialog = true
                                 },
@@ -466,7 +449,7 @@ fun LogcatDialog(dismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     AlertDialog(
-        containerColor = colors.background,
+        containerColor = MaterialTheme.colorScheme.background,
         onDismissRequest = dismiss,
         title = {
             Text(text = stringResource(R.string.log_cat))
@@ -479,7 +462,8 @@ fun LogcatDialog(dismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(
+            WhiteButton(
+                text = stringResource(R.string.save),
                 onClick = {
                     scope.launch {
                         withContext(Dispatchers.IO) {
@@ -517,17 +501,19 @@ fun LogcatDialog(dismiss: () -> Unit) {
                             }
                         }
                     }
-                }, colors = whiteButtonColors
-            ) { Text(text = stringResource(R.string.save)) }
-            Button(
+                }
+            )
+            WhiteButton(
+                text = stringResource(R.string.copylog),
                 onClick = {
                     clipboardHelper(
                         txt("Logcat"),
                         list.value.joinToString(separator = "\n\n") { it.toString() }
                     )
-                }, colors = whiteButtonColors
-            ) { Text(text = stringResource(R.string.copylog)) }
-            Button(
+                }
+            )
+            WhiteButton(
+                text = stringResource(R.string.clear),
                 onClick = {
                     try {
                         Runtime.getRuntime().exec("logcat -c")
@@ -535,13 +521,14 @@ fun LogcatDialog(dismiss: () -> Unit) {
                         logError(t)
                     }
                     dismiss()
-                }, colors = whiteButtonColors
-            ) { Text(text = stringResource(R.string.clear)) }
+                }
+            )
         },
         dismissButton = {
-            Button(
-                onClick = dismiss, colors = blackButtonColors
-            ) { Text(text = stringResource(R.string.close)) }
+            BlackButton(
+                text = stringResource(R.string.close),
+                onClick = dismiss,
+            )
         },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     )
@@ -550,8 +537,6 @@ fun LogcatDialog(dismiss: () -> Unit) {
 
 @Composable
 fun LogcatItem(item: LogcatItem) {
-    val interactionSource = remember { MutableInteractionSource() }
-
     val color = when (item.level) {
         LogcatLevel.Fatal -> Color.Magenta
         LogcatLevel.Error -> Color.Red
@@ -569,9 +554,9 @@ fun LogcatItem(item: LogcatItem) {
                 modifier = Modifier
                     .padding(2.dp)
                     .rounded()
-                    .background(colors.onBackground)
+                    .background(MaterialTheme.colorScheme.onBackground)
                     .padding(4.dp),
-                color = colors.surfaceVariant
+                color = MaterialTheme.colorScheme.surfaceVariant
             )
         }
         Text(
@@ -579,18 +564,18 @@ fun LogcatItem(item: LogcatItem) {
             modifier = Modifier
                 .padding(2.dp)
                 .rounded()
-                .background(colors.surfaceVariant)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(4.dp),
-            color = colors.onBackground
+            color = MaterialTheme.colorScheme.onBackground
         )
         Text(
             item.tag,
             modifier = Modifier
                 .padding(2.dp)
                 .rounded()
-                .background(colors.surfaceVariant)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(4.dp),
-            color = colors.onBackground
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
     Row(
@@ -598,13 +583,10 @@ fun LogcatItem(item: LogcatItem) {
             .height(IntrinsicSize.Min)
             .fillMaxWidth()
             .clickable(
-                interactionSource = interactionSource,
-                indication = null,
                 onClick = {
                     clipboardHelper(txt("Logcat"), item.toString())
                 })
             .rounded()
-            .ripple(interactionSource)
             .padding(5.dp)
     ) {
         Box(
@@ -617,7 +599,7 @@ fun LogcatItem(item: LogcatItem) {
         Spacer(modifier = Modifier.width(5.dp))
         Text(
             item.message,
-            color = colors.onBackground,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
             lineHeight = 15.sp,
         )
@@ -630,7 +612,11 @@ fun RoundColor(color: Color) {
         modifier = Modifier
             .padding(start = 15.dp)
             .size(20.dp)
-            .border(width = 1.5.dp, shape = CircleShape, color = colors.onBackground)
+            .border(
+                width = 1.5.dp,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.onBackground
+            )
             .background(color, CircleShape)
     )
 }
@@ -638,8 +624,7 @@ fun RoundColor(color: Color) {
 @PreviewLightDark
 @Composable
 private fun SettingScreenPreview() {
-    val screen = SettingScreen()
-    CloudStreamTheme {
-        screen.Content()
+    CloudStreamPreviewTheme {
+        SettingScreen.Content()
     }
 }
