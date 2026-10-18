@@ -862,8 +862,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         binding.readActionTts.setOnClickListener {
-            //scrollToDesired()
             viewModel.startTTS()
+        }
+
+        binding.readActionTts.setOnLongClickListener { view ->
+            view.popupMenu(
+                items = listOf(1 to R.string.tts_resume_playback, 2 to R.string.tts_read_from_here),
+                selectedItemId = -1,
+            ) {
+                viewModel.startTTS(fromVisibleText = itemId == 2)
+            }
+            true
         }
 
         binding.ttsActionForward.setOnClickListener {

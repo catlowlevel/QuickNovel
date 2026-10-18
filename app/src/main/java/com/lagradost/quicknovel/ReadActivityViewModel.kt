@@ -179,6 +179,8 @@ abstract class AbstractBook {
     abstract fun title(): String
     abstract fun getChapterTitle(index: Int): UiText
     abstract fun getLoadingStatus(index: Int): String?
+    abstract fun playbackId(): String
+    abstract fun chapterId(index: Int): String
 
     @Throws
     open fun loadImage(image: String): InputStream? = null
@@ -225,6 +227,12 @@ abstract class AbstractBook {
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
+    override fun playbackId(): String = ttsPlaybackBookKey(
+        "quick", data.meta.apiName, data.meta.author.orEmpty(), data.meta.name
+    )
+
+    override fun chapterId(index: Int): String = data.data[index].url
+
     override fun resolveUrl(url: String): String {
         return Apis.getApiFromNameNull(data.meta.apiName)?.fixUrl(url) ?: url
     }
@@ -300,7 +308,11 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 }
 
-class RegularBook(val data: EpubBook) : AbstractBook() {
+class RegularBook(val data: EpubBook, private val sourceUri: String) : AbstractBook() {
+    override fun playbackId(): String = ttsPlaybackBookKey("epub", sourceUri)
+
+    override fun chapterId(index: Int): String = allTocReferences[index].completeHref
+
     private val allTocReferences: List<TOCReference>
     init {
         val flatTOC = mutableListOf<TOCReference>()
@@ -1167,7 +1179,7 @@ class ReadActivityViewModel : ViewModel() {
                     ?: throw ErrorLoadingException("Unable to open file descriptor")
                 val zipFile = AndroidZipFile(fd, "")
                 val book = EpubReader().readEpubLazy(zipFile, "utf-8")
-                RegularBook(book)
+                RegularBook(book, data.toString())
             } else {
                 val input = context.contentResolver.openInputStream(data)
                     ?: throw ErrorLoadingException("Empty data")
@@ -1260,6 +1272,8 @@ class ReadActivityViewModel : ViewModel() {
 
     fun init(book: AbstractBook, context: Context) {
         this.book = book
+        ttsBookId = book.playbackId()
+        ttsBookmark = getKey<TTSPlaybackBookmark>(EPUB_TTS_POSITION, ttsBookId)
         _title.postValue(book.title())
 
         updateChapters()
@@ -1309,6 +1323,14 @@ class ReadActivityViewModel : ViewModel() {
 
     var ttsSession: TTSSession? = null
 
+    private lateinit var ttsBookId: String
+    @Volatile
+    private var ttsBookmark: TTSPlaybackBookmark? = null
+    @Volatile
+    private var resumeTTSPosition = true
+    @Volatile
+    private var ttsStartIndex: ScrollIndex? = null
+
     private fun initTTSSession(context: Context) {
         runOnMainThread {
             ttsSession = TTSSession(context, ::parseAction)
@@ -1351,8 +1373,15 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    fun startTTS() {
-        currentTTSStatus = TTSHelper.TTSStatus.IsRunning
+    fun startTTS(fromVisibleText: Boolean = false) {
+        synchronized(this) {
+            if (!::book.isInitialized || !::ttsBookId.isInitialized) return
+            if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) {
+                resumeTTSPosition = !fromVisibleText
+                ttsStartIndex = desiredTTSIndex ?: desiredIndex
+            }
+            currentTTSStatus = TTSHelper.TTSStatus.IsRunning
+        }
     }
 
     fun forwardsTTS() {
@@ -1371,7 +1400,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun playTTS() {
-        currentTTSStatus = TTSHelper.TTSStatus.IsRunning
+        startTTS()
     }
 
     fun pausePlayTTS() {
@@ -1410,38 +1439,11 @@ class ReadActivityViewModel : ViewModel() {
                 }
             }
 
-            val dIndex = desiredTTSIndex ?: desiredIndex ?: return@coroutineScope
-
             if (ttsThreadMutex.isLocked) return@coroutineScope
             ttsThreadMutex.withLock {
                 ttsSession.register()
                 ttsSession.setSpeed(ttsSpeed)
                 ttsSession.setPitch(ttsPitch)
-
-                var ttsInnerIndex = 0 // this inner index is different from what is set
-                var index = dIndex.index
-
-                let {
-                    val startChar = dIndex.char
-
-                    val lines = chapterMutex.withLock {
-                        chapterData[index].letInner {
-                            it.ttsLines
-                        }
-                    } ?: run {
-                        // in case of error just go to the next chapter
-                        index++
-                        return@let
-                    }
-
-                    val idx = lines.indexOfFirst { it.startChar >= startChar }
-                    if (idx != -1) {
-                        ttsInnerIndex = idx
-                    } else {
-                        // In case we are at the very last thing, then goto the next chapter
-                        index++
-                    }
-                }
 
                 suspend fun awaitLines(chapter: Int): List<TTSHelper.TTSLine>? {
                     loadIndividualChapter(chapter)
@@ -1460,6 +1462,44 @@ class ReadActivityViewModel : ViewModel() {
                         }
                     }
                     return null
+                }
+
+                val bookmark = ttsBookmark.takeIf { resumeTTSPosition }
+                fun bookmarkedChapter(): Int? = bookmark?.resolveChapter(
+                    (0 until book.size()).map { book.chapterId(it) }
+                )
+
+                var resumeChapter = bookmarkedChapter()
+                if (bookmark != null && resumeChapter == null && bookmark.chapter >= book.size() &&
+                    bookmark.sentence >= 0 && bookmark.chapterId.isNotBlank()
+                ) {
+                    // Some providers discover their following chapters only as they are loaded.
+                    loadIndividualChapter(bookmark.chapter, notify = false)
+                    resumeChapter = bookmarkedChapter()
+                }
+
+                val visible = ttsStartIndex ?: desiredTTSIndex ?: desiredIndex
+                var index = resumeChapter ?: visible?.index?.coerceIn(0, book.size() - 1) ?: return@withLock
+                val initialLines = awaitLines(index) ?: return@withLock
+                var ttsInnerIndex = if (resumeChapter != null) {
+                    bookmark?.resolveSentence(initialLines.size) ?: 0
+                } else {
+                    initialLines.sentenceAtCharacter(visible?.char ?: 0) ?: 0
+                }
+
+                if (resumeChapter != null) {
+                    initialLines.getOrNull(ttsInnerIndex)?.let { line ->
+                        val inner = innerCharToIndex(index, line.startChar) ?: 0
+                        desiredTTSIndex = ScrollIndex(index, inner, line.startChar)
+                        scrollToDesired(ScrollIndex(index, inner, line.startChar))
+                    }
+                }
+
+                fun savePosition(chapter: Int, sentence: Int) {
+                    val position = TTSPlaybackBookmark(chapter, sentence, book.chapterId(chapter))
+                    if (ttsBookmark == position) return
+                    setKey(EPUB_TTS_POSITION, ttsBookId, position)
+                    ttsBookmark = position
                 }
 
                 while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
@@ -1512,14 +1552,7 @@ class ReadActivityViewModel : ViewModel() {
 
                         val line = lines[ttsInnerIndex]
                         val nextLine = lines.getOrNull(ttsInnerIndex + 1)
-
-                        // set keys
-                        /*setKey(
-                            EPUB_CURRENT_POSITION_SCROLL_CHAR,
-                            book.title(),
-                            line.startChar
-                        )
-                        setKey(EPUB_CURRENT_POSITION, book.title(), line.index)*/
+                        savePosition(index, ttsInnerIndex)
 
                         // if we are outside the app, then we post new desired location
                         // as otherwise the scroll overrides it

@@ -93,6 +93,8 @@
     <string name="read_action_chapters_formatted" formatted="true">%d Chapters</string>
 
     <string name="read_action_tts">Text To Speech</string>
+    <string name="tts_resume_playback">Resume narration</string>
+    <string name="tts_read_from_here">Read from here</string>
     <string name="read_action_screen_rotation">Screen Rotation</string>
 
     <string name="grid_view">Grid</string>
