@@ -194,22 +194,10 @@
                     style="@style/WhiteCheckmark"
                     android:text="@string/tts_auto_center" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/tts_auto_center_hint"
-                    android:textSize="14sp" />
-
                 <com.google.android.material.checkbox.MaterialCheckBox
                     android:id="@+id/read_settings_floating_tts"
                     style="@style/WhiteCheckmark"
                     android:text="@string/tts_floating_controls" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/tts_floating_controls_hint"
-                    android:textSize="14sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
