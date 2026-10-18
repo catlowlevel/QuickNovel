@@ -23,11 +23,6 @@ import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.UIHelper.requestAudioFocus
 import com.lagradost.quicknovel.util.UIHelper.unRequestAudioFocus
 import io.noties.markwon.Markwon
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.jsoup.Jsoup
 import java.util.Locale
 import java.util.Stack
@@ -58,7 +53,7 @@ class TTSSession(
             }
         }
     private var isRegistered = false
-    private var tts: TextToSpeech? = null
+    private val tts: TextToSpeech? get() = engineLoader.engine
     private var TTSQueue: Pair<TTSHelper.TTSLine, Int>? = null
 
     private var TTSQueueId = 0
@@ -114,7 +109,7 @@ class TTSSession(
     }
 
     fun ttsInitialized(): Boolean {
-        return tts != null
+        return engineLoader.initialized
     }
 
     suspend fun speak(
@@ -122,7 +117,9 @@ class TTSSession(
         next: TTSHelper.TTSLine?,
         action: () -> Boolean
     ): Int? {
-        val tts = requireTTS(action) ?: return null
+        if (action()) return null
+        val tts = requireTTS() ?: return null
+        if (action()) return null
 
         val queue = TTSQueue
         val ret = if (queue?.first == line) {
@@ -159,96 +156,75 @@ class TTSSession(
         playbackControl.signal()
     }
 
-    private val mutex: Mutex = Mutex() // no duplicate tts
+    private val engineLoader = TTSEngineLoader(
+        create = { ready ->
+            TextToSpeech(context.applicationContext) { status ->
+                ready(status == TextToSpeech.SUCCESS)
+                if (status != TextToSpeech.SUCCESS) {
+                    val errorMSG = when (status) {
+                        TextToSpeech.ERROR -> "ERROR"
+                        TextToSpeech.ERROR_INVALID_REQUEST -> "ERROR_INVALID_REQUEST"
+                        TextToSpeech.ERROR_NETWORK -> "ERROR_NETWORK"
+                        TextToSpeech.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+                        TextToSpeech.ERROR_NOT_INSTALLED_YET -> "ERROR_NOT_INSTALLED_YET"
+                        TextToSpeech.ERROR_OUTPUT -> "ERROR_OUTPUT"
+                        TextToSpeech.ERROR_SYNTHESIS -> "ERROR_SYNTHESIS"
+                        TextToSpeech.ERROR_SERVICE -> "ERROR_SERVICE"
+                        else -> status.toString()
+                    }
 
-    suspend fun requireTTS(action: () -> Boolean = { false }): TextToSpeech? = with(mutex) {
-        coroutineScope {
-            val currentTTS = tts
-            if (currentTTS != null) {
-                return@coroutineScope currentTTS
-            }
-
-            var waiting = true
-            var success = false
-            // Fucking retarded leak, we have to use applicationContext
-            val pendingTTS = TextToSpeech(context.applicationContext) { status ->
-                success = status == TextToSpeech.SUCCESS
-                waiting = false
-                if (status == TextToSpeech.SUCCESS) {
-                    return@TextToSpeech
+                    CommonActivity.showToast("Initialization Failed! Error $errorMSG")
                 }
-                val errorMSG = when (status) {
-                    TextToSpeech.ERROR -> "ERROR"
-                    TextToSpeech.ERROR_INVALID_REQUEST -> "ERROR_INVALID_REQUEST"
-                    TextToSpeech.ERROR_NETWORK -> "ERROR_NETWORK"
-                    TextToSpeech.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
-                    TextToSpeech.ERROR_NOT_INSTALLED_YET -> "ERROR_NOT_INSTALLED_YET"
-                    TextToSpeech.ERROR_OUTPUT -> "ERROR_OUTPUT"
-                    TextToSpeech.ERROR_SYNTHESIS -> "ERROR_SYNTHESIS"
-                    TextToSpeech.ERROR_SERVICE -> "ERROR_SERVICE"
-                    else -> status.toString()
-                }
-
-                CommonActivity.showToast("Initialization Failed! Error $errorMSG")
-                return@TextToSpeech
             }
-
-            while (waiting && isActive) {
-                if (action()) {
-                    return@coroutineScope null
-                }
-                delay(100)
-            }
-
-            if (!success) return@coroutineScope null
-
+        },
+        configure = { pendingTTS ->
             val voiceName = BaseApplication.getKey<String>(EPUB_VOICE)
             val langName = BaseApplication.getKey<String>(EPUB_LANG)
 
             val canSetLanguage = pendingTTS.setLanguage(
-                pendingTTS.availableLanguages.firstOrNull { it.displayName == langName }
+                pendingTTS.availableLanguages?.firstOrNull { it.displayName == langName }
                     ?: Locale.US)
             pendingTTS.voice =
-                pendingTTS.voices.firstOrNull { it.name == voiceName }
+                pendingTTS.voices?.firstOrNull { it.name == voiceName }
                     ?: pendingTTS.defaultVoice
 
             if (canSetLanguage == TextToSpeech.LANG_MISSING_DATA || canSetLanguage == TextToSpeech.LANG_NOT_SUPPORTED) {
                 CommonActivity.showToast(R.string.tts_language_error)
-                pendingTTS.shutdown()
-                return@coroutineScope null
-            }
-
-            pendingTTS.setOnUtteranceProgressListener(object :
-                UtteranceProgressListener() {
-                //MIGHT BE INTERESTING https://stackoverflow.com/questions/44461533/android-o-new-texttospeech-onrangestart-callback
-                override fun onDone(utteranceId: String) {
-                    utteranceFinished(utteranceId)
-                }
-
-                @Deprecated("Deprecated")
-                override fun onError(utteranceId: String?) {
-                    utteranceFinished(utteranceId)
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    utteranceFinished(utteranceId)
-                }
-
-                override fun onStart(utteranceId: String) {
-                    utteranceId.toIntOrNull()?.let { id ->
-                        TTSStartSpeakId = maxOf(TTSStartSpeakId, id)
+                false
+            } else {
+                pendingTTS.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onDone(utteranceId: String) {
+                        utteranceFinished(utteranceId)
                     }
-                }
-            })
 
-            pendingTTS.setPitch(pitch)
-            pendingTTS.setSpeechRate(speed)
+                    @Deprecated("Deprecated")
+                    override fun onError(utteranceId: String?) {
+                        utteranceFinished(utteranceId)
+                    }
 
-            tts = pendingTTS
-            return@coroutineScope pendingTTS
-        }
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        utteranceFinished(utteranceId)
+                    }
+
+                    override fun onStart(utteranceId: String) {
+                        utteranceId.toIntOrNull()?.let { id ->
+                            TTSStartSpeakId = maxOf(TTSStartSpeakId, id)
+                        }
+                    }
+                })
+
+                pendingTTS.setPitch(pitch)
+                pendingTTS.setSpeechRate(speed)
+
+                true
+            }
+        },
+        dispose = { engine -> engine.shutdown() },
+    )
+
+    suspend fun requireTTS(): TextToSpeech? {
+        return engineLoader.acquire()
     }
-
 
     fun register() {
         if (isRegistered) return
@@ -261,9 +237,8 @@ class TTSSession(
         tts?.apply {
             stop()
             setOnUtteranceProgressListener(null) // Fucking retarded leak
-            shutdown()
         }
-        tts = null
+        engineLoader.release()
         TTSQueue = null
 
         unregister()

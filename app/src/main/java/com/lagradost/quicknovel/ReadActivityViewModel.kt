@@ -46,7 +46,6 @@ import com.lagradost.quicknovel.BaseApplication.Companion.setKeyClass
 import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.BookDownloader2Helper.getQuickChapter
 import com.lagradost.quicknovel.CommonActivity.TAG
-import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.TTSHelper.parseTextToSpans
 import com.lagradost.quicknovel.TTSHelper.preParseHtml
@@ -86,6 +85,7 @@ import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
 import io.noties.markwon.image.ImageSizeResolver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -552,9 +552,10 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<TTSHelper.TTSLine?>(null)
     val ttsLine: LiveData<TTSHelper.TTSLine?> = _ttsLine
 
-    // Playback events do not replay on focus return or while a paused highlight is selected.
-    private val _ttsSentenceStarted = MutableSharedFlow<TTSHelper.TTSLine>(extraBufferCapacity = 1)
-    val ttsSentenceStarted = _ttsSentenceStarted.asSharedFlow()
+    // Announce only sentences selected for speech, before engine startup/queueing can delay centering.
+    // Events do not replay on focus return or while a paused highlight is selected.
+    private val _ttsSentenceStarting = MutableSharedFlow<TTSHelper.TTSLine>(extraBufferCapacity = 1)
+    val ttsSentenceStarting = _ttsSentenceStarting.asSharedFlow()
 
     private val _ttsProgress = MutableLiveData<TTSPlaybackProgress?>(null)
     val ttsProgress: LiveData<TTSPlaybackProgress?> = _ttsProgress
@@ -1379,7 +1380,18 @@ class ReadActivityViewModel : ViewModel() {
     private fun initTTSSession(context: Context) {
         refreshPronunciationOverrides()
         runOnMainThread {
-            ttsSession = TTSSession(context, ::parseAction, ttsPlaybackControl)
+            val session = TTSSession(context, ::parseAction, ttsPlaybackControl)
+            ttsSession = session
+            // Warm up silently while the book loads; reading and warm-up share the same engine.
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    session.requireTTS()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    logError(error)
+                }
+            }
         }
     }
 
@@ -1547,7 +1559,12 @@ class ReadActivityViewModel : ViewModel() {
                     initialLines.getOrNull(ttsInnerIndex)?.let { line ->
                         val inner = innerCharToIndex(index, line.startChar) ?: 0
                         desiredTTSIndex = ScrollIndex(index, inner, line.startChar)
-                        scrollToDesired(ScrollIndex(index, inner, line.startChar))
+                        val restored = ScrollIndex(index, inner, line.startChar)
+                        if (autoCenterTTS) {
+                            // Publish the restored chapter without first pinning its sentence to the top.
+                            changeIndex(restored)
+                            updateReadArea()
+                        } else scrollToDesired(restored)
                     }
                 }
 
@@ -1670,15 +1687,13 @@ class ReadActivityViewModel : ViewModel() {
                             ttsInnerIndex++
                             continue
                         }
-                        // wait for next line
+                        _ttsSentenceStarting.emit(line)
+                        // Start centering as this sentence is selected, including the first cold read.
                         val waitFor = ttsSession.speak(
                             spokenLine,
                             nextLine?.let(overrides::prepare)
                         ) {
                             currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip
-                        }
-                        if (waitFor != null && currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
-                            _ttsSentenceStarted.emit(line)
                         }
 
                         if (!ttsSession.isValidTTS()) {
@@ -1860,14 +1875,38 @@ class ReadActivityViewModel : ViewModel() {
 
     // FUCK ANDROID WITH ALL MY HEART
     // SEE https://stackoverflow.com/questions/45960265/android-o-oreo-8-and-higher-media-buttons-issue WHY
+    private var dummySound: MediaPlayer? = null
+
     private fun playDummySound() {
-        val act = activity ?: return
-        val mMediaPlayer: MediaPlayer = MediaPlayer.create(act, R.raw.dummy_sound_500ms)
-        mMediaPlayer.setOnCompletionListener { mMediaPlayer.release() }
-        mMediaPlayer.start()
+        val appContext = context?.applicationContext ?: return
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            dummySound?.release()
+            val player = MediaPlayer()
+            dummySound = player
+            fun finish() {
+                if (dummySound === player) {
+                    dummySound = null
+                    player.release()
+                }
+            }
+            try {
+                appContext.resources.openRawResourceFd(R.raw.dummy_sound_500ms).use { source ->
+                    player.setDataSource(source.fileDescriptor, source.startOffset, source.length)
+                }
+                player.setOnPreparedListener { if (dummySound === player) player.start() }
+                player.setOnCompletionListener { finish() }
+                player.setOnErrorListener { _, _, _ -> finish(); true }
+                player.prepareAsync()
+            } catch (error: Throwable) {
+                finish()
+                logError(error)
+            }
+        }
     }
 
     override fun onCleared() {
+        dummySound?.release()
+        dummySound = null
         //println("onCleared===${System.currentTimeMillis()}")
         lastChangeIndex?.let { setScrollKeys(it) }
         ttsSession?.release()

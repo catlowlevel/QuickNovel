@@ -1052,7 +1052,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         )
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                viewModel.ttsSentenceStarted.collect { line ->
+                viewModel.ttsSentenceStarting.collect { line ->
                     if (viewModel.currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
                         ttsAutoCentering.onSentenceStarted(line)
                     }
