@@ -568,7 +568,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         config.setArgs(binding.loadingText, CONFIG_FONT or CONFIG_COLOR)
         config.setArgs(binding.readBattery, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readTimeClock, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
+        config.setArgs(binding.readWordCount, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readLoadingBar)
+    }
+
+    private fun updateReaderOverlayVisibility() {
+        binding.readOverlay.isVisible = binding.readBattery.isVisible ||
+                binding.readTimeClock.isVisible || binding.readWordCount.isVisible
     }
 
     private fun updatePadding() {
@@ -811,12 +817,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.showBatteryLive) { show ->
             binding.readBattery.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showTime
+            updateReaderOverlayVisibility()
         }
 
         observe(viewModel.showTimeLive) { show ->
             binding.readTimeClock.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showBattery
+            updateReaderOverlayVisibility()
         }
 
         observe(viewModel.screenAwakeLive) { awake ->
@@ -893,8 +899,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             binding.readToolbar.title = title
         }
 
-        observe(viewModel.chapterTile) { title ->
-            binding.readToolbar.subtitle = title.asString(binding.readToolbar.context)
+        observe(viewModel.chapterInfo) { chapter ->
+            val title = chapter.title.asString(this)
+            val count = chapter.wordCount
+            val label = count?.let { resources.getQuantityString(R.plurals.word_count, it, it) }
+            binding.readToolbar.subtitle = if (label == null) title else {
+                getString(R.string.chapter_word_count_format, label, title)
+            }
+            binding.readWordCount.text = label
+            binding.readWordCount.isVisible = count != null
+            updateReaderOverlayVisibility()
         }
 
         observe(viewModel.chaptersTitles) { titles ->

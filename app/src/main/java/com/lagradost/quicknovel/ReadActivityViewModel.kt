@@ -71,6 +71,7 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.SubtitleHelper
+import com.lagradost.quicknovel.util.countWords
 import com.lagradost.quicknovel.util.translation.TranslationManager
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
 import io.noties.markwon.AbstractMarkwonPlugin
@@ -102,6 +103,7 @@ import java.io.InputStream
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -448,6 +450,8 @@ data class LiveChapterData(
     val rawText: String,
     //val ttsLines: List<TTSHelper.TTSLine>
 ) {
+    val wordCount: Int = countWords(rendered)
+
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
         ttsParseText(rendered.substring(0, rendered.length), index)
@@ -458,6 +462,8 @@ data class ChapterUpdate(
     val data: ArrayList<SpanDisplay>,
     val seekToDesired: Boolean
 )
+
+data class ReaderChapterInfo(val index: Int, val title: UiText, val wordCount: Int?)
 
 class ReadActivityViewModel : ViewModel() {
     lateinit var book: AbstractBook
@@ -514,9 +520,8 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<String>(null)
     val title: LiveData<String> = _title
 
-    private val _chapterTile: MutableLiveData<UiText> =
-        MutableLiveData<UiText>(null)
-    val chapterTile: LiveData<UiText> = _chapterTile
+    private val _chapterInfo = MutableLiveData<ReaderChapterInfo>()
+    val chapterInfo: LiveData<ReaderChapterInfo> = _chapterInfo
 
     private val _bottomVisibility: MutableLiveData<Boolean> =
         MutableLiveData<Boolean>(false)
@@ -575,10 +580,19 @@ class ReadActivityViewModel : ViewModel() {
 
     private val loading: HashSet<Int> = hashSetOf()
     private val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
+    private val chapterWordCounts = ConcurrentHashMap<Int, Int>()
     private val hasExpanded: HashSet<Int> = hashSetOf()
 
+    @Volatile
     var currentIndex = Int.MIN_VALUE
         private set
+
+    private fun publishChapterInfo() {
+        val index = currentIndex
+        val title = chaptersTitlesInternal.getOrNull(index) ?: return
+        val info = ReaderChapterInfo(index, title, chapterWordCounts[index])
+        _chapterInfo.postValue(info)
+    }
 
 
 
@@ -617,7 +631,9 @@ class ReadActivityViewModel : ViewModel() {
         hasExpanded.clear() // will unfuck the rest
         chapterMutex.withLock {
             chapterData.clear()
+            chapterWordCounts.clear()
         }
+        publishChapterInfo()
         _loadingStatus.postValue(Resource.Loading())
         loadIndividualChapter(currentIndex, reload = false, notify = true, postLoading = true)
         updateReadArea(seekToDesired = true)
@@ -742,7 +758,8 @@ class ReadActivityViewModel : ViewModel() {
                                 idx,
                                 0,
                                 chaptersTitlesInternal[idx],
-                                canReload
+                                canReload,
+                                chapterWordCounts[idx],
                             )
                         )
                     chapters.addAll(chapterIdxToSpanDisplay(idx))
@@ -755,7 +772,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload, chapterWordCounts[cIndex]))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -771,7 +788,7 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload, chapterWordCounts[cIndex]))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -812,9 +829,11 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             loading += index
+            chapterWordCounts.remove(index)
             chapterData[index] = Resource.Loading(null)
             if (notify) notifyChapterUpdate(index)
         }
+        if (index == currentIndex) publishChapterInfo()
 
         // we check for out of bounds and if it is out of bounds then try to expand it (Reddit next)
         // we lock it here to prevent duplicate loading when init
@@ -931,6 +950,7 @@ class ReadActivityViewModel : ViewModel() {
             // set the data and return
             chapterMutex.withLock {
                 chapterData[index] = data
+                if (data is Resource.Success) chapterWordCounts[index] = data.value.wordCount
             }
         } catch (t: Throwable) {
             // Tasks.await may throw
@@ -942,6 +962,7 @@ class ReadActivityViewModel : ViewModel() {
                 loading -= index
                 if (notify) notifyChapterUpdate(index)
             }
+            if (index == currentIndex) publishChapterInfo()
         }
     }
 
@@ -1646,12 +1667,9 @@ class ReadActivityViewModel : ViewModel() {
     private var lastChangeIndex: ScrollIndex? = null
     private var lastScrollMs: Long = 0
     private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
-        if (alsoTitle) {
-            _chapterTile.postValue(chaptersTitlesInternal[scrollIndex.index])
-        }
-
         desiredIndex = scrollIndex
         currentIndex = scrollIndex.index
+        if (alsoTitle) publishChapterInfo()
 
         // the majority of the time is spent on setKey, and because this is called from onscroll
         // this fixes lag
@@ -1716,7 +1734,7 @@ class ReadActivityViewModel : ViewModel() {
         // push the update
         updateReadArea(seekToDesired = true)
         // update the view
-        _chapterTile.postValue(chaptersTitlesInternal[index])
+        publishChapterInfo()
         //_loadingStatus.postValue(Resource.Success(true))
     }
 
@@ -1726,7 +1744,7 @@ class ReadActivityViewModel : ViewModel() {
         setKey(EPUB_CURRENT_POSITION, book.title(), realNewIndex)
         currentIndex = realNewIndex
         if (updateArea) updateReadArea()
-        _chapterTile.postValue(chaptersTitlesInternal[realNewIndex])
+        publishChapterInfo()
     }*/
 
 

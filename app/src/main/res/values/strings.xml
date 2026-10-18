@@ -326,6 +326,11 @@
 
     <string name="search_downloads">Search Downloads…</string>
     <string name="search_chapters">Search Chapters…</string>
+    <string name="chapter_word_count_format">%1$s · %2$s</string>
+    <plurals name="word_count">
+        <item quantity="one">%1$,d word</item>
+        <item quantity="other">%1$,d words</item>
+    </plurals>
     <string name="chapters">Chapters</string>
     <string name="paragraph_spacing">Paragraph spacing</string>
     <string name="more_spacing">More Spacing</string>

@@ -4,6 +4,9 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -785,7 +788,15 @@ class TextAdapter(
     private fun bindChapter(binding: ViewBinding, obj: ChapterStartSpanned) {
         if (binding !is SingleFinishedChapterBinding) return
 
-        binding.root.setText(obj.name)
+        val title = obj.name.asString(binding.root.context)
+        binding.root.text = obj.wordCount?.let { count ->
+            val label = binding.root.resources.getQuantityString(R.plurals.word_count, count, count)
+            SpannableStringBuilder(title).append('\n').apply {
+                val start = length
+                append(label)
+                setSpan(RelativeSizeSpan(0.75f), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        } ?: title
         binding.root.setOnClickListener {
             viewModel.switchVisibility()
         }
@@ -835,7 +846,7 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                    newItem.id == oldItem.id && oldItem.name == newItem.name && oldItem.wordCount == newItem.wordCount
                 }
 
                 is ChapterLoadSpanned -> {
