@@ -398,6 +398,20 @@
         <item name="tabMode">scrollable</item>-->
     </style>
 
+    <style name="Theme.Widget.Tabs.Pill" parent="Theme.Widget.Tabs">
+        <item name="android:background">@color/transparent</item>
+        <item name="android:paddingHorizontal">5dp</item>
+        <item name="tabGravity">start</item>
+        <item name="tabIndicator">@drawable/indicator_background</item>
+        <item name="tabIndicatorColor">?attr/white</item>
+        <item name="tabIndicatorGravity">center</item>
+        <item name="tabIndicatorHeight">30dp</item>
+        <item name="tabMode">scrollable</item>
+        <item name="tabSelectedTextColor">?attr/primaryBlackBackground</item>
+        <item name="tabTextAppearance">@style/TabNoCaps</item>
+        <item name="tabTextColor">?attr/textColor</item>
+    </style>
+
 
     <style name="LightMode">
         <item name="primaryGrayBackground">@color/lightPrimaryGrayBackground</item>

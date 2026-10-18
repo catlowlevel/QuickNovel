@@ -7,6 +7,7 @@ import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
+import android.text.style.BackgroundColorSpan
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -14,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.text.getSpans
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -30,6 +32,9 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ReadActivityViewModel
 import com.lagradost.quicknovel.SpanDisplay
 import com.lagradost.quicknovel.TTSHelper
+import com.lagradost.quicknovel.TTSWordOverride
+import com.lagradost.quicknovel.TTSReaderOverrideHighlights
+import com.lagradost.quicknovel.LiveChapterData
 import com.lagradost.quicknovel.TextSpan
 import com.lagradost.quicknovel.databinding.SingleFailedBinding
 import com.lagradost.quicknovel.databinding.SingleFinishedChapterBinding
@@ -270,6 +275,17 @@ class TextAdapter(
 ) :
     NoStateAdapter<SpanDisplay>(DiffCallback()) {
     private var currentTTSLine: TTSHelper.TTSLine? = null
+    private val overrideHighlights = TTSReaderOverrideHighlights()
+    private var ttsChapters: Map<Int, LiveChapterData> = emptyMap()
+
+    internal fun updatePronunciationRules(rules: List<TTSWordOverride>) {
+        overrideHighlights.updateRules(rules)
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
+
+    internal fun updateSpeechChapters(chapters: Map<Int, LiveChapterData>) {
+        ttsChapters = chapters
+    }
 
     fun changeHeight(height: Int): Boolean {
         if (config.toolbarHeight == height) return false
@@ -664,10 +680,22 @@ class TextAdapter(
             is SingleTextBinding -> {
                 binding.root.apply {
                     // this is set to fix the nonclick https://stackoverflow.com/questions/8641343/android-clickablespan-not-calling-onclick
-                    text = if (config.bionicReading) {
+                    val original = if (config.bionicReading) {
                         obj.bionicText
                     } else {
                         obj.text
+                    }
+                    val chapter = ttsChapters[obj.index]
+                    val matches = if (overrideHighlights.enabled && chapter != null) {
+                        overrideHighlights.forParagraph(chapter.ttsLines, obj.index, obj.start, obj.end)
+                    } else emptyList()
+                    text = if (matches.isEmpty()) original else SpannableString(original).apply {
+                        val color = ColorUtils.setAlphaComponent(config.textColor, 45)
+                        matches.forEach { match ->
+                            val start = match.start.coerceIn(0, length)
+                            val end = match.end.coerceIn(start, length)
+                            if (end > start) setSpan(BackgroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
                     }
 
                     setTextIsSelectable(false) // this is so retarded

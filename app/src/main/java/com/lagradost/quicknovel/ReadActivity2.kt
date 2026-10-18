@@ -1002,6 +1002,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTTSControls()
         }
 
+        observe(viewModel.pronunciationOverridesLive) { rules ->
+            textAdapter.updatePronunciationRules(rules)
+        }
+
         observe(viewModel.autoCenterTTSLive) { enabled ->
             updateTTSLine(viewModel.ttsLine.value)
             if (!enabled) ttsAutoCentering.cancel()
@@ -1413,6 +1417,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         //here inserted novel chapter text into recyclerview
         observe(viewModel.chapter) { chapter ->
             cachedChapter = chapter.data
+            textAdapter.updateSpeechChapters(chapter.ttsChapters)
 
             if (chapter.seekToDesired) {
                 textAdapter.submitIncomparableList(chapter.data) {
@@ -1866,6 +1871,20 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsAutoCenterTts.isChecked = viewModel.autoCenterTTS
                 readSettingsAutoCenterTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.autoCenterTTS = isChecked
+                }
+
+                readPronunciationOverrides.setOnClickListener {
+                    bottomSheetDialog.dismiss()
+                    TTSOverrideEditor(
+                        this@ReadActivity2,
+                        viewModel.pronunciationOverrideCollections(),
+                        viewModel::updatePronunciationOverrides,
+                        currentSentence = { viewModel.ttsLine.value },
+                        createPreviewOutput = {
+                            AndroidTTSPreviewOutput(this@ReadActivity2, viewModel.ttsSpeed, viewModel.ttsPitch)
+                        },
+                        pauseNarration = viewModel::pauseForTTSPreview,
+                    ).show()
                 }
 
                 readSettingsShowTime.isChecked = viewModel.showTime

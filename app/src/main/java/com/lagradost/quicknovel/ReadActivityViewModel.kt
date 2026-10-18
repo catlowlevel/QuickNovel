@@ -43,6 +43,7 @@ import com.lagradost.quicknovel.BaseApplication.Companion.getKeyClass
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKeyClass
+import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.BookDownloader2Helper.getQuickChapter
 import com.lagradost.quicknovel.CommonActivity.TAG
 import com.lagradost.quicknovel.CommonActivity.activity
@@ -473,7 +474,9 @@ data class LiveChapterData(
 
 data class ChapterUpdate(
     val data: ArrayList<SpanDisplay>,
-    val seekToDesired: Boolean
+    val seekToDesired: Boolean,
+    // Keep speech parsing lazy; rule highlighting and playback use the exact same sentences.
+    val ttsChapters: Map<Int, LiveChapterData> = emptyMap(),
 )
 
 data class ReaderChapterInfo(val index: Int, val title: UiText, val wordCount: Int?)
@@ -492,6 +495,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun resumedApp() {
+        if (::ttsBookId.isInitialized) refreshPronunciationOverrides()
         val leftAt = leftAppAt
         val resumeAt = desiredIndex
 
@@ -818,7 +822,11 @@ class ReadActivityViewModel : ViewModel() {
             }
         }
 
-        _chapterData.postValue(ChapterUpdate(data = chapters, seekToDesired = seekToDesired))
+        val ttsChapters = chapters.filterIsInstance<TextSpan>().map { it.index }.distinct().mapNotNull { index ->
+            val chapter = chapterData[index]
+            if (chapter is Resource.Success) index to chapter.value else null
+        }.toMap()
+        _chapterData.postValue(ChapterUpdate(data = chapters, seekToDesired = seekToDesired, ttsChapters = ttsChapters))
     }
 
     private fun notifyChapterUpdate(index: Int, seekToDesired: Boolean = false) {
@@ -1280,6 +1288,7 @@ class ReadActivityViewModel : ViewModel() {
     fun init(book: AbstractBook, context: Context) {
         this.book = book
         ttsBookId = book.playbackId()
+        refreshPronunciationOverrides()
         ttsBookmark = getKey<TTSPlaybackBookmark>(EPUB_TTS_POSITION, ttsBookId)
         _title.postValue(book.title())
 
@@ -1330,6 +1339,35 @@ class ReadActivityViewModel : ViewModel() {
 
     var ttsSession: TTSSession? = null
 
+    @Volatile
+    private var speechOverrides = TTSOverrideEngine(emptyList())
+    internal val pronunciationOverridesLive = MutableLiveData<List<TTSWordOverride>>(emptyList())
+
+    internal fun pronunciationOverrideCollections(): TTSOverrideCollections = TTSOverrideCollections(
+        global = getKey<TTSWordOverrides>(EPUB_TTS_WORD_OVERRIDES)?.rules.orEmpty(),
+        local = if (::ttsBookId.isInitialized) getKey<TTSWordOverrides>(ttsLocalOverrideKey(ttsBookId))?.rules.orEmpty()
+            else emptyList(),
+    )
+
+    internal fun updatePronunciationOverrides(collections: TTSOverrideCollections) {
+        if (!::ttsBookId.isInitialized) return
+        val appContext = context ?: return
+        // Persist both scopes together so a transfer cannot lose a rule between writes.
+        appContext.getSharedPrefs().edit()
+            .putString(EPUB_TTS_WORD_OVERRIDES, DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.global)))
+            .putString(ttsLocalOverrideKey(ttsBookId), DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.local)))
+            .apply()
+        val rules = collections.effectiveRules()
+        speechOverrides = TTSOverrideEngine(rules)
+        pronunciationOverridesLive.value = rules
+    }
+
+    private fun refreshPronunciationOverrides() {
+        val rules = pronunciationOverrideCollections().effectiveRules()
+        speechOverrides = TTSOverrideEngine(rules)
+        pronunciationOverridesLive.postValue(rules)
+    }
+
     private lateinit var ttsBookId: String
     @Volatile
     private var ttsBookmark: TTSPlaybackBookmark? = null
@@ -1339,6 +1377,7 @@ class ReadActivityViewModel : ViewModel() {
     private var ttsStartIndex: ScrollIndex? = null
 
     private fun initTTSSession(context: Context) {
+        refreshPronunciationOverrides()
         runOnMainThread {
             ttsSession = TTSSession(context, ::parseAction, ttsPlaybackControl)
         }
@@ -1380,6 +1419,13 @@ class ReadActivityViewModel : ViewModel() {
         if (!ttsSession.ttsInitialized()) return
         if (currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
             currentTTSStatus = TTSHelper.TTSStatus.IsPaused
+        }
+    }
+
+    internal fun pauseForTTSPreview() {
+        if (currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
+            currentTTSStatus = TTSHelper.TTSStatus.IsPaused
+            ttsSession?.interruptTTS()
         }
     }
 
@@ -1614,10 +1660,20 @@ class ReadActivityViewModel : ViewModel() {
                         }
                         if (currentTTSStatus != TTSHelper.TTSStatus.IsRunning) continue
 
+                        // Use one immutable rule snapshot for current and prefetched speech.
+                        // Highlighting, bookmarks and centering keep the original sentence.
+                        val overrides = speechOverrides
+                        val spokenLine = overrides.prepare(line)
+                        if (spokenLine == null) {
+                            ttsSession.interruptTTS()
+                            _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true))
+                            ttsInnerIndex++
+                            continue
+                        }
                         // wait for next line
                         val waitFor = ttsSession.speak(
-                            line,
-                            nextLine
+                            spokenLine,
+                            nextLine?.let(overrides::prepare)
                         ) {
                             currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip
                         }

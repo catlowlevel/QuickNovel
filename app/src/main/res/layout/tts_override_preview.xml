@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            style="@style/AppTextViewStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:labelFor="@id/input"
+            android:text="@string/tts_override_preview_input"
+            android:textColor="?attr/grayTextColor"
+            android:textSize="14sp" />
+
+        <androidx.appcompat.widget.AppCompatEditText
+            android:id="@+id/input"
+            style="@style/AppEditStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="64dp"
+            android:maxLines="5"
+            android:gravity="top|start"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:importantForAutofill="no"
+            android:textColor="?attr/textColor"
+            android:textSize="16sp"
+            android:hint="@string/tts_override_preview_hint" />
+
+        <TextView
+            android:id="@+id/match_count"
+            style="@style/AppTextViewStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="?attr/grayTextColor"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/AppTextViewStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:labelFor="@id/output"
+            android:text="@string/tts_override_preview_output"
+            android:textStyle="bold"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/output"
+            style="@style/AppTextViewStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:textSize="16sp"
+            android:textIsSelectable="true" />
+
+        <TextView
+            style="@style/AppTextViewStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/tts_override_preview_audio_hint"
+            android:textColor="?attr/grayTextColor"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

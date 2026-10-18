@@ -10,25 +10,14 @@
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/read_settings_tabs"
-        style="@style/Theme.Widget.Tabs"
+        style="@style/Theme.Widget.Tabs.Pill"
         android:layout_width="match_parent"
         android:layout_height="40dp"
         android:layout_gravity="bottom"
         android:layout_marginTop="10dp"
-        android:background="@color/transparent"
         android:descendantFocusability="blocksDescendants"
         android:focusable="false"
-        android:paddingHorizontal="5dp"
         app:layout_scrollFlags="noScroll"
-        app:tabGravity="start"
-        app:tabIndicator="@drawable/indicator_background"
-        app:tabIndicatorColor="?attr/white"
-        app:tabIndicatorGravity="center"
-        app:tabIndicatorHeight="30dp"
-        app:tabMode="scrollable"
-        app:tabSelectedTextColor="?attr/primaryBlackBackground"
-        app:tabTextAppearance="@style/TabNoCaps"
-        app:tabTextColor="?attr/textColor"
     />
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -192,6 +181,13 @@
                 android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
                 android:paddingBottom="20dp"
                 android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/read_pronunciation_overrides"
+                    style="@style/BlackButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/tts_pronunciation_overrides" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
                     android:id="@+id/read_settings_auto_center_tts"
