@@ -19,7 +19,7 @@ import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseOperation
 import com.lagradost.quicknovel.ui.common.updateItem
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
-import com.lagradost.quicknovel.util.AppUtils.openInBrowser
+import com.lagradost.quicknovel.util.AppUtils.openInAppBrowser
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -88,6 +88,7 @@ sealed class MainPageAction {
 
     data class Search(val data: String) : MainPageAction()
     object Expand : MainPageAction()
+    object Retry : MainPageAction()
     data class OpenInBrowser(val url: String) : MainPageAction()
     object Back : MainPageAction()
     object Dismiss : MainPageAction()
@@ -147,7 +148,7 @@ class MainPageViewModel2(
                     filterVisual = FilterQueryVisual(
                         category = mainCategory?.first, tag = tag?.first, orderBy = orderBy?.first
                     ), filter = filter.copy(
-                        loading = true,
+                        loading = true, error = null,
                     )
                 )
             }
@@ -197,7 +198,7 @@ class MainPageViewModel2(
     val searchQuery = SingleActiveQuery(Dispatchers.IO)
     suspend fun search(queryText: String) = searchQuery.launch {
         updateState {
-            copy(openQuery = true, query = query.copy(loading = true, items = persistentListOf()))
+            copy(openQuery = true, query = query.copy(query = queryText, loading = true, error = null, items = persistentListOf()))
         }
         api.searchResult(queryText).onFailure { error ->
             if (error is CancellationException) {
@@ -243,7 +244,14 @@ class MainPageViewModel2(
             }
 
             is MainPageAction.OpenInBrowser -> {
-                openInBrowser(action.url)
+                openInAppBrowser(action.url.ifBlank { api.mainUrl })
+            }
+
+            MainPageAction.Retry -> {
+                viewModelScope.launch {
+                    if (state.value.openQuery) search(state.value.query.query)
+                    else if (!state.value.filter.loading) expand()
+                }
             }
 
             is MainPageAction.Back -> {

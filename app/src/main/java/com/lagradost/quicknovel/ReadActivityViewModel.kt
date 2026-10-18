@@ -171,6 +171,8 @@ class PreferenceDelegateLiveView<T : Any>(
 }
 
 abstract class AbstractBook {
+    open fun chapterBrowserUrl(index: Int): String? = null
+
     open fun resolveUrl(url: String): String {
         return url
     }
@@ -229,6 +231,9 @@ abstract class AbstractBook {
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
+    override fun chapterBrowserUrl(index: Int): String? =
+        chapterBrowserUrlOrNull(data.data, index, ::resolveUrl)
+
     override fun playbackId(): String = ttsPlaybackBookKey(
         "quick", data.meta.apiName, data.meta.author.orEmpty(), data.meta.name
     )
@@ -514,6 +519,9 @@ class ReadActivityViewModel : ViewModel() {
     fun canReload(): Boolean {
         return book.canReload
     }
+
+    fun chapterBrowserUrl(index: Int = currentIndex): String? =
+        if (::book.isInitialized) book.chapterBrowserUrl(index) else null
 
 
     var mlSettings

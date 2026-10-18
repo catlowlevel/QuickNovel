@@ -13,7 +13,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.*
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Interceptor designed to bypass Cloudflare and Turnstile protections.
@@ -31,16 +30,13 @@ class CloudflareKiller : Interceptor {
         CookieManager.getInstance().removeAllCookies(null)
     }
     */
-    /** In-memory cache for cookies associated with each host*/
-    val savedCookies = ConcurrentHashMap<String, Map<String, String>>()
-
     override fun intercept(chain: Interceptor.Chain): Response = runBlocking {
         val request = chain.request()
         val url = request.url.toString()
         val host = request.url.host
 
         // If we already have cookies in CookieManager, use them
-        val initialCookies = savedCookies[host] ?: getAllCookiesForUrl(url)
+        val initialCookies = getAllCookiesForUrl(url)
         if (initialCookies.containsKey("cf_clearance")) {
             val response = proceed(request, initialCookies)
             if (!looksLikeCloudflareChallenge(response)) return@runBlocking response
@@ -48,7 +44,6 @@ class CloudflareKiller : Interceptor {
             // If the saved cookies still trigger a challenge, they are expired/invalid
             response.close()
             clearCookiesForHost(request.url)
-            savedCookies.remove(host)
         }
 
         // try the request normally. Only invoke WebView bypass when
@@ -59,14 +54,13 @@ class CloudflareKiller : Interceptor {
 
         // Bypass needed. Locked section to prevent multiple WebViews from opening
         mutex.withLock {
-            val currentCookies = savedCookies[host] ?: getAllCookiesForUrl(url)
+            val currentCookies = getAllCookiesForUrl(url)
             if (currentCookies.containsKey("cf_clearance")) {
                 val response = proceed(request, currentCookies)
                 if (!looksLikeCloudflareChallenge(response)) return@runBlocking response
 
                 response.close()
                 clearCookiesForHost(request.url)
-                savedCookies.remove(host)
             }
 
             Log.d(TAG, "Resolving Cloudflare for $host...")
@@ -194,7 +188,6 @@ class CloudflareKiller : Interceptor {
 
         val cookies = getAllCookiesForUrl(url)
         if (!cookies.containsKey("cf_clearance")) return null
-        savedCookies[host] = cookies
         return proceed(request, cookies)
     }
 }

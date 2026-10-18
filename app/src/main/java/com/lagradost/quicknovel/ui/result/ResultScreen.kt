@@ -111,7 +111,8 @@ import com.lagradost.quicknovel.ui.common.SearchResponseOperation
 import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
-import com.lagradost.quicknovel.util.AppUtils.openInBrowser
+import com.lagradost.quicknovel.util.AppUtils.openInAppBrowser
+import com.lagradost.quicknovel.ui.common.BrowserRecovery
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
@@ -143,7 +144,19 @@ object ResultScreen : Screen {
 fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
     Scaffold { innerPadding ->
         if (state.loadingResponse) {
-            LoadingScreen(Modifier.padding(innerPadding))
+            Box(Modifier.fillMaxSize().padding(innerPadding)) {
+                LoadingScreen(Modifier.fillMaxSize())
+                TextButton(onClick = { action(ResultPageAction.OpenInBrowser) },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) {
+                    Text(stringResource(R.string.browser_verify))
+                }
+            }
+        } else if (state.responseError != null && state.response == null) {
+            BrowserRecovery(
+                onRetry = { action(ResultPageAction.Retry) },
+                onOpenBrowser = { action(ResultPageAction.OpenInBrowser) },
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+            )
         } else {
             ResultScreenImpl(innerPadding, state, action)
         }
@@ -372,7 +385,7 @@ fun ResultScreenImpl(
                             stringResource(R.string.download_open_action),
                             R.drawable.ic_baseline_public_24,
                         ) {
-                            openInBrowser(response.url)
+                            openInAppBrowser(response.url)
                         }
                         TextIcon(
                             stringResource(R.string.result_share),

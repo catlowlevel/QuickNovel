@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.quicknovel.CommonActivity.activity
+import com.lagradost.quicknovel.BrowserActivity
 import com.lagradost.quicknovel.mvvm.logError
 import java.io.Reader
 
@@ -61,6 +62,10 @@ object AppUtils {
                     "<br />"
                 }
             }
+    }
+
+    fun openInAppBrowser(url: String) {
+        activity?.let { BrowserActivity.open(it, url) }
     }
 
     fun openInBrowser(url : String) {

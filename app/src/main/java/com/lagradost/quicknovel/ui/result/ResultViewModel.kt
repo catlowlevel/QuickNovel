@@ -269,9 +269,7 @@ class ResultViewModel : ViewModel() {
     fun openInBrowser() = viewModelScope.launchSafe {
         loadMutex.withLock {
             if (loadUrl.isBlank()) return@launchSafe
-            val i = Intent(Intent.ACTION_VIEW)
-            i.data = loadUrl.toUri()
-            activity?.startActivity(i)
+            com.lagradost.quicknovel.util.AppUtils.openInAppBrowser(loadUrl)
         }
     }
 

@@ -83,7 +83,7 @@ class WebViewResolver(
             return webViewUserAgent ?: context?.let { ctx ->
                 runBlocking {
                     mainWork {
-                        WebView(ctx).settings.userAgentString.also { userAgent ->
+                        WebSettings.getDefaultUserAgent(ctx).also { userAgent ->
                             webViewUserAgent = userAgent
                         }
                     }
@@ -190,6 +190,7 @@ class WebViewResolver(
                     if (userAgent != null) {
                         settings.userAgentString = userAgent
                     }
+                    WebViewBrowserCookies.recordUserAgent(url, settings.userAgentString)
                     // Blocks unnecessary images, remove if captcha fucks.
                     //settings.blockNetworkImage = true
 
@@ -209,6 +210,14 @@ class WebViewResolver(
                 webView?.addJavascriptInterface(MyJavaScriptInterface(), "NativeAndroid")
 
                 webView?.webViewClient = object : WebViewClient() {
+                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                        stabilityJob?.cancel()
+                        webView = null
+                        view.destroy()
+                        deferredResponse.complete(fixedRequest to extraRequestList)
+                        return true
+                    }
+
                     /**
                      * Called for every sub-resource request (scripts, images, AJAX).
                      * We use this to block garbage, capture headers, and share the OkHttp state.

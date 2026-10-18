@@ -55,6 +55,9 @@ import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
+import com.lagradost.quicknovel.network.BrowserSessionInterceptor
+import com.lagradost.quicknovel.network.BrowserRequestOriginInterceptor
+import com.lagradost.quicknovel.network.WebViewBrowserCookies
 import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
@@ -127,6 +130,8 @@ class MainActivity : AppCompatActivity() {
                 .newBuilder()
                 .ignoreAllSSLErrors()
                 .readTimeout(30L, TimeUnit.SECONDS)
+                .addInterceptor(BrowserRequestOriginInterceptor())
+                .addNetworkInterceptor(BrowserSessionInterceptor(WebViewBrowserCookies))
                 .build(),
             responseParser = object : ResponseParser {
                 val mapper: ObjectMapper = jacksonObjectMapper().configure(

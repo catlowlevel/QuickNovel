@@ -944,6 +944,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             setNavigationOnClickListener {
                 this@ReadActivity2.onBackPressed()
             }
+            inflateMenu(R.menu.reader_actions)
+            menu.findItem(R.id.reader_open_browser).icon?.setTint(colorFromAttribute(R.attr.iconColor))
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.reader_open_browser -> {
+                        viewModel.chapterBrowserUrl()?.let { BrowserActivity.open(this@ReadActivity2, it) }
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
 
         //updateTimeText()
@@ -1128,6 +1139,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         observe(viewModel.chapterInfo) { chapter ->
+            binding.readToolbar.menu.findItem(R.id.reader_open_browser).isVisible =
+                viewModel.chapterBrowserUrl(chapter.index) != null
             val title = chapter.title.asString(this)
             val count = chapter.wordCount
             val label = count?.let { resources.getQuantityString(R.plurals.word_count, it, it) }

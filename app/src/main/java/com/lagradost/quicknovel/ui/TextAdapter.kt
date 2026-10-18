@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
 import com.lagradost.quicknovel.ChapterLoadSpanned
+import com.lagradost.quicknovel.BrowserActivity
 import com.lagradost.quicknovel.ChapterOverscrollSpanned
 import com.lagradost.quicknovel.ChapterStartSpanned
 import com.lagradost.quicknovel.CommonActivity.showToast
@@ -626,12 +627,12 @@ class TextAdapter(
     private fun bindFailed(binding: ViewBinding, obj: FailedSpanned) {
         if (binding !is SingleFailedBinding) return
 
-        binding.root.setText(obj.reason)
+        binding.reason.setText(obj.reason)
 
-        binding.root.setOnClickListener {
+        val retry = View.OnClickListener {
             if (obj.cause == null) {
                 viewModel.switchVisibility()
-                return@setOnClickListener
+                return@OnClickListener
             }
 
             showToast(txt(R.string.reload_chapter_format, (obj.index + 1).toString()))
@@ -640,6 +641,14 @@ class TextAdapter(
             } else {
                 viewModel.reloadChapter(obj.index)
             }
+        }
+        binding.root.setOnClickListener(retry)
+        binding.retry.isVisible = obj.cause != null
+        binding.retry.setOnClickListener(retry)
+        val url = viewModel.chapterBrowserUrl(obj.index)
+        binding.openBrowser.isVisible = url != null
+        binding.openBrowser.setOnClickListener {
+            url?.let { BrowserActivity.open(binding.root.context, it) }
         }
     }
 
@@ -806,8 +815,10 @@ class TextAdapter(
             }
 
             is SingleFailedBinding -> {
-                config.setArgs(binding.root, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
-                binding.root.minHeight = config.toolbarHeight
+                config.setArgs(binding.reason, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                config.setArgs(binding.retry, CONFIG_COLOR or CONFIG_FONT)
+                config.setArgs(binding.openBrowser, CONFIG_COLOR or CONFIG_FONT)
+                binding.root.minimumHeight = config.toolbarHeight
             }
 
             is SingleFinishedChapterBinding -> {

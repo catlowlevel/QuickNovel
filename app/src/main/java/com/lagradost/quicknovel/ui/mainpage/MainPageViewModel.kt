@@ -64,11 +64,9 @@ class MainPageViewModel : ViewModel() {
 
     fun openInBrowser() {
         try {
-            val url = currentUrl.value
+            val url = currentUrl.value ?: if (::repo.isInitialized) api.mainUrl else null
             if (url != null) {
-                val i = Intent(Intent.ACTION_VIEW)
-                i.data = Uri.parse(url)
-                activity?.startActivity(i)
+                com.lagradost.quicknovel.util.AppUtils.openInAppBrowser(url)
             }
         } catch (_: Throwable) {
 

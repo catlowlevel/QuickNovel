@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.ui.mainpage
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import com.lagradost.quicknovel.ui.common.BrowserRecovery
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -145,20 +147,25 @@ fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
-        SearchList(
-            lazyGridState = listState,
-            isRow = searchIsRowState,
-            items = if (state.openQuery) state.query.items else state.filter.items,
-            modifier = Modifier
-                .fillMaxSize()
-                // This fixes the double padding from the bottom nav bar
-                .padding(
-                    start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
-                    end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                    top = innerPadding.calculateTopPadding()
-                ),
-            searchAction = searchAction,
-        )
+        Column(Modifier.fillMaxSize().padding(
+            start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+            end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+            top = innerPadding.calculateTopPadding(),
+        )) {
+            val error = if (state.openQuery) state.query.error else state.filter.error
+            if (error != null) BrowserRecovery(
+                onRetry = { action(MainPageAction.Retry) },
+                onOpenBrowser = { action(MainPageAction.OpenInBrowser(state.filter.url)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SearchList(
+                lazyGridState = listState,
+                isRow = searchIsRowState,
+                items = if (state.openQuery) state.query.items else state.filter.items,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                searchAction = searchAction,
+            )
+        }
 
         LaunchedEffect(shouldLoadMore.value) {
             if (shouldLoadMore.value && state.filter.error == null && !state.filter.loading) {
@@ -298,7 +305,8 @@ fun MainPageSearchBar(
                             .padding(5.dp),
                         color = MaterialTheme.colorScheme.onBackground, strokeWidth = 3.0.dp
                     )
-                } else if (!openQuery) {
+                }
+                if (!openQuery) {
                     IconButton(onClick = {
                         action(MainPageAction.OpenInBrowser(url))
                     }) {

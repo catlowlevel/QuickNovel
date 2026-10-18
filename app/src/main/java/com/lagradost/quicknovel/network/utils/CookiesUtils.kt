@@ -25,19 +25,11 @@ object CookiesUtils {
         return this.entries.joinToString("; ") { "${it.key}=${it.value}" }
     }
 
-    /**
-     * Retrieves cookies from the system's CookieManager for both the root domain
-     * and the specific subdomain to ensure a complete session
-     */
+    /** CookieManager includes applicable domain cookies and filters by path and secure scheme. */
     fun getAllCookiesForUrl(url: String): Map<String, String> {
         val manager = CookieManager.getInstance()
-        val uri = url.toHttpUrlOrNull() ?: return emptyMap()
-
-        val rootDomain = uri.topPrivateDomain() ?: uri.host
-        val rootCookies = parseCookieMap(manager.getCookie("${uri.scheme}://$rootDomain"))
-        val subCookies = parseCookieMap(manager.getCookie(url))
-
-        return (rootCookies + subCookies).filter { it.value.isNotBlank() }
+        if (url.toHttpUrlOrNull() == null) return emptyMap()
+        return parseCookieMap(manager.getCookie(url))
     }
 
 
@@ -48,22 +40,11 @@ object CookiesUtils {
         val host = url.host
         val rootDomain = url.topPrivateDomain() ?: host
 
-        val keys = mutableSetOf<String>()
-        val rawCookies = (manager.getCookie(uri) ?: "") + "; " + (manager.getCookie("${url.scheme}://$rootDomain") ?: "")
-
-        rawCookies.split(";").forEach {
-            val name = it.split("=").firstOrNull()?.trim()
-            if (!name.isNullOrBlank()) keys.add(name)
-        }
-
-        keys.forEach { name ->
-            val deleteSuffix = "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/"
-
-            manager.setCookie(uri, "$name$deleteSuffix")
-            manager.setCookie(host, "$name$deleteSuffix")
-            manager.setCookie(rootDomain, "$name$deleteSuffix")
-            manager.setCookie(".$rootDomain", "$name$deleteSuffix")
-        }
+        // Expired clearance must not erase unrelated login or provider preference cookies.
+        val deletion = "cf_clearance=; Max-Age=0; Path=/"
+        manager.setCookie(uri, deletion)
+        manager.setCookie(uri, "$deletion; Domain=$host")
+        manager.setCookie(uri, "$deletion; Domain=$rootDomain")
         manager.flush()
     }
 }

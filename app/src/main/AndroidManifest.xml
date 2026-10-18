@@ -13,6 +13,16 @@
 
     <queries>
         <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
             <!-- Allow TTS usage on A11+-->
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
@@ -247,6 +257,8 @@
                     android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".BrowserActivity" android:exported="false" />
 
         <activity
             android:name=".ReadActivity2"

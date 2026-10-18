@@ -89,6 +89,8 @@ sealed class ResultPageAction {
     object OpenBookmark : ResultPageAction()
     object DismissDialog : ResultPageAction()
     object ExpandReviews : ResultPageAction()
+    object Retry : ResultPageAction()
+    object OpenInBrowser : ResultPageAction()
     data class ResultAction(val action: SearchResponseAction) : ResultPageAction()
     data class ChapterAction(
         val response: ImmutableSearchResponse,
@@ -166,8 +168,12 @@ class ResultViewModel2(
         }
     }
 
-    init {
-        viewModelScope.launch {
+    private var loadJob: kotlinx.coroutines.Job? = null
+
+    private fun loadResponse() {
+        if (loadJob?.isActive == true) return
+        updateState { copy(loadingResponse = true, responseError = null) }
+        loadJob = viewModelScope.launch {
             api.loadResult(url).onFailure { error ->
                 updateState { copy(responseError = error, loadingResponse = false) }
             }.onSuccess { value ->
@@ -194,6 +200,10 @@ class ResultViewModel2(
                 }
             }
         }
+    }
+
+    init {
+        loadResponse()
 
         BookDownloader2.downloadProgressChanged += this::onDownloadStateChange
         BookDownloader2.downloadRemoved += this::onDownloadRemoved
@@ -268,6 +278,8 @@ class ResultViewModel2(
 
     override fun onAction(action: ResultPageAction) {
         when (action) {
+            ResultPageAction.Retry -> loadResponse()
+            ResultPageAction.OpenInBrowser -> com.lagradost.quicknovel.util.AppUtils.openInAppBrowser(url)
             is ResultPageAction.ResultAction -> {
                 resultAction(action.action)
             }
