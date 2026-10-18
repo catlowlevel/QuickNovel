@@ -54,6 +54,7 @@ import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.filterChapterTitles
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -90,6 +91,15 @@ class ResultViewModel : ViewModel() {
 
     }
 
+    var chapterQuery: String = ""
+        private set
+
+    fun searchChapters(query: String) {
+        if (chapterQuery == query) return
+        chapterQuery = query
+        reorderChapters()
+    }
+
     fun reorderChapters() {
         when (val response = this.loadResponse.value) {
             is Resource.Success -> {
@@ -119,13 +129,14 @@ class ResultViewModel : ViewModel() {
         val sort = sortChapterBy
         val state = downloadState.value
 
-        return list.filter { chapter ->
+        val eligible = list.filter { chapter ->
             val read = hasReadChapter(chapter)
 
             (filterUnread && !read) || (filterRead && read) ||
                     (filterDownloaded && (state != null && state.progress > (chapterIndex(chapter)
                         ?: Int.MAX_VALUE)))
-        }.sortedBy { chapter ->
+        }
+        return filterChapterTitles(eligible, chapterQuery) { it.name }.sortedBy { chapter ->
             return@sortedBy when (sort) {
                 CHAPTER_SORT -> {
                     chapterIndex(chapter)?.toLong()

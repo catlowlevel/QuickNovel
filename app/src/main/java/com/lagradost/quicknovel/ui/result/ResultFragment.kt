@@ -9,10 +9,14 @@ import android.os.Bundle
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.SearchView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
+import androidx.core.view.marginBottom
+import androidx.core.view.marginTop
 import androidx.core.view.postDelayed
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doOnTextChanged
@@ -129,8 +133,12 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             )
         }
         val parameter = binding.chapterList.layoutParams
-        parameter.height =
-            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop
+        parameter.height = maxOf(
+            0,
+            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height -
+                    binding.resultScrollPadding.paddingTop - binding.chapterSearch.height -
+                    binding.chapterSearch.marginTop - binding.chapterSearch.marginBottom
+        )
 
         binding.chapterList.layoutParams = parameter
         //ViewGroup.LayoutParams(binding.chapterList.layoutParams.width,displayMetrics.heightPixels)
@@ -637,6 +645,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 chaptersFab.isVisible = 3 == pos
                 resultRelatedholder.isVisible = 2 == pos
                 resultChapterholder.isVisible = 3 == pos
+                if (pos != 3) chapterSearch.clearFocus()
             }
         }
 
@@ -658,6 +667,25 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
         observe(viewModel.loadResponse, ::newState)
 
+        binding.chapterSearch.apply {
+            findViewById<TextView>(androidx.appcompat.R.id.search_src_text).textSize = 14f
+            setQuery(viewModel.chapterQuery, false)
+            clearFocus()
+            doOnNextLayout { updateScrollHeight() }
+            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String): Boolean {
+                    viewModel.searchChapters(query)
+                    clearFocus()
+                    return true
+                }
+
+                override fun onQueryTextChange(newText: String): Boolean {
+                    viewModel.searchChapters(newText)
+                    return true
+                }
+            })
+        }
+
         binding.chapterList.apply {
             setRecycledViewPool(ChapterAdapter.sharedPool)
             val mainPageAdapter = ChapterAdapter(viewModel)
@@ -665,13 +693,20 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             setHasFixedSize(true)
         }
 
+        var displayedQuery = viewModel.chapterQuery
         observeNullable(viewModel.chapters) { chapters ->
+            binding.chapterSearchEmpty.isVisible = chapters?.isEmpty() == true
+            binding.chapterList.isVisible = chapters?.isEmpty() != true
+            val onCommit = if (displayedQuery != viewModel.chapterQuery) {
+                Runnable { binding.chapterList.scrollToPosition(0) }
+            } else null
+            displayedQuery = viewModel.chapterQuery
             (binding.chapterList.adapter as? ChapterAdapter)?.let { adapter ->
                 if (chapters == null || chapters.size > 300) {
                     // if we have too many it takes a long time to diff
-                    adapter.submitIncomparableList(chapters)
+                    adapter.submitIncomparableList(chapters, onCommit)
                 } else {
-                    adapter.submitList(chapters)
+                    adapter.submitList(chapters, onCommit)
                 }
             }
         }

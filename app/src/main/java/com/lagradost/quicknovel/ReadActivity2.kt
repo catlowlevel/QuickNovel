@@ -23,9 +23,11 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.core.animation.doOnEnd
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -45,6 +47,7 @@ import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
+import com.lagradost.quicknovel.databinding.ChapterPickerHeaderBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
@@ -71,6 +74,7 @@ import com.lagradost.quicknovel.util.UIHelper.getStatusBarHeight
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.divCeil
+import com.lagradost.quicknovel.util.filterChapterTitles
 import com.lagradost.quicknovel.util.toPx
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
@@ -896,35 +900,73 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.chaptersTitles) { titles ->
             binding.readActionChapters.setOnClickListener {
                 val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
-                //builderSingle.setIcon(R.drawable.ic_launcher)
+                val header = ChapterPickerHeaderBinding.inflate(layoutInflater)
+                header.chapterSearch.findViewById<TextView>(androidx.appcompat.R.id.search_src_text).textSize = 14f
+                builderSingle.setCustomTitle(header.root)
                 val currentChapter = viewModel.desiredIndex?.index
                 // cant be too safe here
                 val validChapter =
                     currentChapter != null && currentChapter >= 0 && currentChapter < titles.size
                 if (validChapter) {
-                    builderSingle.setTitle(titles[currentChapter].asString(this)) //  "Select Chapter"
+                    header.chapterPickerTitle.text = titles[currentChapter].asString(this)
                 } else {
-                    builderSingle.setTitle(R.string.select_chapter)
+                    header.chapterPickerTitle.setText(R.string.select_chapter)
                 }
 
+                val chapterTitles = titles.map { it.asString(this) }.withIndex().toList()
+                var visibleChapters = chapterTitles
                 val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
-
-                arrayAdapter.addAll(titles.map { it.asString(this) })
+                arrayAdapter.addAll(visibleChapters.map { it.value })
 
                 builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
 
                 builderSingle.setAdapter(arrayAdapter) { _, which ->
-                    viewModel.seekToChapter(which)
+                    visibleChapters.getOrNull(which)?.let { viewModel.seekToChapter(it.index) }
                 }
 
                 val dialog = builderSingle.create()
                 dialog.show()
+                // AlertDialog does not detect text editors placed in a custom title.
+                dialog.window?.apply {
+                    clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                    setSoftInputMode(
+                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                    )
+                }
 
                 dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-                if (validChapter) {
-                    dialog.listView.setSelection(currentChapter)
-                    dialog.listView.setItemChecked(currentChapter, true)
+
+                fun filterChapters(query: String) {
+                    visibleChapters = filterChapterTitles(chapterTitles, query) { it.value }
+                    arrayAdapter.setNotifyOnChange(false)
+                    arrayAdapter.clear()
+                    arrayAdapter.addAll(visibleChapters.map { it.value })
+                    arrayAdapter.notifyDataSetChanged()
+                    header.chapterSearchEmpty.isVisible = visibleChapters.isEmpty()
+                    dialog.listView.clearChoices()
+                    val selectedPosition = visibleChapters.indexOfFirst { it.index == currentChapter }
+                    if (selectedPosition >= 0) dialog.listView.setItemChecked(selectedPosition, true)
+                    dialog.listView.setSelection(
+                        if (query.isBlank() && selectedPosition >= 0) selectedPosition else 0
+                    )
                 }
+
+                header.chapterSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                    override fun onQueryTextSubmit(query: String): Boolean {
+                        filterChapters(query)
+                        header.chapterSearch.clearFocus()
+                        return true
+                    }
+
+                    override fun onQueryTextChange(newText: String): Boolean {
+                        filterChapters(newText)
+                        return true
+                    }
+                })
+                filterChapters("")
+                header.root.requestFocus()
+                dialog.setOnDismissListener { header.chapterSearch.clearFocus() }
             }
         }
 
