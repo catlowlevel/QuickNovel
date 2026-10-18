@@ -1006,6 +1006,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             textAdapter.updatePronunciationRules(rules)
         }
 
+        observe(viewModel.blurUpcomingTTSLive) { enabled ->
+            textAdapter.updateUpcomingBlur(enabled, viewModel.currentTTSStatus)
+        }
+
         observe(viewModel.autoCenterTTSLive) { enabled ->
             updateTTSLine(viewModel.ttsLine.value)
             if (!enabled) ttsAutoCentering.cancel()
@@ -1220,6 +1224,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }*/
 
         observe(viewModel.ttsStatus) { status ->
+            textAdapter.updateUpcomingBlur(viewModel.blurUpcomingTTS, status)
             updateTTSProgress()
             updateTTSControls()
             if (status != TTSHelper.TTSStatus.IsRunning) ttsAutoCentering.cancel()
@@ -1871,6 +1876,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsAutoCenterTts.isChecked = viewModel.autoCenterTTS
                 readSettingsAutoCenterTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.autoCenterTTS = isChecked
+                }
+
+                readSettingsBlurUpcomingTts.isChecked = viewModel.blurUpcomingTTS
+                readSettingsBlurUpcomingTts.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.blurUpcomingTTS = isChecked
                 }
 
                 readPronunciationOverrides.setOnClickListener {

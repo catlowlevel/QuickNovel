@@ -98,6 +98,7 @@
     <string name="tts_chapter_progress">Narration: chapter %1$d, sentence %2$d of %3$d</string>
     <string name="tts_floating_controls">Floating playback controls</string>
     <string name="tts_auto_center">Automatically center narration</string>
+    <string name="tts_blur_upcoming">Blur upcoming sentences</string>
     <string name="tts_pronunciation_overrides">Pronunciation overrides</string>
     <string name="tts_overrides_description">Local rules apply to this book; global rules apply to every book.</string>
     <string name="tts_override_local">Local</string>

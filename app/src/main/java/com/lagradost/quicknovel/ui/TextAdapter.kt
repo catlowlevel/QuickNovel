@@ -2,15 +2,18 @@ package com.lagradost.quicknovel.ui
 
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.BlurMaskFilter
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
 import android.text.style.BackgroundColorSpan
+import android.text.style.MaskFilterSpan
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -34,6 +37,7 @@ import com.lagradost.quicknovel.SpanDisplay
 import com.lagradost.quicknovel.TTSHelper
 import com.lagradost.quicknovel.TTSWordOverride
 import com.lagradost.quicknovel.TTSReaderOverrideHighlights
+import com.lagradost.quicknovel.upcomingTTSBlurRange
 import com.lagradost.quicknovel.LiveChapterData
 import com.lagradost.quicknovel.TextSpan
 import com.lagradost.quicknovel.databinding.SingleFailedBinding
@@ -275,8 +279,19 @@ class TextAdapter(
 ) :
     NoStateAdapter<SpanDisplay>(DiffCallback()) {
     private var currentTTSLine: TTSHelper.TTSLine? = null
+    private var blurUpcomingEnabled = viewModel.blurUpcomingTTS
+    private var blurPlaybackStatus = viewModel.currentTTSStatus
     private val overrideHighlights = TTSReaderOverrideHighlights()
     private var ttsChapters: Map<Int, LiveChapterData> = emptyMap()
+
+    internal fun updateUpcomingBlur(enabled: Boolean, status: TTSHelper.TTSStatus) {
+        if (blurUpcomingEnabled == enabled && blurPlaybackStatus == status) return
+        val wasActive = blurUpcomingEnabled && blurPlaybackStatus != TTSHelper.TTSStatus.IsStopped
+        blurUpcomingEnabled = enabled
+        blurPlaybackStatus = status
+        val active = enabled && status != TTSHelper.TTSStatus.IsStopped
+        if ((wasActive || active) && itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
 
     internal fun updatePronunciationRules(rules: List<TTSWordOverride>) {
         overrideHighlights.updateRules(rules)
@@ -355,9 +370,14 @@ class TextAdapter(
         return ViewHolderState(binding)
     }
 
-    /** updates new onbind calls, but not current */
+    /** Update the narration target and invalidate cached blur while the session is active. */
     fun updateTTSLine(line: TTSHelper.TTSLine?) {
+        val changed = currentTTSLine != line
         currentTTSLine = line
+        // Invalidate cached rows too, so scrolling back after a skip cannot reveal a stale blur.
+        if (changed && blurUpcomingEnabled && blurPlaybackStatus != TTSHelper.TTSStatus.IsStopped && itemCount > 0) {
+            notifyItemRangeChanged(0, itemCount)
+        }
     }
 
     /*fun getViewOffset(scrollVisibility: ScrollVisibilityItem, char: Int): Int? {
@@ -689,12 +709,30 @@ class TextAdapter(
                     val matches = if (overrideHighlights.enabled && chapter != null) {
                         overrideHighlights.forParagraph(chapter.ttsLines, obj.index, obj.start, obj.end)
                     } else emptyList()
-                    text = if (matches.isEmpty()) original else SpannableString(original).apply {
+                    val blur = upcomingTTSBlurRange(
+                        blurUpcomingEnabled, blurPlaybackStatus, currentTTSLine, obj.index, obj.start, obj.end
+                    )
+                    // Mask filters require software drawing. Limit it to affected rows, and reset
+                    // the layer when a recycled/rebound row becomes readable again.
+                    val layer = if (blur == null) View.LAYER_TYPE_NONE else View.LAYER_TYPE_SOFTWARE
+                    if (layerType != layer) setLayerType(layer, null)
+                    text = if (matches.isEmpty() && blur == null) original else SpannableString(original).apply {
                         val color = ColorUtils.setAlphaComponent(config.textColor, 45)
                         matches.forEach { match ->
                             val start = match.start.coerceIn(0, length)
                             val end = match.end.coerceIn(start, length)
                             if (end > start) setSpan(BackgroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
+                        if (blur != null) {
+                            val start = blur.start.coerceIn(0, length)
+                            val end = blur.end.coerceIn(start, length)
+                            if (end > start) {
+                                val fontPixels = TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_SP, config.textSize.toFloat(), resources.displayMetrics
+                                )
+                                setSpan(MaskFilterSpan(BlurMaskFilter(fontPixels * 0.60f, BlurMaskFilter.Blur.NORMAL)),
+                                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            }
                         }
                     }
 

@@ -2023,6 +2023,11 @@ class ReadActivityViewModel : ViewModel() {
         EPUB_TTS_AUTO_CENTER, false, Boolean::class, autoCenterTTSLive
     )
 
+    val blurUpcomingTTSLive = MutableLiveData<Boolean>()
+    var blurUpcomingTTS by PreferenceDelegateLiveView(
+        EPUB_TTS_BLUR_UPCOMING, false, Boolean::class, blurUpcomingTTSLive
+    )
+
     val paddingHorizontalLive: MutableLiveData<Int> = MutableLiveData(null)
     var paddingHorizontal by PreferenceDelegateLiveView(
         EPUB_TEXT_PADDING, DEF_HORIZONTAL_PAD, Int::class, paddingHorizontalLive
