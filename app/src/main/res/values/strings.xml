@@ -95,6 +95,7 @@
     <string name="read_action_tts">Text To Speech</string>
     <string name="tts_resume_playback">Resume narration</string>
     <string name="tts_read_from_here">Read from here</string>
+    <string name="tts_chapter_progress">Narration: chapter %1$d, sentence %2$d of %3$d</string>
     <string name="read_action_screen_rotation">Screen Rotation</string>
 
     <string name="grid_view">Grid</string>

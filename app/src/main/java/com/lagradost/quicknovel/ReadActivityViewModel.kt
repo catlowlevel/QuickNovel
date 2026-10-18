@@ -547,6 +547,8 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<TTSHelper.TTSLine?>(null)
     val ttsLine: LiveData<TTSHelper.TTSLine?> = _ttsLine
 
+    private val _ttsProgress = MutableLiveData<TTSPlaybackProgress?>(null)
+    val ttsProgress: LiveData<TTSPlaybackProgress?> = _ttsProgress
 
     /*  private val _orientation: MutableLiveData<OrientationType> =
           MutableLiveData<OrientationType>(null)
@@ -1345,7 +1347,10 @@ class ReadActivityViewModel : ViewModel() {
         set(value) = synchronized(this@ReadActivityViewModel) {
             val previous = _currentTTSStatus
             _currentTTSStatus = value
-            if (value == TTSHelper.TTSStatus.IsStopped) pendingTTSSkip.set(0)
+            if (value == TTSHelper.TTSStatus.IsStopped) {
+                pendingTTSSkip.set(0)
+                _ttsProgress.postValue(null)
+            }
             playDummySound()
             _ttsStatus.postValue(value)
             if (previous == TTSHelper.TTSStatus.IsStopped && value == TTSHelper.TTSStatus.IsRunning) {
@@ -1504,6 +1509,8 @@ class ReadActivityViewModel : ViewModel() {
 
                 while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
                     val lines = awaitLines(index) ?: break
+                    // Empty chapters have no narration progress; don't retain the previous chapter.
+                    if (lines.isEmpty()) _ttsProgress.postValue(null)
 
                     fun notify() {
                         TTSNotifications.notify(
@@ -1572,6 +1579,7 @@ class ReadActivityViewModel : ViewModel() {
 
                         // post visual
                         _ttsLine.postValue(line)
+                        _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex))
 
                         // A paused session can move its highlight without ever queueing speech.
                         var wasPaused = false
@@ -1623,6 +1631,7 @@ class ReadActivityViewModel : ViewModel() {
                         if (interrupted || currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0) {
                             continue
                         }
+                        _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true))
                         ttsInnerIndex += 1
                     }
                     if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
@@ -1657,6 +1666,7 @@ class ReadActivityViewModel : ViewModel() {
             ttsSession.interruptTTS()
             ttsSession.unregister()
             _ttsLine.postValue(null)
+            _ttsProgress.postValue(null)
             ttsTimeRemaining.postValue(null)
         }
     }

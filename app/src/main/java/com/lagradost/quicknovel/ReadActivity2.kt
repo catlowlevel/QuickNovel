@@ -31,6 +31,7 @@ import androidx.appcompat.widget.SearchView
 import androidx.core.animation.doOnEnd
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -116,9 +117,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             v.translationY = 0f
             ObjectAnimator.ofFloat(v, "translationY", v.height.toFloat()).apply {
                 duration = 200
+                addUpdateListener { updateTTSProgressPosition() }
                 start()
             }.doOnEnd {
                 v.isVisible = false
+                updateTTSProgressPosition()
             }
         }
 
@@ -151,6 +154,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             v.translationY = v.height.toFloat()
             ObjectAnimator.ofFloat(v, "translationY", 0f).apply {
                 duration = 200
+                addUpdateListener { updateTTSProgressPosition() }
                 start()
             }
         }
@@ -366,7 +370,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val (_, bottomY) = outLocation
         return bottomY - max(
             binding.realText.paddingBottom,
-            if (viewModel.showTime || viewModel.showBattery) binding.readOverlay.height else 0
+            if (binding.readTtsProgress.isVisible) {
+                (-binding.readTtsProgress.translationY).roundToInt() + binding.readTtsProgress.height
+            } else if (binding.readOverlay.isVisible) binding.readOverlay.height else 0
         )
     }
 
@@ -570,11 +576,39 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         config.setArgs(binding.readTimeClock, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readWordCount, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readLoadingBar)
+        binding.readTtsProgress.progressTintList = ColorStateList.valueOf(config.textColor)
+        binding.readTtsProgress.progressBackgroundTintList = ColorStateList.valueOf(
+            ColorUtils.setAlphaComponent(config.textColor, Color.alpha(config.textColor) / 4)
+        )
     }
 
     private fun updateReaderOverlayVisibility() {
         binding.readOverlay.isVisible = binding.readBattery.isVisible ||
                 binding.readTimeClock.isVisible || binding.readWordCount.isVisible
+        updateTTSProgressPosition()
+    }
+
+    private fun updateTTSProgress() {
+        val progress = viewModel.ttsProgress.value
+        binding.readTtsProgress.isVisible = progress != null &&
+                viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped
+        if (progress != null) {
+            binding.readTtsProgress.max = TTSPlaybackProgress.MAX
+            binding.readTtsProgress.progress = progress.progress
+            binding.readTtsProgress.contentDescription = getString(
+                R.string.tts_chapter_progress,
+                progress.chapter + 1, progress.sentenceIndex + 1, progress.sentenceCount
+            )
+        }
+        updateTTSProgressPosition()
+    }
+
+    private fun updateTTSProgressPosition() {
+        // Keep the bar above both the persistent status strip and the sliding controls.
+        val footerHeight = if (binding.readOverlay.isVisible) binding.readOverlay.height else 0
+        val controls = binding.readerBottomViewHolder
+        val controlsHeight = if (controls.isVisible) controls.height - controls.translationY else 0f
+        binding.readTtsProgress.translationY = -maxOf(footerHeight.toFloat(), controlsHeight)
     }
 
     private fun updatePadding() {
@@ -739,6 +773,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.readOverlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateTTSProgressPosition()
+        }
+        binding.readerBottomViewHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateTTSProgressPosition()
+        }
         fixSystemBarsPadding(binding.readerBottomViewHolder, padTop = false, overlayCutout = false)
         fixSystemBarsPadding(binding.readToolbarHolder, padBottom = false, overlayCutout = false)
 
@@ -904,6 +944,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTTSLine(line)
         }
 
+        observeNullable(viewModel.ttsProgress) {
+            updateTTSProgress()
+        }
+
         observe(viewModel.title) { title ->
             binding.readToolbar.title = title
         }
@@ -1006,6 +1050,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.ttsStatus) { status ->
             val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
+            updateTTSProgress()
 
             /*if (isTTSRunning) {
                 binding.readToolbar.inflateMenu(R.menu.sleep_timer)
