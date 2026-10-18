@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.media.MediaPlayer
+import android.os.SystemClock
 import android.speech.tts.Voice
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -104,6 +105,7 @@ import java.util.Locale
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -1292,18 +1294,20 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    private var pendingTTSSkip: Int = 0
+    private val pendingTTSSkip = AtomicInteger()
+    @Volatile
     private var _currentTTSStatus: TTSHelper.TTSStatus = TTSHelper.TTSStatus.IsStopped
     var currentTTSStatus: TTSHelper.TTSStatus
         get() = _currentTTSStatus
         set(value) = synchronized(this@ReadActivityViewModel) {
+            val previous = _currentTTSStatus
+            _currentTTSStatus = value
+            if (value == TTSHelper.TTSStatus.IsStopped) pendingTTSSkip.set(0)
             playDummySound()
-            if (_currentTTSStatus == TTSHelper.TTSStatus.IsStopped && value == TTSHelper.TTSStatus.IsRunning) {
+            _ttsStatus.postValue(value)
+            if (previous == TTSHelper.TTSStatus.IsStopped && value == TTSHelper.TTSStatus.IsRunning) {
                 startTTSWorker()
             }
-
-            _ttsStatus.postValue(value)
-            _currentTTSStatus = value
         }
 
     fun stopTTS() {
@@ -1331,15 +1335,18 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun forwardsTTS() {
-        val ttsSession = ttsSession ?: return
-        if (!ttsSession.ttsInitialized()) return
-        pendingTTSSkip += 1
+        skipTTS(1)
     }
 
     fun backwardsTTS() {
-        val ttsSession = ttsSession ?: return
-        if (!ttsSession.ttsInitialized()) return
-        pendingTTSSkip -= 1
+        skipTTS(-1)
+    }
+
+    private fun skipTTS(offset: Int) {
+        synchronized(this) {
+            if (ttsSession?.ttsInitialized() != true || currentTTSStatus == TTSHelper.TTSStatus.IsStopped) return
+            pendingTTSSkip.addAndGet(offset)
+        }
     }
 
     fun playTTS() {
@@ -1368,9 +1375,19 @@ class ReadActivityViewModel : ViewModel() {
     suspend fun startTTSThread() = coroutineScope {
         val ttsSession = ttsSession ?: return@coroutineScope
         try {
-            val ttsStartTime = System.currentTimeMillis()
+            val ttsStartTime = SystemClock.elapsedRealtime()
             var ttsEndTime = ttsStartTime + ttsTimer
             val ttsHasTimer = ttsEndTime > ttsStartTime
+            var pausedSince: Long? = null
+
+            fun accountForPause() {
+                if (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
+                    if (pausedSince == null) pausedSince = SystemClock.elapsedRealtime()
+                } else {
+                    pausedSince?.let { ttsEndTime += SystemClock.elapsedRealtime() - it }
+                    pausedSince = null
+                }
+            }
 
             val dIndex = desiredTTSIndex ?: desiredIndex ?: return@coroutineScope
 
@@ -1405,30 +1422,27 @@ class ReadActivityViewModel : ViewModel() {
                     }
                 }
 
-                loadIndividualChapter(index)
-                while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
-                    val lines =
-                        when (val currentData = chapterMutex.withLock { chapterData[index] }) {
+                suspend fun awaitLines(chapter: Int): List<TTSHelper.TTSLine>? {
+                    loadIndividualChapter(chapter)
+                    while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
+                        when (val data = chapterMutex.withLock { chapterData[chapter] }) {
+                            is Resource.Success -> return data.value.ttsLines
+                            is Resource.Loading -> delay(100)
+                            is Resource.Failure -> {
+                                showToast(data.errorString)
+                                return null
+                            }
                             null -> {
                                 showToast(R.string.got_null_data)
-                                break
-                            }
-
-                            is Resource.Failure -> {
-                                showToast(currentData.errorString)
-                                break
-                            }
-
-                            is Resource.Loading -> {
-                                if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
-                                delay(100)
-                                continue
-                            }
-
-                            is Resource.Success -> {
-                                currentData.value.ttsLines
+                                return null
                             }
                         }
+                    }
+                    return null
+                }
+
+                while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
+                    val lines = awaitLines(index) ?: break
 
                     fun notify() {
                         TTSNotifications.notify(
@@ -1450,18 +1464,21 @@ class ReadActivityViewModel : ViewModel() {
                     updateIndex(index)
 
                     //preload next chapter
+                    val nextChapter = index + 1
                     viewModelScope.launch(Dispatchers.IO) {
                         val exists =
-                            chapterMutex.withLock { chapterData[index + 1] is Resource.Success }
+                            chapterMutex.withLock { chapterData[nextChapter] is Resource.Success }
                         if (!exists)
-                            loadIndividualChapter(index + 1)
+                            loadIndividualChapter(nextChapter)
                     }
+                    var navigated = false
                     // speak all lines
                     while (ttsInnerIndex < lines.size && ttsInnerIndex >= 0) {
                         ensureActive()
 
                         // auto stop
-                        val currentTimeRemaining = ttsEndTime - System.currentTimeMillis()
+                        accountForPause()
+                        val currentTimeRemaining = ttsEndTime - (pausedSince ?: SystemClock.elapsedRealtime())
                         if (ttsHasTimer) {
                             if (currentTimeRemaining < 0) {
                                 currentTTSStatus = TTSHelper.TTSStatus.IsStopped
@@ -1502,49 +1519,60 @@ class ReadActivityViewModel : ViewModel() {
                         // post visual
                         _ttsLine.postValue(line)
 
+                        // A paused session can move its highlight without ever queueing speech.
+                        var wasPaused = false
+                        while (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
+                            if (!wasPaused) {
+                                ttsSession.interruptTTS()
+                                wasPaused = true
+                            }
+                            if (pendingTTSSkip.get() != 0) break
+                            delay(100)
+                        }
+                        accountForPause()
+                        if (wasPaused) notify()
+                        if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
+
+                        val skip = pendingTTSSkip.getAndSet(0)
+                        if (skip != 0) {
+                            val target = TTSSentencePosition(index, ttsInnerIndex).movedBy(skip, book.size()) {
+                                awaitLines(it)?.size
+                            } ?: return@withLock
+                            index = target.chapter
+                            ttsInnerIndex = target.sentence
+                            navigated = true
+                            break
+                        }
+                        if (currentTTSStatus != TTSHelper.TTSStatus.IsRunning) continue
+
                         // wait for next line
                         val waitFor = ttsSession.speak(
                             line,
                             nextLine
                         ) {
-                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip != 0
+                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0
                         }
 
                         if (!ttsSession.isValidTTS()) {
                             currentTTSStatus = TTSHelper.TTSStatus.IsStopped
                         }
 
+                        var interrupted = false
                         ttsSession.waitForOr(waitFor, {
-                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip != 0
+                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0
                         }) {
+                            interrupted = true
                             notify()
                         }
 
-                        // wait for pause
-                        var isPauseDuration = 0L
-                        while (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
-                            isPauseDuration++
-                            delay(100)
-                        }
-
-                        // do not count in tts sleep
-                        ttsEndTime += 100L * isPauseDuration
-
-                        // if we pause then we resume on the same line
-                        if (isPauseDuration > 0) {
-                            notify()
-                            pendingTTSSkip = 0
+                        // Revisit this sentence after a pause/skip; only completed speech advances.
+                        if (interrupted || currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0) {
                             continue
                         }
-
-                        if (pendingTTSSkip != 0) {
-                            ttsInnerIndex += pendingTTSSkip
-                            pendingTTSSkip = 0
-                        } else {
-                            ttsInnerIndex += 1
-                        }
+                        ttsInnerIndex += 1
                     }
                     if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
+                    if (navigated) continue
 
                     // this may case a bug where you cant seek back if the entire chapter is none
                     // but this is better than restarting the chapter

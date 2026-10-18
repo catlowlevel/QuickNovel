@@ -233,6 +233,34 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
+    private val ttsKeyboardShortcuts = TTSKeyboardShortcuts()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val handled = when (event.action) {
+            KeyEvent.ACTION_DOWN -> ttsKeyboardShortcuts.keyDown(
+                event.keyCode,
+                event.repeatCount,
+                enabled = !event.isCanceled && event.hasNoModifiers() && hasWindowFocus() &&
+                        currentFocus?.onCheckIsTextEditor() != true &&
+                        viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped,
+            ) { action ->
+                when (action) {
+                    TTSKeyboardShortcuts.Action.TogglePlayback -> viewModel.pausePlayTTS()
+                    TTSKeyboardShortcuts.Action.NextSentence -> viewModel.forwardsTTS()
+                    TTSKeyboardShortcuts.Action.PreviousSentence -> viewModel.backwardsTTS()
+                }
+            }
+            KeyEvent.ACTION_UP -> ttsKeyboardShortcuts.keyUp(event.keyCode)
+            else -> false
+        }
+        return handled || super.dispatchKeyEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) ttsKeyboardShortcuts.clear()
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             kill()
@@ -583,6 +611,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     }
 
     override fun onPause() {
+        ttsKeyboardShortcuts.clear()
         viewModel.leftApp()
         super.onPause()
     }
