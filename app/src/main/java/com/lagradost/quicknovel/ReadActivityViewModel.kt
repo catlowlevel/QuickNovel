@@ -22,6 +22,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.Disposable
@@ -545,6 +547,10 @@ class ReadActivityViewModel : ViewModel() {
     private val _ttsLine: MutableLiveData<TTSHelper.TTSLine?> =
         MutableLiveData<TTSHelper.TTSLine?>(null)
     val ttsLine: LiveData<TTSHelper.TTSLine?> = _ttsLine
+
+    // Playback events do not replay on focus return or while a paused highlight is selected.
+    private val _ttsSentenceStarted = MutableSharedFlow<TTSHelper.TTSLine>(extraBufferCapacity = 1)
+    val ttsSentenceStarted = _ttsSentenceStarted.asSharedFlow()
 
     private val _ttsProgress = MutableLiveData<TTSPlaybackProgress?>(null)
     val ttsProgress: LiveData<TTSPlaybackProgress?> = _ttsProgress
@@ -1615,6 +1621,9 @@ class ReadActivityViewModel : ViewModel() {
                         ) {
                             currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip
                         }
+                        if (waitFor != null && currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
+                            _ttsSentenceStarted.emit(line)
+                        }
 
                         if (!ttsSession.isValidTTS()) {
                             currentTTSStatus = TTSHelper.TTSStatus.IsStopped
@@ -1912,6 +1921,11 @@ class ReadActivityViewModel : ViewModel() {
     val floatingTTSControlsLive = MutableLiveData<Boolean>()
     var floatingTTSControls by PreferenceDelegateLiveView(
         EPUB_TTS_FLOATING_CONTROLS, false, Boolean::class, floatingTTSControlsLive
+    )
+
+    val autoCenterTTSLive = MutableLiveData<Boolean>()
+    var autoCenterTTS by PreferenceDelegateLiveView(
+        EPUB_TTS_AUTO_CENTER, false, Boolean::class, autoCenterTTSLive
     )
 
     val paddingHorizontalLive: MutableLiveData<Int> = MutableLiveData(null)

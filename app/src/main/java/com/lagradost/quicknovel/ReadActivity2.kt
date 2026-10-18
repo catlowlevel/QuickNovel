@@ -37,10 +37,15 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
+import androidx.core.view.doOnNextLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
@@ -177,6 +182,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
     private lateinit var floatingTTSControls: FloatingTTSControls
+    private lateinit var ttsAutoCentering: TTSAutoCentering
 
     private var _imageHolder: WeakReference<LinearLayout>? = null
     var imageHolder
@@ -275,7 +281,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         if (!hasFocus) {
             ttsKeyboardShortcuts.clear()
             if (::floatingTTSControls.isInitialized) floatingTTSControls.cancelGestures()
-        } else updateFloatingTTSPosition()
+            if (::ttsAutoCentering.isInitialized) ttsAutoCentering.cancel(clearTouch = true)
+        } else {
+            updateFloatingTTSPosition()
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -500,15 +509,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         textAdapter.updateTTSLine(line)
         val first = textLayoutManager.findFirstVisibleItemPosition()
         val last = textLayoutManager.findLastVisibleItemPosition()
-        textAdapter.notifyItemRangeChanged(first, last + 1 - first)
+        if (first != RecyclerView.NO_POSITION && last >= first) {
+            textAdapter.notifyItemRangeChanged(first, last + 1 - first)
+        }
         /*for (position in textLayoutManager.findFirstVisibleItemPosition()..textLayoutManager.findLastVisibleItemPosition()) {
             val viewHolder = binding.realText.findViewHolderForAdapterPosition(position)
             if (viewHolder !is TextAdapter.TextAdapterHolder) continue
             viewHolder.updateTTSLine(line)
         }*/
 
-        // update the lock area
-        if (line == null || !viewModel.ttsLock) {
+        // Smooth centering owns scrolling while enabled; the legacy visibility lock must not fight it.
+        if (line == null || viewModel.autoCenterTTS || !viewModel.ttsLock) {
             lockTop = null
             lockBottom = null
             return
@@ -626,6 +637,39 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         if (::floatingTTSControls.isInitialized) floatingTTSControls.reposition()
     }
 
+    private fun ttsReadingViewport(): TTSCenteringViewport {
+        var top = getTopY()
+        var bottom = getBottomY()
+        val location = IntArray(2)
+        val insets = ViewCompat.getRootWindowInsets(binding.realText)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        top = maxOf(top, insets?.top ?: 0)
+        bottom = minOf(bottom, binding.root.rootView.height - (insets?.bottom ?: 0))
+        if (binding.readToolbarHolder.isVisible) {
+            binding.readToolbarHolder.getLocationInWindow(location)
+            top = maxOf(top, location[1] + binding.readToolbarHolder.height)
+        }
+        if (binding.readerBottomViewHolder.isVisible) {
+            binding.readerBottomViewHolder.getLocationInWindow(location)
+            bottom = minOf(bottom, location[1])
+        }
+        binding.root.rootView.getLocationInWindow(location)
+        val viewport = TTSCenteringViewport(
+            bounds = TTSVerticalBounds(top, maxOf(top, bottom)),
+            screenCenter = location[1] + binding.root.rootView.height / 2,
+        )
+        val panel = binding.floatingTtsControls.root
+        if (!panel.isVisible) return viewport
+        binding.realText.getLocationInWindow(location)
+        val readerLeft = location[0] + binding.realText.paddingLeft
+        val readerRight = location[0] + binding.realText.width - binding.realText.paddingRight
+        panel.getLocationInWindow(location)
+        if (location[0] >= readerRight || location[0] + panel.width <= readerLeft) return viewport
+        val clearance = 12.toPx
+        return viewport.copy(obstruction = TTSVerticalBounds(location[1] - clearance, location[1] + panel.height + clearance))
+    }
+
     private fun updateTTSControls() {
         val status = viewModel.currentTTSStatus
         val active = status != TTSHelper.TTSStatus.IsStopped
@@ -728,6 +772,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     override fun onPause() {
         ttsKeyboardShortcuts.clear()
         floatingTTSControls.cancelGestures()
+        if (::ttsAutoCentering.isInitialized) ttsAutoCentering.cancel(clearTouch = true)
         viewModel.leftApp()
         super.onPause()
     }
@@ -957,6 +1002,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTTSControls()
         }
 
+        observe(viewModel.autoCenterTTSLive) { enabled ->
+            updateTTSLine(viewModel.ttsLine.value)
+            if (!enabled) ttsAutoCentering.cancel()
+            if (!enabled) binding.realText.doOnNextLayout {
+                // Rebuild the legacy lock after removing temporary centering space.
+                if (!viewModel.autoCenterTTS) updateTTSLine(viewModel.ttsLine.value)
+            }
+        }
+
         observe(viewModel.screenAwakeLive) { awake ->
             if (awake)
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -984,6 +1038,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         textLayoutManager = LinearLayoutManager(binding.realText.context)
+        ttsAutoCentering = TTSAutoCentering(
+            reader = binding.realText,
+            layout = textLayoutManager,
+            adapter = textAdapter,
+            items = { cachedChapter },
+            viewport = ::ttsReadingViewport,
+            enabled = { viewModel.autoCenterTTS && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped },
+        )
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.ttsSentenceStarted.collect { line ->
+                    if (viewModel.currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
+                        ttsAutoCentering.onSentenceStarted(line)
+                    }
+                }
+            }
+        }
 
         binding.ttsActionPausePlay.setOnClickListener {
             viewModel.pausePlayTTS()
@@ -1144,9 +1215,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             true
         }*/
 
-        observe(viewModel.ttsStatus) {
+        observe(viewModel.ttsStatus) { status ->
             updateTTSProgress()
             updateTTSControls()
+            if (status != TTSHelper.TTSStatus.IsRunning) ttsAutoCentering.cancel()
         }
 
         binding.apply {
@@ -1221,6 +1293,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             layoutManager = textLayoutManager
             adapter = textAdapter
             itemAnimator = null
+            // Observe the complete reader touch stream, including touches handled by paragraph views.
+            addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+                override fun onInterceptTouchEvent(rv: RecyclerView, event: MotionEvent): Boolean {
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> ttsAutoCentering.onReaderTouchStarted()
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> ttsAutoCentering.onReaderTouchEnded()
+                    }
+                    return false
+                }
+            })
             // testing overscroll
             setOnTouchListener { _, event ->
                 when (event.action) {
@@ -1337,11 +1419,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel._loadingStatus.postValue(Resource.Success(true))
                     scrollToDesired()
                     onScroll()
+                    ttsAutoCentering.onContentChanged()
                 }
             } else {
                 textAdapter.submitList(chapter.data) {
                     viewModel._loadingStatus.postValue(Resource.Success(true))
                     onScroll()
+                    ttsAutoCentering.onContentChanged()
                 }
             }
         }
@@ -1777,6 +1861,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsFloatingTts.isChecked = viewModel.floatingTTSControls
                 readSettingsFloatingTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.floatingTTSControls = isChecked
+                }
+
+                readSettingsAutoCenterTts.isChecked = viewModel.autoCenterTTS
+                readSettingsAutoCenterTts.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.autoCenterTTS = isChecked
                 }
 
                 readSettingsShowTime.isChecked = viewModel.showTime
