@@ -33,6 +33,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
@@ -46,6 +47,7 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DataStore.getKey
+import com.lagradost.quicknovel.DataStore.setKey
 import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ChapterPickerHeaderBinding
@@ -134,9 +136,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             -binding.readToolbarHolder.height.toFloat()
         ).apply {
             duration = 200
+            addUpdateListener { updateFloatingTTSPosition() }
             start()
         }.doOnEnd {
             binding.readToolbarHolder.isVisible = false
+            updateFloatingTTSPosition()
         }
     }
 
@@ -165,12 +169,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         ObjectAnimator.ofFloat(binding.readToolbarHolder, "translationY", 0f).apply {
             duration = 200
+            addUpdateListener { updateFloatingTTSPosition() }
             start()
         }
     }
 
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
+    private lateinit var floatingTTSControls: FloatingTTSControls
 
     private var _imageHolder: WeakReference<LinearLayout>? = null
     var imageHolder
@@ -266,7 +272,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) ttsKeyboardShortcuts.clear()
+        if (!hasFocus) {
+            ttsKeyboardShortcuts.clear()
+            if (::floatingTTSControls.isInitialized) floatingTTSControls.cancelGestures()
+        } else updateFloatingTTSPosition()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -580,6 +589,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         binding.readTtsProgress.progressBackgroundTintList = ColorStateList.valueOf(
             ColorUtils.setAlphaComponent(config.textColor, Color.alpha(config.textColor) / 4)
         )
+        floatingTTSControls.setColors(config.backgroundColor, config.textColor)
     }
 
     private fun updateReaderOverlayVisibility() {
@@ -609,6 +619,67 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val controls = binding.readerBottomViewHolder
         val controlsHeight = if (controls.isVisible) controls.height - controls.translationY else 0f
         binding.readTtsProgress.translationY = -maxOf(footerHeight.toFloat(), controlsHeight)
+        updateFloatingTTSPosition()
+    }
+
+    private fun updateFloatingTTSPosition() {
+        if (::floatingTTSControls.isInitialized) floatingTTSControls.reposition()
+    }
+
+    private fun updateTTSControls() {
+        val status = viewModel.currentTTSStatus
+        val active = status != TTSHelper.TTSStatus.IsStopped
+        val floating = active && viewModel.floatingTTSControls
+        floatingTTSControls.update(viewModel.floatingTTSControls, status)
+
+        binding.readerBottomView.isVisible = !active || floating
+        binding.readerBottomViewTts.isVisible = active && !floating
+        binding.readActionTts.setImageResource(
+            if (floating) R.drawable.ic_baseline_stop_24 else R.drawable.ic_baseline_volume_up_24
+        )
+        binding.readActionTts.setContentDescription(getString(
+            if (floating) R.string.tts_stop_playback else R.string.read_action_tts
+        ))
+        binding.readActionTts.isLongClickable = !floating
+
+        binding.ttsActionPausePlay.setImageResource(
+            if (status == TTSHelper.TTSStatus.IsRunning) R.drawable.ic_baseline_pause_24
+            else R.drawable.ic_baseline_play_arrow_24
+        )
+        binding.ttsActionPausePlay.setContentDescription(getString(
+            if (status == TTSHelper.TTSStatus.IsRunning) R.string.tts_pause_playback
+            else R.string.tts_resume_playback
+        ))
+    }
+
+    private fun floatingTTSBounds(): FloatingControlsBounds {
+        val area = binding.readNormalLayout
+        val panel = binding.floatingTtsControls.root
+        val margin = 12.toPx.toFloat()
+        val location = IntArray(2)
+        area.getLocationInWindow(location)
+        val insets = ViewCompat.getRootWindowInsets(area)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        // Account only for insets overlapping the reader; decor fitting may already exclude them.
+        val safeLeft = maxOf(0, (insets?.left ?: 0) - location[0]).toFloat()
+        val safeTop = maxOf(0, (insets?.top ?: 0) - location[1]).toFloat()
+        val safeRight = maxOf(0, location[0] + area.width - (area.rootView.width - (insets?.right ?: 0)))
+        val safeBottom = maxOf(0, location[1] + area.height - (area.rootView.height - (insets?.bottom ?: 0)))
+        val toolbar = binding.readToolbarHolder
+        val toolbarBottom = if (toolbar.isVisible) toolbar.bottom + toolbar.translationY else 0f
+        val bottomControls = binding.readerBottomViewHolder
+        val controlsHeight = if (bottomControls.isVisible) bottomControls.height - bottomControls.translationY else 0f
+        val footerHeight = if (binding.readOverlay.isVisible) binding.readOverlay.height else 0
+        val progressHeight = if (binding.readTtsProgress.isVisible) binding.readTtsProgress.height else 0
+        return FloatingControlsBounds.forArea(
+            left = safeLeft + margin,
+            top = maxOf(safeTop, toolbarBottom) + margin,
+            right = area.width - safeRight - margin,
+            bottom = area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - progressHeight - margin,
+            panelWidth = panel.width.toFloat(),
+            panelHeight = panel.height.toFloat(),
+        )
     }
 
     private fun updatePadding() {
@@ -656,6 +727,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     override fun onPause() {
         ttsKeyboardShortcuts.clear()
+        floatingTTSControls.cancelGestures()
         viewModel.leftApp()
         super.onPause()
     }
@@ -773,6 +845,22 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        floatingTTSControls = FloatingTTSControls(
+            binding.floatingTtsControls,
+            initialPosition = getKey<FloatingControlsPosition>(EPUB_TTS_FLOATING_POSITION) ?: FloatingControlsPosition(),
+            bounds = ::floatingTTSBounds,
+            savePosition = { setKey(EPUB_TTS_FLOATING_POSITION, it) },
+            togglePlayback = { viewModel.pausePlayTTS() },
+            previousSentence = { viewModel.backwardsTTS() },
+            nextSentence = { viewModel.forwardsTTS() },
+        )
+        binding.readNormalLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            floatingTTSControls.cancelGestures()
+            updateFloatingTTSPosition()
+        }
+        binding.readToolbarHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateFloatingTTSPosition()
+        }
         binding.readOverlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updateTTSProgressPosition()
         }
@@ -865,6 +953,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateReaderOverlayVisibility()
         }
 
+        observe(viewModel.floatingTTSControlsLive) {
+            updateTTSControls()
+        }
+
         observe(viewModel.screenAwakeLive) { awake ->
             if (awake)
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -902,7 +994,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         binding.readActionTts.setOnClickListener {
-            viewModel.startTTS()
+            if (viewModel.floatingTTSControls && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
+                viewModel.stopTTS()
+            } else {
+                viewModel.startTTS()
+            }
         }
 
         binding.readActionTts.setOnLongClickListener { view ->
@@ -1048,25 +1144,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             true
         }*/
 
-        observe(viewModel.ttsStatus) { status ->
-            val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
+        observe(viewModel.ttsStatus) {
             updateTTSProgress()
-
-            /*if (isTTSRunning) {
-                binding.readToolbar.inflateMenu(R.menu.sleep_timer)
-            } else {
-                binding.readToolbar.menu.clear()
-            }*/
-
-            binding.readerBottomView.isGone = isTTSRunning
-            binding.readerBottomViewTts.isVisible = isTTSRunning
-            binding.ttsActionPausePlay.setImageResource(
-                when (status) {
-                    TTSHelper.TTSStatus.IsPaused -> R.drawable.ic_baseline_play_arrow_24
-                    TTSHelper.TTSStatus.IsRunning -> R.drawable.ic_baseline_pause_24
-                    TTSHelper.TTSStatus.IsStopped -> R.drawable.ic_baseline_play_arrow_24
-                }
-            )
+            updateTTSControls()
         }
 
         binding.apply {
@@ -1692,6 +1772,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsLockTts.isChecked = viewModel.ttsLock
                 readSettingsLockTts.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.ttsLock = isChecked
+                }
+
+                readSettingsFloatingTts.isChecked = viewModel.floatingTTSControls
+                readSettingsFloatingTts.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.floatingTTSControls = isChecked
                 }
 
                 readSettingsShowTime.isChecked = viewModel.showTime

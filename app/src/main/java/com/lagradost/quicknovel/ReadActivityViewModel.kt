@@ -107,7 +107,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -1335,11 +1334,11 @@ class ReadActivityViewModel : ViewModel() {
 
     private fun initTTSSession(context: Context) {
         runOnMainThread {
-            ttsSession = TTSSession(context, ::parseAction)
+            ttsSession = TTSSession(context, ::parseAction, ttsPlaybackControl)
         }
     }
 
-    private val pendingTTSSkip = AtomicInteger()
+    private val ttsPlaybackControl = TTSPlaybackControl()
     @Volatile
     private var _currentTTSStatus: TTSHelper.TTSStatus = TTSHelper.TTSStatus.IsStopped
     var currentTTSStatus: TTSHelper.TTSStatus
@@ -1348,9 +1347,9 @@ class ReadActivityViewModel : ViewModel() {
             val previous = _currentTTSStatus
             _currentTTSStatus = value
             if (value == TTSHelper.TTSStatus.IsStopped) {
-                pendingTTSSkip.set(0)
+                ttsPlaybackControl.reset()
                 _ttsProgress.postValue(null)
-            }
+            } else ttsPlaybackControl.signal()
             playDummySound()
             _ttsStatus.postValue(value)
             if (previous == TTSHelper.TTSStatus.IsStopped && value == TTSHelper.TTSStatus.IsRunning) {
@@ -1400,7 +1399,7 @@ class ReadActivityViewModel : ViewModel() {
     private fun skipTTS(offset: Int) {
         synchronized(this) {
             if (ttsSession?.ttsInitialized() != true || currentTTSStatus == TTSHelper.TTSStatus.IsStopped) return
-            pendingTTSSkip.addAndGet(offset)
+            ttsPlaybackControl.skip(offset)
         }
     }
 
@@ -1507,19 +1506,23 @@ class ReadActivityViewModel : ViewModel() {
                     ttsBookmark = position
                 }
 
+                var notifiedChapterAndStatus: Pair<Int, TTSHelper.TTSStatus>? = null
                 while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
                     val lines = awaitLines(index) ?: break
                     // Empty chapters have no narration progress; don't retain the previous chapter.
                     if (lines.isEmpty()) _ttsProgress.postValue(null)
 
                     fun notify() {
+                        val chapterAndStatus = index to currentTTSStatus
+                        if (notifiedChapterAndStatus == chapterAndStatus) return
                         TTSNotifications.notify(
                             book.title(),
                             chaptersTitlesInternal[index],
                             book.poster(),
-                            currentTTSStatus,
+                            chapterAndStatus.second,
                             context
                         )
+                        notifiedChapterAndStatus = chapterAndStatus
                     }
                     notify()
 
@@ -1582,20 +1585,18 @@ class ReadActivityViewModel : ViewModel() {
                         _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex))
 
                         // A paused session can move its highlight without ever queueing speech.
-                        var wasPaused = false
-                        while (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
-                            if (!wasPaused) {
-                                ttsSession.interruptTTS()
-                                wasPaused = true
+                        val wasPaused = currentTTSStatus == TTSHelper.TTSStatus.IsPaused
+                        if (wasPaused) {
+                            ttsSession.interruptTTS()
+                            ttsPlaybackControl.awaitWhile {
+                                currentTTSStatus == TTSHelper.TTSStatus.IsPaused && !ttsPlaybackControl.hasPendingSkip
                             }
-                            if (pendingTTSSkip.get() != 0) break
-                            delay(100)
                         }
                         accountForPause()
                         if (wasPaused) notify()
                         if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
 
-                        val skip = pendingTTSSkip.getAndSet(0)
+                        val skip = ttsPlaybackControl.takeSkip()
                         if (skip != 0) {
                             val target = TTSSentencePosition(index, ttsInnerIndex).movedBy(skip, book.size()) {
                                 awaitLines(it)?.size
@@ -1612,7 +1613,7 @@ class ReadActivityViewModel : ViewModel() {
                             line,
                             nextLine
                         ) {
-                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0
+                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip
                         }
 
                         if (!ttsSession.isValidTTS()) {
@@ -1621,14 +1622,14 @@ class ReadActivityViewModel : ViewModel() {
 
                         var interrupted = false
                         ttsSession.waitForOr(waitFor, {
-                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0
+                            currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip
                         }) {
                             interrupted = true
                             notify()
                         }
 
                         // Revisit this sentence after a pause/skip; only completed speech advances.
-                        if (interrupted || currentTTSStatus != TTSHelper.TTSStatus.IsRunning || pendingTTSSkip.get() != 0) {
+                        if (interrupted || currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip) {
                             continue
                         }
                         _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true))
@@ -1906,6 +1907,11 @@ class ReadActivityViewModel : ViewModel() {
     val showTimeLive: MutableLiveData<Boolean> = MutableLiveData(null)
     var showTime by PreferenceDelegateLiveView(
         EPUB_HAS_TIME, true, Boolean::class, showTimeLive
+    )
+
+    val floatingTTSControlsLive = MutableLiveData<Boolean>()
+    var floatingTTSControls by PreferenceDelegateLiveView(
+        EPUB_TTS_FLOATING_CONTROLS, false, Boolean::class, floatingTTSControlsLive
     )
 
     val paddingHorizontalLive: MutableLiveData<Int> = MutableLiveData(null)

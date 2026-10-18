@@ -34,7 +34,11 @@ import java.util.Stack
 import kotlin.math.roundToInt
 
 
-class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boolean) {
+class TTSSession(
+    val context: Context,
+    event: (TTSHelper.TTSActionType) -> Boolean,
+    private val playbackControl: TTSPlaybackControl,
+) {
     private val intentFilter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
     private val myNoisyAudioStreamReceiver = BecomingNoisyReceiver()
 
@@ -59,7 +63,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
 
     private var TTSQueueId = 0
     private var TTSStartSpeakId = 0
-    private var TTSEndSpeakId = 0
+    @Volatile private var TTSEndSpeakId = 0
 
     private var speed: Float = 1.0f
     private var pitch: Float = 1.0f
@@ -141,14 +145,18 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
      * break early and interrupt TTS */
     suspend fun waitForOr(id: Int?, action: () -> Boolean, then: () -> Unit) {
         if (id == null) return
-        while (id > TTSEndSpeakId) {
-            delay(50)
-            if (action()) {
-                interruptTTS()
-                then()
-                break
-            }
+        playbackControl.awaitWhile { id > TTSEndSpeakId && !action() }
+        if (action()) {
+            interruptTTS()
+            then()
         }
+    }
+
+    @Synchronized
+    private fun utteranceFinished(utteranceId: String?) {
+        val id = utteranceId?.toIntOrNull() ?: return
+        TTSEndSpeakId = maxOf(TTSEndSpeakId, id)
+        playbackControl.signal()
     }
 
     private val mutex: Mutex = Mutex() // no duplicate tts
@@ -214,22 +222,16 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
                 UtteranceProgressListener() {
                 //MIGHT BE INTERESTING https://stackoverflow.com/questions/44461533/android-o-new-texttospeech-onrangestart-callback
                 override fun onDone(utteranceId: String) {
-                    utteranceId.toIntOrNull()?.let { id ->
-                        TTSEndSpeakId = maxOf(TTSEndSpeakId, id)
-                    }
+                    utteranceFinished(utteranceId)
                 }
 
                 @Deprecated("Deprecated")
                 override fun onError(utteranceId: String?) {
-                    utteranceId?.toIntOrNull()?.let { id ->
-                        TTSEndSpeakId = maxOf(TTSEndSpeakId, id)
-                    }
+                    utteranceFinished(utteranceId)
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    utteranceId?.toIntOrNull()?.let { id ->
-                        TTSEndSpeakId = maxOf(TTSEndSpeakId, id)
-                    }
+                    utteranceFinished(utteranceId)
                 }
 
                 override fun onStart(utteranceId: String) {

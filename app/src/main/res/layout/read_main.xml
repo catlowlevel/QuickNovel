@@ -445,7 +445,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:background="@drawable/ripple_regular"
-                        android:contentDescription="@string/read_action_screen_rotation"
+                        android:contentDescription="@string/tts_previous_sentence"
                         android:padding="@dimen/screenEdgeMargin"
                         app:layout_constraintEnd_toStartOf="@id/tts_action_stop"
                         app:layout_constraintStart_toStartOf="parent"
@@ -458,7 +458,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:background="@drawable/ripple_regular"
-                        android:contentDescription="@string/read_action_tts"
+                        android:contentDescription="@string/tts_stop_playback"
                         android:padding="@dimen/screenEdgeMargin"
                         app:layout_constraintEnd_toStartOf="@id/tts_action_pause_play"
                         app:layout_constraintStart_toEndOf="@+id/tts_action_back"
@@ -471,7 +471,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:background="@drawable/ripple_regular"
-                        android:contentDescription="@string/read_action_chapters"
+                        android:contentDescription="@string/tts_pause_playback"
                         android:padding="@dimen/screenEdgeMargin"
                         app:layout_constraintEnd_toStartOf="@id/tts_action_forward"
                         app:layout_constraintStart_toEndOf="@+id/tts_action_stop"
@@ -485,7 +485,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:background="@drawable/ripple_regular"
-                        android:contentDescription="@string/read_action_settings"
+                        android:contentDescription="@string/tts_next_sentence"
                         android:padding="@dimen/screenEdgeMargin"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@id/tts_action_pause_play"
@@ -534,5 +534,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
         </com.google.android.material.appbar.AppBarLayout>
+
+        <include
+                android:id="@+id/floating_tts_controls"
+                layout="@layout/floating_tts_controls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:visibility="gone" />
     </FrameLayout>
 </FrameLayout>

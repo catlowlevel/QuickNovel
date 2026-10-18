@@ -96,6 +96,13 @@
     <string name="tts_resume_playback">Resume narration</string>
     <string name="tts_read_from_here">Read from here</string>
     <string name="tts_chapter_progress">Narration: chapter %1$d, sentence %2$d of %3$d</string>
+    <string name="tts_floating_controls">Floating playback controls</string>
+    <string name="tts_floating_controls_hint">Drag anywhere on the controls to move them. Tap an arrow to move one sentence.</string>
+    <string name="tts_reset_controls_position">Reset controls position</string>
+    <string name="tts_previous_sentence">Previous sentence</string>
+    <string name="tts_next_sentence">Next sentence</string>
+    <string name="tts_pause_playback">Pause narration</string>
+    <string name="tts_stop_playback">Stop narration</string>
     <string name="read_action_screen_rotation">Screen Rotation</string>
 
     <string name="grid_view">Grid</string>
