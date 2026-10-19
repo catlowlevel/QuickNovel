@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 .kotlin/
+
+# Local release signing credentials and key
+/signing.properties
+/release.keystore

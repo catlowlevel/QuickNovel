@@ -7,6 +7,17 @@ apply plugin: 'kotlin-kapt'
 
 apply(plugin: "org.jetbrains.kotlin.plugin.compose")
 
+def releaseSigningFile = rootProject.file('signing.properties')
+def releaseSigningProperties = new Properties()
+if (releaseSigningFile.isFile()) {
+    releaseSigningFile.withInputStream { releaseSigningProperties.load(it) }
+    ['STORE_FILE', 'STORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].each { key ->
+        if (!releaseSigningProperties.getProperty(key)) {
+            throw new GradleException("Missing signing property: " + key)
+        }
+    }
+}
+
 android {
     compileSdkVersion 37
     //buildToolsVersion "30.0.3"
@@ -31,8 +42,23 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseSigningFile.isFile()) {
+            release {
+                // Support paths relative to the app module or the repository root.
+                def keyFile = file(releaseSigningProperties.getProperty('STORE_FILE'))
+                if (!keyFile.isFile()) keyFile = rootProject.file(releaseSigningProperties.getProperty('STORE_FILE'))
+                storeFile = keyFile
+                storePassword = releaseSigningProperties.getProperty('STORE_PASSWORD')
+                keyAlias = releaseSigningProperties.getProperty('KEY_ALIAS')
+                keyPassword = releaseSigningProperties.getProperty('KEY_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningFile.isFile()) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
