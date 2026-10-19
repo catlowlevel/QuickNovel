@@ -58,7 +58,8 @@ class TTSSession(
 
     private var TTSQueueId = 0
     private var TTSStartSpeakId = 0
-    @Volatile private var TTSEndSpeakId = 0
+    @Volatile
+    private var TTSEndSpeakId = 0
 
     private var speed: Float = 1.0f
     private var pitch: Float = 1.0f
@@ -336,6 +337,8 @@ data class ChapterStartSpanned(
     val name: UiText,
     val canReload: Boolean,
     val wordCount: Int? = null,
+    val showingSummary: Boolean = false,
+    val summaryTruncated: Boolean = false,
 ) : SpanDisplay() {
     override fun id(): Long {
         return generateId(1, index, 0, 0)

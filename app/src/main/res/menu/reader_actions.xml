@@ -7,4 +7,8 @@
         android:icon="@drawable/ic_baseline_public_24"
         android:visible="false"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/reader_summary"
+        android:title="@string/ai_summary_generate"
+        app:showAsAction="never" />
 </menu>

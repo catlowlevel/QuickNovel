@@ -7,6 +7,8 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.CharacterStyle
 import android.text.style.RelativeSizeSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.MaskFilterSpan
@@ -69,6 +71,13 @@ const val DRAW_CHAPTER = 4
 const val DRAW_LOAD = 5
 const val DRAW_OVERSCROLL = 6
 const val DRAW_SEPARATOR = 7
+
+/** Derive badge contrast from the current reader text color, including custom themes. */
+private class SummaryBadgeSpan : CharacterStyle() {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.bgColor = ColorUtils.setAlphaComponent(paint.color, 24)
+    }
+}
 
 
 data class ScrollVisibilityItem(
@@ -866,14 +875,21 @@ class TextAdapter(
         if (binding !is SingleFinishedChapterBinding) return
 
         val title = obj.name.asString(binding.root.context)
-        binding.root.text = obj.wordCount?.let { count ->
-            val label = binding.root.resources.getQuantityString(R.plurals.word_count, count, count)
-            SpannableStringBuilder(title).append('\n').apply {
-                val start = length
-                append(label)
-                setSpan(RelativeSizeSpan(0.75f), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        binding.root.text = SpannableStringBuilder(title).apply {
+            val count = obj.wordCount?.let { binding.root.resources.getQuantityString(R.plurals.word_count, it, it) }
+            if (obj.showingSummary || count != null) {
+                append('\n')
+                val metadataStart = length
+                if (obj.showingSummary) {
+                    append(' ').append(binding.root.context.getString(if (obj.summaryTruncated)
+                        R.string.ai_summary_badge_incomplete else R.string.ai_summary_badge)).append(' ')
+                    setSpan(SummaryBadgeSpan(), metadataStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (count != null) append(" · ")
+                }
+                if (count != null) append(count)
+                setSpan(RelativeSizeSpan(0.75f), metadataStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-        } ?: title
+        }
         binding.root.setOnClickListener {
             viewModel.switchVisibility()
         }
@@ -923,7 +939,8 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name && oldItem.wordCount == newItem.wordCount
+                    newItem.id == oldItem.id && oldItem.name == newItem.name && oldItem.wordCount == newItem.wordCount &&
+                        oldItem.showingSummary == newItem.showingSummary && oldItem.summaryTruncated == newItem.summaryTruncated
                 }
 
                 is ChapterLoadSpanned -> {

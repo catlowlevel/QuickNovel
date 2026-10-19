@@ -27,4 +27,23 @@ class ChapterHeaderDiffTest {
         assertFalse(diff.areContentsTheSame(original, header))
         assertTrue(diff.areContentsTheSame(original, original.copy()))
     }
+
+    @Test
+    fun switchingBetweenOriginalAndSummaryRefreshesTheBadgeEvenWithTheSameTitleAndCount() {
+        val original = header.copy(wordCount = 400)
+        val summary = original.copy(showingSummary = true)
+        assertTrue(diff.areItemsTheSame(original, summary))
+        assertFalse(diff.areContentsTheSame(original, summary))
+        assertFalse(diff.areContentsTheSame(summary, original))
+        assertTrue(diff.areContentsTheSame(summary, summary.copy()))
+    }
+
+    @Test
+    fun regeneratedCompleteAndIncompleteSummariesRefreshTheWarningWithoutChangingIdentity() {
+        val complete = header.copy(wordCount = 400, showingSummary = true)
+        val incomplete = complete.copy(summaryTruncated = true)
+        assertTrue(diff.areItemsTheSame(complete, incomplete))
+        assertFalse(diff.areContentsTheSame(complete, incomplete))
+        assertFalse(diff.areContentsTheSame(incomplete, complete))
+    }
 }

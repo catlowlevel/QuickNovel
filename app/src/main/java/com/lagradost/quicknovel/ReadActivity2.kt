@@ -181,6 +181,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
+    private val summaryViewModel: com.lagradost.quicknovel.ai.AiSummaryViewModel by viewModels()
+    private lateinit var summaryDialog: com.lagradost.quicknovel.ai.ReaderSummaryDialog
     private lateinit var floatingTTSControls: FloatingTTSControls
     private lateinit var ttsAutoCentering: TTSAutoCentering
 
@@ -872,6 +874,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
     override fun onDestroy() {
+        if (::summaryDialog.isInitialized) summaryDialog.dismissForDestroy()
         viewModel.stopTTS()
         this.unregisterReceiver(mBatInfoReceiver)
         super.onDestroy()
@@ -890,6 +893,19 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        summaryDialog = com.lagradost.quicknovel.ai.ReaderSummaryDialog(this, summaryViewModel.controller)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                summaryViewModel.controller.state.collect { state ->
+                    if (state is com.lagradost.quicknovel.ai.AiSummaryState.Ready) {
+                        val applied = viewModel.showSummary(state.plan.chapter, state.output)
+                        summaryViewModel.controller.close()
+                        if (!applied) showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
+                        else if (state.cacheWriteFailed) showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
+                    } else summaryDialog.render(state)
+                }
+            }
+        }
         floatingTTSControls = FloatingTTSControls(
             binding.floatingTtsControls,
             initialPosition = getKey<FloatingControlsPosition>(EPUB_TTS_FLOATING_POSITION) ?: FloatingControlsPosition(),
@@ -948,6 +964,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             menu.findItem(R.id.reader_open_browser).icon?.setTint(colorFromAttribute(R.attr.iconColor))
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
+                    R.id.reader_summary -> {
+                        lifecycleScope.launch {
+                            if (!viewModel.restoreOriginalChapter()) {
+                                val chapter = viewModel.summaryChapter()
+                                if (chapter == null) showToast(this@ReadActivity2, R.string.ai_summary_unavailable)
+                                else summaryViewModel.controller.open(chapter, java.util.Locale.getDefault().toLanguageTag())
+                            }
+                        }
+                        true
+                    }
                     R.id.reader_open_browser -> {
                         viewModel.chapterBrowserUrl()?.let { BrowserActivity.open(this@ReadActivity2, it) }
                         true
@@ -1141,13 +1167,19 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.chapterInfo) { chapter ->
             binding.readToolbar.menu.findItem(R.id.reader_open_browser).isVisible =
                 viewModel.chapterBrowserUrl(chapter.index) != null
-            val title = chapter.title.asString(this)
+            binding.readToolbar.menu.findItem(R.id.reader_summary).setTitle(
+                if (chapter.showingSummary) R.string.ai_summary_restore else R.string.ai_summary_generate)
+            val originalTitle = chapter.title.asString(this)
+            val title = if (chapter.showingSummary) getString(
+                if (chapter.summaryTruncated) R.string.ai_summary_chapter_incomplete else R.string.ai_summary_chapter_label,
+                originalTitle) else originalTitle
             val count = chapter.wordCount
             val label = count?.let { resources.getQuantityString(R.plurals.word_count, it, it) }
             binding.readToolbar.subtitle = if (label == null) title else {
                 getString(R.string.chapter_word_count_format, label, title)
             }
-            binding.readWordCount.text = label
+            binding.readWordCount.text = if (chapter.showingSummary && label != null)
+                getString(R.string.ai_summary_status_count, label) else label
             binding.readWordCount.isVisible = count != null
             updateReaderOverlayVisibility()
         }
