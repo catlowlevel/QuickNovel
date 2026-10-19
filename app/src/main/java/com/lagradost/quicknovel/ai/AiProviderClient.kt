@@ -51,7 +51,16 @@ class AiProviderClient internal constructor(
 
     override suspend fun testConnection(provider: AiProvider, config: AiProviderConfig): AiModel {
         val validated = validate(provider, config, requireModel = true)
-        val root = get(request(provider, validated, modelId = validated.model))
+        val root = try {
+            get(request(provider, validated, modelId = validated.model))
+        } catch (e: AiProviderException) {
+            // Some compatible services (including DeepSeek) expose only the model catalog.
+            if (validated.baseUrl.isNotEmpty() && e.statusCode in listOf(404, 405, 501)) {
+                return fetchModels(provider, validated).firstOrNull { it.id == validated.model }
+                    ?: throw AiProviderException(AiFailure.NOT_FOUND)
+            }
+            throw e
+        }
         if (provider == AiProvider.GEMINI && !supportsGeneration(root)) {
             throw AiProviderException(AiFailure.UNSUPPORTED_MODEL)
         }
@@ -59,8 +68,10 @@ class AiProviderClient internal constructor(
     }
 
     private fun validate(provider: AiProvider, config: AiProviderConfig, requireModel: Boolean): AiProviderConfig {
+        val baseUrl = config.baseUrl.trim()
+        if (baseUrl.isNotEmpty() && aiApiBaseUrlOrNull(baseUrl) == null) throw AiProviderException(AiFailure.INVALID_URL)
         val key = config.apiKey.trim()
-        if (key.isEmpty()) throw AiProviderException(AiFailure.MISSING_KEY)
+        if (key.isEmpty() && baseUrl.isEmpty()) throw AiProviderException(AiFailure.MISSING_KEY)
         if (key.any { it <= ' ' || it > '~' }) throw AiProviderException(AiFailure.INVALID_KEY)
         val model = config.model.trim().let { if (provider == AiProvider.GEMINI) it.removePrefix("models/") else it }
         if (requireModel) {
@@ -69,11 +80,14 @@ class AiProviderClient internal constructor(
                 throw AiProviderException(AiFailure.INVALID_MODEL)
             }
         }
-        return AiProviderConfig(key, model)
+        return config.copy(apiKey = key, model = model, baseUrl = baseUrl)
     }
 
     private fun request(provider: AiProvider, config: AiProviderConfig, modelId: String? = null, cursor: String? = null): Request {
-        val url = endpoint(provider).newBuilder().addPathSegment("models")
+        val base = if (config.baseUrl.isEmpty()) endpoint(provider) else {
+            aiApiBaseUrlOrNull(config.baseUrl) ?: throw AiProviderException(AiFailure.INVALID_URL)
+        }
+        val url = base.newBuilder().addPathSegment("models")
         if (modelId != null) url.addPathSegment(modelId)
         if (modelId == null) when (provider) {
             AiProvider.GEMINI -> {
@@ -88,10 +102,10 @@ class AiProviderClient internal constructor(
         }
         return Request.Builder().url(url.build()).header("Accept", "application/json").apply {
             when (provider) {
-                AiProvider.OPENAI -> header("Authorization", "Bearer ${config.apiKey}")
-                AiProvider.GEMINI -> header("x-goog-api-key", config.apiKey)
+                AiProvider.OPENAI -> if (config.apiKey.isNotEmpty()) header("Authorization", "Bearer ${config.apiKey}")
+                AiProvider.GEMINI -> if (config.apiKey.isNotEmpty()) header("x-goog-api-key", config.apiKey)
                 AiProvider.CLAUDE -> {
-                    header("x-api-key", config.apiKey)
+                    if (config.apiKey.isNotEmpty()) header("x-api-key", config.apiKey)
                     header("anthropic-version", "2023-06-01")
                 }
             }
@@ -110,7 +124,8 @@ class AiProviderClient internal constructor(
             item.text("name")?.removePrefix("models/")
         } else item.text("id")
         if (id.isNullOrBlank()) return null
-        val name = item.text(if (provider == AiProvider.GEMINI) "displayName" else "display_name") ?: id
+        val name = item.text(if (provider == AiProvider.GEMINI) "displayName" else "display_name")
+            ?: (if (provider != AiProvider.GEMINI) item.text("name") else null) ?: id
         return AiModel(id, name)
     }
 
@@ -151,7 +166,7 @@ class AiProviderClient internal constructor(
                             429 -> AiFailure.RATE_LIMIT
                             in 500..599 -> AiFailure.SERVER
                             else -> AiFailure.INVALID_RESPONSE
-                        })
+                        }, it.code)
                         json(it)
                     }
                     if (continuation.isActive) continuation.resume(result)

@@ -8,8 +8,8 @@ enum class AiProvider(val displayName: String, internal val apiUrl: String) {
     CLAUDE("Claude", "https://api.anthropic.com/v1/"),
 }
 
-data class AiProviderConfig(val apiKey: String = "", val model: String = "") {
-    override fun toString(): String = "AiProviderConfig(apiKey=[redacted], model=$model)"
+data class AiProviderConfig(val apiKey: String = "", val model: String = "", val baseUrl: String = "") {
+    override fun toString(): String = "AiProviderConfig(apiKey=[redacted], model=$model, baseUrl=${if (baseUrl.isBlank()) "[default]" else "[custom]"})"
 }
 
 data class AiKeyProfile(
@@ -63,7 +63,9 @@ data class AiSettings(
 
     fun normalized(): AiSettings = copy(profiles = profiles.mapValues { (provider, profiles) ->
         profiles.map { profile -> profile.copy(name = profile.name.trim(), config = profile.config.let { config ->
-            config.copy(apiKey = config.apiKey.trim(), model = config.model.trim().let {
+            config.copy(apiKey = config.apiKey.trim(), baseUrl = config.baseUrl.trim().let {
+                if (it.isEmpty()) "" else aiApiBaseUrlOrNull(it)?.toString() ?: it
+            }, model = config.model.trim().let {
                 if (provider == AiProvider.GEMINI) it.removePrefix("models/") else it
             })
         }) }
@@ -73,12 +75,12 @@ data class AiSettings(
 data class AiModel(val id: String, val name: String = id)
 
 enum class AiFailure {
-    MISSING_KEY, INVALID_KEY, MISSING_MODEL, INVALID_MODEL, AUTHENTICATION, FORBIDDEN,
+    MISSING_KEY, INVALID_KEY, MISSING_MODEL, INVALID_MODEL, INVALID_URL, AUTHENTICATION, FORBIDDEN,
     NOT_FOUND, RATE_LIMIT, SERVER, NETWORK, TIMEOUT, INVALID_RESPONSE, UNSUPPORTED_MODEL,
     LOAD_SETTINGS, SAVE_SETTINGS,
 }
 
-class AiProviderException(val failure: AiFailure) : Exception(failure.name)
+class AiProviderException(val failure: AiFailure, val statusCode: Int? = null) : Exception(failure.name)
 
 interface AiProviderApi {
     suspend fun fetchModels(provider: AiProvider, config: AiProviderConfig): List<AiModel>
