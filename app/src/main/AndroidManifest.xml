@@ -259,6 +259,7 @@
         </activity>
 
         <activity android:name=".BrowserActivity" android:exported="false" />
+        <activity android:name=".ui.settings.AiSettingsActivity" android:exported="false" />
 
         <activity
             android:name=".ReadActivity2"

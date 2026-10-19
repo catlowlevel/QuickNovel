@@ -348,6 +348,17 @@ object SettingScreen : SearchableSettings {
                 )
             ),
             Preference.PreferenceGroup(
+                title = stringResource(R.string.ai_settings_group),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(R.string.ai_provider_settings),
+                        subtitle = stringResource(R.string.ai_providers_subtitle),
+                        icon = painterResource(R.drawable.ic_baseline_tune_24),
+                        onClick = { context.startActivity(Intent(context, AiSettingsActivity::class.java)) },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
                 title = stringResource(R.string.reader_settings),
                 preferenceItems = persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(
