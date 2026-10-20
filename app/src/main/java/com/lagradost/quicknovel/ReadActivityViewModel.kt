@@ -56,6 +56,7 @@ import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKeyClass
 import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.BookDownloader2Helper.getQuickChapter
+import com.lagradost.quicknovel.BookDownloader2Helper.quickStreamCache
 import com.lagradost.quicknovel.CommonActivity.TAG
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.TTSHelper.parseTextToSpans
@@ -99,6 +100,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -113,6 +115,7 @@ import me.ag2s.epublib.util.zip.AndroidZipFile
 import org.commonmark.node.Node
 import org.jsoup.Jsoup
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.net.URLDecoder
 import java.security.MessageDigest
@@ -241,7 +244,17 @@ abstract class AbstractBook {
     abstract fun author(): String?
 }
 
-class QuickBook(val data: QuickStreamData) : AbstractBook() {
+class QuickBook(data: QuickStreamData) : AbstractBook() {
+    @Volatile
+    var data: QuickStreamData = data
+        private set
+
+    internal fun appendRefreshedChapters(fresh: QuickStreamData): QuickStreamData? {
+        val updated = appendRefreshedChapters(data, fresh) ?: return null
+        data = updated
+        return updated
+    }
+
     override fun chapterBrowserUrl(index: Int): String? =
         chapterBrowserUrlOrNull(data.data, index, ::resolveUrl)
 
@@ -748,7 +761,7 @@ class ReadActivityViewModel : ViewModel() {
     private val chapterMutex = Mutex()
     private val chapterExpandMutex = Mutex()
 
-    private val requested: HashSet<Int> = hashSetOf()
+    private val requested: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
     private val loading: HashSet<Int> = hashSetOf()
     private val chapterData = ConcurrentHashMap<Int, Resource<LiveChapterData>>()
@@ -842,7 +855,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun onScroll(visibility: ScrollVisibilityIndex?) {
-        if (visibility == null || !isInApp) return
+        if (visibility == null || !isInApp || readerBackgroundWorkPending) return
         // dynamically increase padding in case of very small chapters with a maximum of 10 chapters
         val first = visibility.firstInMemory.index
         val last = visibility.lastInMemory.index
@@ -1038,25 +1051,25 @@ class ReadActivityViewModel : ViewModel() {
                 }
             }
             if (preSize != book.size()) updateChapters()
-        }
 
-        // if we are still out of bounds then return no more chapters
-        if (index >= book.size()) {
-            chapterMutex.withLock {
-                // only push one no more chapters
-                if (index == book.size()) {
-                    chapterData[index] =
-                        Resource.Failure(
-                            null,
-                            context?.getString(R.string.no_more_chapters) ?: "ERROR"
-                        )
-                } else {
-                    chapterData.remove(index)
+            // Keep the end check synchronized with appending refreshed chapters.
+            if (index >= book.size()) {
+                chapterMutex.withLock {
+                    // only push one no more chapters
+                    if (index == book.size()) {
+                        chapterData[index] =
+                            Resource.Failure(
+                                null,
+                                context?.getString(R.string.no_more_chapters) ?: "ERROR"
+                            )
+                    } else {
+                        chapterData.remove(index)
+                    }
+                    loading -= index
+                    if (notify) notifyChapterUpdate(index)
                 }
-                loading -= index
-                if (notify) notifyChapterUpdate(index)
+                return
             }
-            return
         }
 
         // we have verified we are within bounds, then set the loading to the index url
@@ -1339,7 +1352,57 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
+    @Volatile
+    private var readerBackgroundWorkPending = false
+    private var refreshSavedChapterList = false
+
+    /** Called after the first list has been committed and its saved scroll position restored. */
+    fun onReaderContentDisplayed(): Boolean {
+        if (!readerBackgroundWorkPending) return false
+        readerBackgroundWorkPending = false
+        val startIndex = currentIndex
+        viewModelScope.launch(Dispatchers.IO) { updateIndexAsync(startIndex) }
+        if (refreshSavedChapterList) {
+            (book as? QuickBook)?.let { quickBook ->
+                viewModelScope.launch(Dispatchers.IO) { refreshSavedChapters(quickBook) }
+            }
+        }
+        return true
+    }
+
+    private suspend fun refreshSavedChapters(quickBook: QuickBook) {
+        val saved = quickBook.data
+        val sourceUrl = saved.sourceUrl ?: return
+        try {
+            val response = Apis.getApiFromName(saved.meta.apiName).load(sourceUrl, allowCache = false)
+            currentCoroutineContext().ensureActive()
+            val fresh = ((response as? Resource.Success)?.value as? StreamResponse)
+                ?.quickStreamData(saved.meta.apiName)?.copy(sourceUrl = sourceUrl) ?: return
+            val updated = chapterExpandMutex.withLock {
+                val previousSize = quickBook.size()
+                val appended = quickBook.appendRefreshedChapters(fresh) ?: return@withLock null
+                chapterMutex.withLock {
+                    // Discard an old end-of-book failure so newly appended chapters can load.
+                    chapterData.keys.filter { it >= previousSize }.forEach { chapterData.remove(it) }
+                    requested.removeAll { it >= previousSize }
+                    hasExpanded.remove(previousSize)
+                }
+                updateChapters()
+                summaryChapterChanges.update { it + 1 }
+                updateReadArea()
+                appended
+            } ?: return
+            try { context?.quickStreamCache()?.save(updated) } catch (error: IOException) { logError(error) }
+            if (currentIndex >= saved.data.lastIndex) updateIndex(currentIndex)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            logError(error)
+        }
+    }
+
     fun init(intent: Intent?, context: ReadActivity2) = ioSafe {
+        refreshSavedChapterList = intent?.getBooleanExtra(EXTRA_REFRESH_CHAPTER_LIST, false) == true
         _loadingStatus.postValue(Resource.Loading())
         initTTSSession(context)
 
@@ -1396,7 +1459,8 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 currentIndex = loadedChapterIndex
-                updateIndexAsync(loadedChapterIndex, notify = false, postLoading = true)
+                requested += loadedChapterIndex
+                loadIndividualChapter(loadedChapterIndex, notify = false, postLoading = true)
 
                 if (book.size() <= 0) {
                     _loadingStatus.postValue(
@@ -1411,7 +1475,8 @@ class ReadActivityViewModel : ViewModel() {
                 // if we are reading a book that sub/resize for some reason, this will clamp it into the correct range
                 if (loadedChapterIndex >= book.size()) {
                     currentIndex = book.size() - 1
-                    updateIndexAsync(currentIndex, notify = false)
+                    requested += currentIndex
+                    loadIndividualChapter(currentIndex, notify = false, postLoading = true)
                     showToast("Resize $loadedChapterIndex -> $currentIndex", Toast.LENGTH_LONG)
                 }
 
@@ -1428,7 +1493,8 @@ class ReadActivityViewModel : ViewModel() {
                 // don't update as you want to seek on update
                 changeIndex(ScrollIndex(currentIndex, innerIndex, char))
 
-                // notify once because initial load is 3 chapters I don't care about 10 notifications when the user cant see it
+                // Publish the resumed chapter before any neighbor fetch can delay or replace its initial seek.
+                readerBackgroundWorkPending = true
                 updateReadArea(seekToDesired = true)
 
                 /*_loadingStatus.postValue(

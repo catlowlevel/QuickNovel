@@ -405,7 +405,8 @@ class ResultViewModel2(
                                         dateOfRelease = chapter.dateOfRelease,
                                         views = chapter.views
                                     )
-                                }.toMutableList()
+                                }.toMutableList(),
+                                sourceUrl = action.response.url,
                             )
                         )
 

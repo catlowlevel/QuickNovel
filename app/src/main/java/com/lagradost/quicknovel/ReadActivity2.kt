@@ -1552,12 +1552,18 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     scrollToDesired()
                     onScroll()
                     ttsAutoCentering.onContentChanged()
+                    binding.realText.post {
+                        if (viewModel.onReaderContentDisplayed()) onScroll()
+                    }
                 }
             } else {
                 textAdapter.submitList(chapter.data) {
                     viewModel._loadingStatus.postValue(Resource.Success(true))
                     onScroll()
                     ttsAutoCentering.onContentChanged()
+                    binding.realText.post {
+                        if (viewModel.onReaderContentDisplayed()) onScroll()
+                    }
                 }
             }
         }

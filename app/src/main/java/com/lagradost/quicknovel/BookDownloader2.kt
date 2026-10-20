@@ -173,6 +173,7 @@ data class QuickStreamData(
     val meta: QuickStreamMetaData,
     val poster: String?,
     val data: MutableList<ChapterData>,
+    val sourceUrl: String? = null,
 )
 
 data class WaitOrCancel(
@@ -585,10 +586,11 @@ object BookDownloader2Helper {
         }
     }
 
-    fun openQuickStream(activity: Activity?, uri: Uri?) {
+    fun openQuickStream(activity: Activity?, uri: Uri?, refreshChapterList: Boolean = false) {
         if (uri == null || activity == null) return
         val myIntent = Intent(activity, ReadActivity2::class.java)
         myIntent.setDataAndType(uri, "quickstream")
+        myIntent.putExtra(EXTRA_REFRESH_CHAPTER_LIST, refreshChapterList)
         activity.startActivity(myIntent)
     }
 
@@ -645,6 +647,12 @@ object BookDownloader2Helper {
         )
     }
 
+    internal fun Context.quickStreamCache(): FileQuickStreamCache =
+        FileQuickStreamCache(File(filesDir, "reader-resume"))
+
+    internal fun Context.savedQuickStream(meta: QuickStreamMetaData, sourceUrl: String): QuickStreamData? =
+        quickStreamCache().load(meta, sourceUrl, File(cacheDir, getFilePath(meta, -1)))
+
     suspend fun Context.getQuickChapter(
         meta: QuickStreamMetaData,
         chapter: ChapterData,
@@ -677,6 +685,9 @@ object BookDownloader2Helper {
             outputFile.parentFile?.mkdirs()
             outputFile.createNewFile()
             outputFile.writeText(mapper.writeValueAsString(data))
+            if (!data.sourceUrl.isNullOrBlank()) {
+                try { quickStreamCache().save(data) } catch (error: Exception) { logError(error) }
+            }
             return outputFile.toUri()
         } catch (e: Exception) {
             return null
@@ -1243,15 +1254,7 @@ object BookDownloader2 {
 
             val uri =
                 activity?.createQuickStream(
-                    QuickStreamData(
-                        QuickStreamMetaData(
-                            res.author,
-                            res.name,
-                            apiName,
-                        ),
-                        res.posterUrl,
-                        res.data.toMutableList()
-                    )
+                    res.quickStreamData(apiName)
                 )
 
             openQuickStream(uri)
@@ -1260,37 +1263,52 @@ object BookDownloader2 {
 
     private val streamResultMutex = Mutex()
     fun stream(card: ResultCached) = ioSafe {
-        if (streamResultMutex.isLocked) return@ioSafe
-        streamResultMutex.withLock {
-            val api = getApiFromName(card.apiName)
-            val data = api.load(card.source)
-
-            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
-                stream(data.value, card.apiName)
-            } else {
-                showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
-            }
-        }
+        stream(ImmutableSearchResponse.from(card))
     }
 
     suspend fun stream(card: ImmutableSearchResponse) = withContext(Dispatchers.IO) {
         if (streamResultMutex.isLocked) return@withContext
         streamResultMutex.withLock {
-            val api = getApiFromName(card.apiName)
-            val data = api.load(card.url)
+            resumeHistoryStream(
+                loadSaved = {
+                    context?.let { ctx ->
+                        with(BookDownloader2Helper) {
+                            ctx.savedQuickStream(QuickStreamMetaData(card.author, card.name, card.apiName), card.url)
+                        }
+                    }
+                },
+                openSaved = { saved ->
+                    val act = activity
+                    val uri = act?.createQuickStream(saved)
+                    if (uri == null) false else {
+                        withContext(Dispatchers.Main) {
+                            BookDownloader2Helper.openQuickStream(act, uri, refreshChapterList = true)
+                        }
+                        card.id?.let {
+                            ImmutableSearchResponse.setTimeOfPageOpened(it, System.currentTimeMillis())
+                            openChanged.invoke(it)
+                        }
+                        true
+                    }
+                },
+                openOnline = {
+                    val api = getApiFromName(card.apiName)
+                    val data = api.load(card.url)
 
-            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
-                val response = ImmutableSearchResponse.from(data.value)
-                ImmutableSearchResponse.addToHistory(response)
-                response.id?.let {
-                    ImmutableSearchResponse.setTimeOfPageOpened(it, System.currentTimeMillis())
-                    openChanged.invoke(it)
-                }
+                    if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                        val response = ImmutableSearchResponse.from(data.value)
+                        ImmutableSearchResponse.addToHistory(response)
+                        response.id?.let {
+                            ImmutableSearchResponse.setTimeOfPageOpened(it, System.currentTimeMillis())
+                            openChanged.invoke(it)
+                        }
 
-                stream(data.value, card.apiName)
-            } else {
-                showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
-            }
+                        stream(data.value, card.apiName)
+                    } else {
+                        showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
+                    }
+                },
+            )
         }
     }
 
