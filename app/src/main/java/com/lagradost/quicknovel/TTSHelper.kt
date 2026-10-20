@@ -16,7 +16,6 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
-import com.lagradost.quicknovel.mvvm.debugAssert
 import com.lagradost.quicknovel.receivers.BecomingNoisyReceiver
 import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.txt
@@ -593,125 +592,15 @@ object TTSHelper {
         return parseSpan(render, index)
     }
 
-    private fun isValidSpeakOutMsg(msg: String): Boolean {
-        return msg.isNotEmpty() && msg.isNotBlank() && msg.contains("[A-z0-9]".toRegex())
-    }
-
-    fun ttsParseText(text: String, tag: Int): ArrayList<TTSLine> {
-        val cleanText = text
-            .replace("\\.([A-z])".toRegex(), ",$1")//\.([A-z]) \.([^-\s])
-            .replace("([.:])([0-9])".toRegex(), ",$2") // GOOD FOR DECIMALS
-            .replace(
-                "(^|[ \"“‘'])(Dr|Mr|Mrs)\\. ([A-Z])".toRegex(),
-                "$1$2, $3"
-            )
-
-        //println("SIZE: ${text.length}")
-
-        debugAssert({ cleanText.length != text.length }) {
-            "TTS requires same length"
+    fun ttsParseText(text: String, tag: Int): ArrayList<TTSLine> =
+        TTSSentenceParser.split(text).mapTo(ArrayList()) { sentence ->
+            // Keep one UTF-16 code unit per source character: reader rule highlights use these offsets.
+            val speech = buildString(sentence.end - sentence.start) {
+                for (index in sentence.start until sentence.end) {
+                    val character = text[index]
+                    append(if (character in "-<>_^«»「」—–¿*~\u200c") ' ' else character)
+                }
+            }
+            TTSLine(speech, sentence.start, sentence.end, tag)
         }
-
-        val ttsLines = ArrayList<TTSLine>()
-
-
-        val invalidStartChars =
-            arrayOf(
-                ' ', '.', ',', '\n', '\"',
-                '\'', '’', '‘', '“', '”', '«', '»', '「', '」', '…', '[', ']'
-            )
-        val endingCharacters = arrayOf(".", "\n", ";", "?", ":")
-        var index = 0
-        while (true) {
-            if (index >= text.length) {
-                break
-            }
-            while (invalidStartChars.contains(text[index])) {
-                index++
-                if (index >= text.length) {
-                    break
-                }
-            }
-
-            var endIndex = Int.MAX_VALUE
-            for (a in endingCharacters) {
-                val indexEnd = cleanText.indexOf(a, index)
-
-                if (indexEnd == -1) continue
-
-                if (indexEnd < endIndex) {
-                    endIndex = indexEnd + 1
-                }
-            }
-
-
-            if (endIndex > text.length) {
-                endIndex = text.length
-            }
-            if (index >= text.length) {
-                break
-            }
-
-            val invalidEndChars =
-                arrayOf('\n')
-            while (true) {
-                var containsInvalidEndChar = false
-                for (a in invalidEndChars) {
-                    if (endIndex <= 0 || endIndex > text.length) break
-                    if (text[endIndex - 1] == a) {
-                        containsInvalidEndChar = true
-                        endIndex--
-                    }
-                }
-                if (!containsInvalidEndChar) {
-                    break
-                }
-            }
-
-            try {
-                // THIS PART IF FOR THE SPEAK PART, REMOVING STUFF THAT IS WACK
-                val message = text.substring(index, endIndex)
-                var msg = message
-                val invalidChars =
-                    arrayOf(
-                        "-",
-                        "<",
-                        ">",
-                        "_",
-                        "^",
-                        "«",
-                        "»",
-                        "「",
-                        "」",
-                        "—",
-                        "–",
-                        "¿",
-                        "*",
-                        "~",
-                        "\u200c" // Zero width joiner
-                    ) // "\'", //Don't ect
-                for (c in invalidChars) {
-                    msg = msg.replace(c, " ")
-                }
-                msg = msg.replace("...", " ")
-                if (msg
-                        .replace("\n", "")
-                        .replace("\t", "")
-                        .replace(".", "").isNotEmpty()
-                ) {
-                    if (isValidSpeakOutMsg(msg)) {
-                        ttsLines.add(TTSLine(msg, index, endIndex, index = tag))
-                    }
-                }
-            } catch (t: Throwable) {
-                break
-            }
-            index = endIndex
-            if (text.getOrNull(index)?.isWhitespace() == true) {
-                index++
-            }
-        }
-
-        return ttsLines
-    }
 }

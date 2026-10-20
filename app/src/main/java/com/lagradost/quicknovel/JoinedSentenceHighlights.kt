@@ -1,25 +1,23 @@
 package com.lagradost.quicknovel
 
-import java.text.BreakIterator
-import java.util.Locale
-
 internal data class JoinedSentenceRange(val start: Int, val end: Int)
 
 /** Both sides of a removed paragraph break belong to the affected sentence(s). */
 internal fun joinedSentenceRanges(text: String, plan: ParagraphFormatPlan): List<JoinedSentenceRange> {
     if (text.isEmpty() || plan.joins.isEmpty()) return emptyList()
-    // Sentence boundaries also cover text which the current TTS parser cannot speak (e.g. Chinese).
-    val sentences = BreakIterator.getSentenceInstance(Locale.ROOT).apply { setText(text) }
+    val sentences = TTSSentenceParser.split(text)
+    if (sentences.isEmpty()) return emptyList()
     val ranges = ArrayList<JoinedSentenceRange>()
+    var first = 0
     for (join in plan.joins) {
         val boundary = plan.displayCharacter(join.start)
         val left = (boundary - 1).coerceIn(0, text.lastIndex)
         val right = (boundary + join.replacement.length).coerceIn(0, text.lastIndex)
-        var start = sentences.preceding(left + 1).takeUnless { it == BreakIterator.DONE } ?: 0
-        var end = sentences.following(right).takeUnless { it == BreakIterator.DONE } ?: text.length
-        while (start < end && text[start].isWhitespace()) start++
-        while (end > start && text[end - 1].isWhitespace()) end--
-        if (end <= start) continue
+        while (first < sentences.lastIndex && sentences[first].end <= left) first++
+        var last = first
+        while (last < sentences.lastIndex && sentences[last + 1].start <= right) last++
+        val start = sentences[first].start
+        val end = sentences[last].end
         val previous = ranges.lastOrNull()
         if (previous != null && start <= previous.end) {
             ranges[ranges.lastIndex] = JoinedSentenceRange(previous.start, maxOf(previous.end, end))

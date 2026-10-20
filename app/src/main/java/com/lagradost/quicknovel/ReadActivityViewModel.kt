@@ -1706,7 +1706,11 @@ class ReadActivityViewModel : ViewModel() {
                         if (data == null) bookmark?.resolveSentence(initialLines.size) ?: 0
                         else {
                             val displayed = displayedChapter(data)
-                            bookmark?.resolveSentence(initialLines, displayed::displayCharacter, data.ttsLines) ?: 0
+                            val migrated = bookmark?.let { saved ->
+                                if (saved.character != null) saved else saved.copy(character =
+                                    legacyTtsSentenceCharacter(data.rendered.toString(), saved.sentence))
+                            }
+                            migrated?.resolveSentence(initialLines, displayed::displayCharacter, data.ttsLines) ?: 0
                         }
                     }
                 } else {
