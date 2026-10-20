@@ -87,6 +87,24 @@
     <string name="ai_summary_chapter_label">%1$s · Summary</string>
     <string name="ai_summary_chapter_incomplete">%1$s · Summary (incomplete)</string>
     <string name="ai_summary_source_changed">The chapter changed or is no longer loaded. Open it and try again.</string>
+    <string name="ai_summary_continuous">Continue with loaded chapters</string>
+    <string name="ai_summary_continue">Continue</string>
+    <string name="ai_summary_start_continuous">Start</string>
+    <string name="ai_summary_continuous_regenerate_scope">Regenerates this chapter and reuses other saved summaries. Newly loaded chapters use additional tokens until you stop.</string>
+    <string name="ai_summary_continuous_scope">Reuses saved summaries. Newly loaded chapters use additional tokens until you stop.</string>
+    <string name="ai_summary_continuous_progress">%1$d ready · %2$s</string>
+    <string name="ai_summary_continuous_waiting">Waiting for %1$s to load</string>
+    <string name="ai_summary_continuous_stopped">Continuous summarization stopped.</string>
+    <string name="ai_summary_continuous_cache_failed">Stopped: the last summary could not be saved.</string>
+    <string name="ai_summary_continuous_incomplete">Stopped: the last summary is incomplete.</string>
+    <plurals name="ai_summary_continuous_done">
+        <item quantity="one">%1$d chapter ready</item>
+        <item quantity="other">%1$d chapters ready</item>
+    </plurals>
+    <plurals name="ai_summary_continuous_estimate">
+        <item quantity="one">%1$d loaded chapter · up to ~%2$s input tokens + output</item>
+        <item quantity="other">%1$d loaded chapters · up to ~%2$s input tokens + output</item>
+    </plurals>
     <string name="ai_summary_stop">Stop summarizing</string>
     <string name="ai_summary_ready_for_chapter">Summary ready for %1$s.</string>
     <string name="ai_summary_generate">Summarize</string>

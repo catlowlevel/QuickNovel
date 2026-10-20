@@ -6,6 +6,7 @@ import android.text.TextUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -35,7 +36,8 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
     fun dismissForDestroy() = dismissDialog()
 
     fun render(state: AiSummaryState) {
-        if (state == AiSummaryState.Closed || state is AiSummaryState.Running) {
+        if (state == AiSummaryState.Closed || state is AiSummaryState.Running ||
+            state is AiSummaryState.Ready || state is AiSummaryState.Waiting || state is AiSummaryState.Finished) {
             dismissDialog()
             return
         }
@@ -63,7 +65,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             orientation = LinearLayout.VERTICAL
             setPadding(inset, (16 * density).toInt(), inset, (16 * density).toInt())
         }
-        fun text(value: String, selectable: Boolean = false, prominent: Boolean = false,
+        fun text(value: String, prominent: Boolean = false,
                  secondary: Boolean = false, lines: Int = Int.MAX_VALUE) {
             val label = TextView(activity).apply {
                 this.text = value
@@ -72,7 +74,6 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 includeFontPadding = false
                 maxLines = lines
                 ellipsize = TextUtils.TruncateAt.END
-                setTextIsSelectable(selectable)
             }
             content.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 if (content.childCount > 0) topMargin = (12 * density).toInt()
@@ -81,6 +82,15 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
         fun words(value: String): String {
             val count = countWords(value)
             return activity.resources.getQuantityString(R.plurals.word_count, count, count)
+        }
+        fun continuousToggle(enabled: Boolean) {
+            if (!controller.canContinue) return
+            content.addView(CheckBox(activity).apply {
+                setText(R.string.ai_summary_continuous)
+                textSize = 14f
+                isChecked = enabled
+                setOnCheckedChangeListener { _, checked -> controller.setContinuous(checked) }
+            })
         }
         fun button(which: Int, title: Int?, action: () -> Unit = {}) {
             current.getButton(which).apply {
@@ -106,7 +116,9 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 if (saved.output.truncated) text(activity.getString(R.string.ai_summary_truncated), secondary = true)
                 text(activity.getString(R.string.ai_summary_preview), prominent = true, secondary = true)
                 text(saved.output.text, secondary = true, lines = 4)
-                button(AlertDialog.BUTTON_POSITIVE, R.string.ai_summary_reuse, controller::reuse)
+                continuousToggle(state.continuous)
+                button(AlertDialog.BUTTON_POSITIVE,
+                    if (state.continuous) R.string.ai_summary_continue else R.string.ai_summary_reuse, controller::reuse)
                 button(AlertDialog.BUTTON_NEUTRAL, R.string.ai_summary_regenerate, controller::regenerate)
             }
             is AiSummaryState.Confirm -> {
@@ -115,24 +127,27 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 val defaultHost = aiApiBaseUrlOrNull(plan.provider.apiUrl)!!.host
                 val name = plan.profileName.trim().ifBlank { plan.provider.displayName }
                 content.addView(AiRequestConfirmationView(activity).apply {
-                    bind(plan.chapter.title, "$name · ${plan.config.model}",
-                        activity.getString(R.string.chapter_word_count_format, words(plan.chapter.text),
-                            activity.getString(R.string.ai_request_token_estimate, NumberFormat.getIntegerInstance().format(plan.inputTokens))),
-                        host.takeUnless { it == defaultHost })
+                    val estimate = if (state.continuous) activity.resources.getQuantityString(
+                        R.plurals.ai_summary_continuous_estimate, state.loadedCount, state.loadedCount,
+                        NumberFormat.getIntegerInstance().format(state.knownInputTokens))
+                    else activity.getString(R.string.chapter_word_count_format, words(plan.chapter.text),
+                        activity.getString(R.string.ai_request_token_estimate, NumberFormat.getIntegerInstance().format(plan.inputTokens)))
+                    bind(plan.chapter.title, "$name · ${plan.config.model}", estimate, host.takeUnless { it == defaultHost })
                 })
-                button(AlertDialog.BUTTON_POSITIVE,
-                    if (state.regenerating) R.string.ai_summary_regenerate else R.string.ai_summary_generate, controller::generate)
+                continuousToggle(state.continuous)
+                if (state.continuous) text(activity.getString(
+                    if (state.regenerating) R.string.ai_summary_continuous_regenerate_scope else R.string.ai_summary_continuous_scope), secondary = true)
+                button(AlertDialog.BUTTON_POSITIVE, when {
+                    state.continuous -> R.string.ai_summary_start_continuous
+                    state.regenerating -> R.string.ai_summary_regenerate
+                    else -> R.string.ai_summary_generate
+                }, controller::generate)
             }
-            is AiSummaryState.Running -> Unit
-            is AiSummaryState.Ready -> {
-                current.setTitle(activity.getString(R.string.ai_summary_result_title, state.plan.chapter.title))
-                if (state.output.truncated) text(activity.getString(R.string.ai_summary_truncated))
-                text(state.output.text, selectable = true)
-                button(AlertDialog.BUTTON_POSITIVE, R.string.done, controller::close)
-                button(AlertDialog.BUTTON_NEGATIVE, R.string.ai_summary_regenerate, controller::regenerate)
-            }
+            is AiSummaryState.Running, is AiSummaryState.Ready,
+            is AiSummaryState.Waiting, is AiSummaryState.Finished -> Unit
             is AiSummaryState.Failed -> {
                 text(state.chapter.title)
+                if (state.continuous) text(activity.getString(R.string.ai_summary_continuous_stopped), secondary = true)
                 text(activity.getString(state.reason.messageRes()))
                 button(AlertDialog.BUTTON_POSITIVE, R.string.ai_summary_retry, controller::retry)
                 button(AlertDialog.BUTTON_NEUTRAL, R.string.ai_provider_settings) {

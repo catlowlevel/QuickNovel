@@ -41,6 +41,13 @@ import com.lagradost.quicknovel.ai.AiChapter
 import com.lagradost.quicknovel.ai.AiChapterTextViews
 import com.lagradost.quicknovel.ai.AiOriginalPosition
 import com.lagradost.quicknovel.ai.AiSummaryOutput
+import com.lagradost.quicknovel.ai.AiSummaryChapterSource
+import com.lagradost.quicknovel.ai.AiNextSummaryChapter
+import com.lagradost.quicknovel.ai.AiProviderException
+import com.lagradost.quicknovel.ai.AiFailure
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeyClass
@@ -530,6 +537,35 @@ class ReadActivityViewModel : ViewModel() {
         if (::book.isInitialized) book.chapterBrowserUrl(index) else null
 
 
+    private val summaryChapterChanges = MutableStateFlow(0L)
+    val summaryChapterSource = object : AiSummaryChapterSource {
+        override val changes = summaryChapterChanges.asStateFlow()
+
+        private fun sourceIndex(after: AiChapter): Int? {
+            if (!::book.isInitialized || book.playbackId() != after.bookId) return null
+            return (0 until book.size()).firstOrNull { book.chapterId(it) == after.chapterId }
+        }
+
+        override suspend fun next(after: AiChapter): AiNextSummaryChapter = chapterMutex.withLock {
+            val index = sourceIndex(after) ?: return@withLock AiNextSummaryChapter.SourceChanged
+            val next = index + 1
+            if (next >= book.size()) return@withLock AiNextSummaryChapter.End
+            val data = (chapterData[next] as? Resource.Success)?.value
+            if (data != null) AiNextSummaryChapter.Loaded(summarySourceChapter(data))
+            else AiNextSummaryChapter.Waiting(book.getChapterTitle(next).asStringNull(context) ?: "")
+        }
+
+        override suspend fun loadedAfter(after: AiChapter): List<AiChapter> = chapterMutex.withLock {
+            val index = sourceIndex(after) ?: throw AiProviderException(AiFailure.SOURCE_CHANGED)
+            buildList {
+                for (next in index + 1 until book.size()) {
+                    val data = (chapterData[next] as? Resource.Success)?.value ?: break
+                    add(summarySourceChapter(data))
+                }
+            }
+        }
+    }
+
     /** Capture one original chapter atomically, independently of translated text and preloaded neighbors. */
     suspend fun summaryChapter(): AiChapter? = chapterMutex.withLock {
         if (!::book.isInitialized) return@withLock null
@@ -734,6 +770,7 @@ class ReadActivityViewModel : ViewModel() {
         hasExpanded.clear() // will unfuck the rest
         chapterMutex.withLock {
             chapterData.clear()
+            summaryChapterChanges.update { it + 1 }
             chapterWordCounts.clear()
         }
         publishChapterInfo()
@@ -1070,6 +1107,7 @@ class ReadActivityViewModel : ViewModel() {
                 loading -= index
                 if (notify) notifyChapterUpdate(index)
             }
+            summaryChapterChanges.update { it + 1 }
             if (index == currentIndex) publishChapterInfo()
         }
     }
@@ -1368,6 +1406,7 @@ class ReadActivityViewModel : ViewModel() {
 
     fun init(book: AbstractBook, context: Context) {
         this.book = book
+        summaryChapterChanges.update { it + 1 }
         ttsBookId = book.playbackId()
         refreshPronunciationOverrides()
         ttsBookmark = getKey<TTSPlaybackBookmark>(EPUB_TTS_POSITION, ttsBookId)

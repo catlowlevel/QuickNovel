@@ -52,6 +52,8 @@ import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.ai.AiSummaryState
+import com.lagradost.quicknovel.ai.AiSummaryFinishReason
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.DataStore.setKey
 import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
@@ -934,6 +936,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        summaryViewModel.controller.attachChapterSource(viewModel.summaryChapterSource)
         summaryDialog = com.lagradost.quicknovel.ai.ReaderSummaryDialog(this, summaryViewModel.controller)
         aiProgressOverlay = com.lagradost.quicknovel.ai.ReaderAiProgressOverlay(
             binding.readerAiProgress,
@@ -954,20 +957,38 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 summaryViewModel.controller.state.collect { state ->
                     aiProgressOverlay.render(state)
+                    // Cached results may reach Ready before the collector observes Running.
+                    summaryDialog.render(state)
                     binding.readToolbar.menu.findItem(R.id.reader_summary)?.isEnabled =
-                        state !is com.lagradost.quicknovel.ai.AiSummaryState.Running &&
-                            state !is com.lagradost.quicknovel.ai.AiSummaryState.Preparing &&
-                            state !is com.lagradost.quicknovel.ai.AiSummaryState.Ready
-                    if (state is com.lagradost.quicknovel.ai.AiSummaryState.Ready) {
-                        val offscreen = !viewModel.isCurrentSummaryChapter(state.plan.chapter)
-                        val applied = viewModel.showSummary(state.plan.chapter, state.output)
-                        summaryViewModel.controller.close()
-                        when {
-                            !applied && !offscreen -> showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
-                            state.cacheWriteFailed -> showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
-                            offscreen -> showToast(this@ReadActivity2, getString(R.string.ai_summary_ready_for_chapter, state.plan.chapter.title))
+                        !summaryViewModel.controller.isProcessing() && state !is AiSummaryState.Preparing &&
+                            state !is AiSummaryState.Ready && state !is AiSummaryState.Finished
+                    when (state) {
+                        is AiSummaryState.Ready -> {
+                            val offscreen = !viewModel.isCurrentSummaryChapter(state.plan.chapter)
+                            val applied = viewModel.showSummary(state.plan.chapter, state.output)
+                            if (!applied && !offscreen) {
+                                summaryViewModel.controller.close()
+                                showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
+                            } else {
+                                summaryViewModel.controller.acknowledge(state)
+                                if (!state.continuous) when {
+                                    state.cacheWriteFailed -> showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
+                                    offscreen -> showToast(this@ReadActivity2, getString(R.string.ai_summary_ready_for_chapter, state.plan.chapter.title))
+                                }
+                            }
                         }
-                    } else summaryDialog.render(state)
+                        is AiSummaryState.Finished -> {
+                            val message = when (state.reason) {
+                                AiSummaryFinishReason.END -> resources.getQuantityString(R.plurals.ai_summary_continuous_done,
+                                    state.completedChapters, state.completedChapters)
+                                AiSummaryFinishReason.CACHE_WRITE_FAILED -> getString(R.string.ai_summary_continuous_cache_failed)
+                                AiSummaryFinishReason.INCOMPLETE -> getString(R.string.ai_summary_continuous_incomplete)
+                            }
+                            summaryViewModel.controller.close()
+                            showToast(this@ReadActivity2, message)
+                        }
+                        else -> Unit
+                    }
                 }
             }
         }

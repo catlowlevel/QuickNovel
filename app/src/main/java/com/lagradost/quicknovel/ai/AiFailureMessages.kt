@@ -8,6 +8,7 @@ internal fun AiFailure.messageRes(): Int = when (this) {
     AiFailure.MISSING_MODEL -> R.string.ai_error_missing_model
     AiFailure.INVALID_MODEL -> R.string.ai_error_invalid_model
     AiFailure.INVALID_URL -> R.string.ai_error_invalid_url
+    AiFailure.SOURCE_CHANGED -> R.string.ai_summary_source_changed
     AiFailure.EMPTY_CHAPTER -> R.string.ai_summary_unavailable
     AiFailure.REQUEST_TOO_LARGE -> R.string.ai_error_request_too_large
     AiFailure.REQUEST_REJECTED -> R.string.ai_error_request_rejected

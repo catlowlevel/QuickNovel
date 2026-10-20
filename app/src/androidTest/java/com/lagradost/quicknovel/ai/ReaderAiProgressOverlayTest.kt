@@ -108,6 +108,31 @@ class ReaderAiProgressOverlayTest {
                 }
                 onView(withText("Reader touch target")).perform(click())
                 scenario.onActivity { assertEquals(2, readerTaps) }
+                scenario.onActivity {
+                    // A fast result can replace Running before the collector renders it.
+                    reply.complete(AiSummaryOutput("Fixture summary"))
+                    controller.open(AiChapter("book", "chapter", "Novel", "Chapter 4", "Original text"), "en")
+                    dialog!!.render(controller.state.value)
+                    controller.generate()
+                    val ready = controller.state.value as AiSummaryState.Ready
+                    overlay.render(ready)
+                    dialog!!.render(ready)
+                    assertSame(ready, controller.state.value) // Dismissal must not cancel the result.
+                }
+                onView(withText("Reader touch target")).perform(click())
+                scenario.onActivity {
+                    assertEquals(3, readerTaps)
+                    controller.close()
+                    controller.open(AiChapter("book", "chapter", "Novel", "Chapter 4", "Original text"), "en")
+                    assertTrue(controller.state.value is AiSummaryState.Saved)
+                    dialog!!.render(controller.state.value)
+                    controller.reuse()
+                    val reused = controller.state.value as AiSummaryState.Ready
+                    dialog!!.render(reused)
+                    assertSame(reused, controller.state.value)
+                }
+                onView(withText("Reader touch target")).perform(click())
+                scenario.onActivity { assertEquals(4, readerTaps) }
             } finally {
                 scenario.onActivity {
                     dialog?.dismissForDestroy()
