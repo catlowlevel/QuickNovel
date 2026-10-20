@@ -93,6 +93,29 @@ class AiSummaryStreamingControllerTest {
     }
 
     @Test
+    fun openingAnotherChapterOrRegeneratingCannotDiscardTheActivePaidRequest() {
+        val api = Api()
+        val controller = AiSummaryController(scope, store, api)
+        controller.open(chapter, "en")
+        controller.generate()
+        val running = controller.state.value as AiSummaryState.Running
+        val other = chapter.copy(chapterId = "next-chapter", title = "Next chapter")
+        controller.open(other, "en")
+        controller.regenerate(other, "en")
+        controller.generate()
+        assertEquals(running, controller.state.value)
+        assertEquals(1, api.replies.size)
+        api.callbacks.single()(17)
+        assertEquals(17L, (controller.state.value as AiSummaryState.Running).generatedTokens)
+        api.replies.single().complete(AiSummaryOutput("Original request completed"))
+        val ready = controller.state.value as AiSummaryState.Ready
+        assertEquals(chapter, ready.plan.chapter)
+        assertEquals("Original request completed", ready.output.text)
+        controller.open(other, "en")
+        assertEquals(other, (controller.state.value as AiSummaryState.Confirm).plan.chapter)
+    }
+
+    @Test
     fun failureAfterProgressRetainsThePreviousCacheAndRetryStartsWithAZeroCount() {
         val api = Api()
         val cache = Cache()

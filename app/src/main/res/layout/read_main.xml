@@ -543,4 +543,14 @@
                 android:layout_gravity="top|start"
                 android:visibility="gone" />
     </FrameLayout>
+
+    <include
+            android:id="@+id/reader_ai_progress"
+            layout="@layout/reader_ai_progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_margin="12dp"
+            android:visibility="gone" />
+
 </FrameLayout>

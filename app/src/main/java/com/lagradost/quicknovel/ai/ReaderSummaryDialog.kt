@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.FrameLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -19,23 +18,15 @@ import com.lagradost.quicknovel.ui.settings.AiSettingsActivity
 import com.lagradost.quicknovel.ui.common.AiRequestConfirmationView
 import java.text.NumberFormat
 
-/** Reuses one reader dialog for confirmation, progress, result and errors. */
+/** Confirmation and recovery stay modal; generation progress belongs to the reader overlay. */
 class ReaderSummaryDialog(private val activity: AppCompatActivity, private val controller: AiSummaryController) {
     private var dialog: AlertDialog? = null
     private var contentHost: FrameLayout? = null
-    private var progressText: TextView? = null
-    private var runningPlan: AiSummaryPlan? = null
-
-    private fun generatedCount(tokens: Long): String = activity.resources.getQuantityString(
-        R.plurals.ai_generated_token_count, tokens.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
-        NumberFormat.getIntegerInstance().format(tokens))
 
     private fun dismissDialog() {
         val previous = dialog
         dialog = null
         contentHost = null
-        progressText = null
-        runningPlan = null
         // Programmatic dismissal must not cancel a request or close a later popup.
         previous?.setOnDismissListener(null)
         previous?.dismiss()
@@ -44,17 +35,10 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
     fun dismissForDestroy() = dismissDialog()
 
     fun render(state: AiSummaryState) {
-        if (state == AiSummaryState.Closed) {
+        if (state == AiSummaryState.Closed || state is AiSummaryState.Running) {
             dismissDialog()
             return
         }
-        val progress = progressText
-        if (state is AiSummaryState.Running && runningPlan === state.plan && dialog?.isShowing == true && progress != null) {
-            progress.text = generatedCount(state.generatedTokens)
-            return
-        }
-        progressText = null
-        runningPlan = null
         // AlertDialog retains its custom view after dismissal; every new dialog owns a new host.
         val host = contentHost ?: FrameLayout(activity).also { contentHost = it }
         val current = dialog ?: AlertDialog.Builder(activity)
@@ -68,8 +52,6 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                     if (dialog === dismissed) {
                         dialog = null
                         contentHost = null
-                        progressText = null
-                        runningPlan = null
                         controller.close()
                     }
                 }
@@ -82,7 +64,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             setPadding(inset, (16 * density).toInt(), inset, (16 * density).toInt())
         }
         fun text(value: String, selectable: Boolean = false, prominent: Boolean = false,
-                 secondary: Boolean = false, lines: Int = Int.MAX_VALUE): TextView {
+                 secondary: Boolean = false, lines: Int = Int.MAX_VALUE) {
             val label = TextView(activity).apply {
                 this.text = value
                 textSize = if (secondary) 14f else 16f
@@ -95,7 +77,6 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             content.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 if (content.childCount > 0) topMargin = (12 * density).toInt()
             })
-            return label
         }
         fun words(value: String): String {
             val count = countWords(value)
@@ -142,13 +123,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 button(AlertDialog.BUTTON_POSITIVE,
                     if (state.regenerating) R.string.ai_summary_regenerate else R.string.ai_summary_generate, controller::generate)
             }
-            is AiSummaryState.Running -> {
-                text(state.plan.chapter.title)
-                content.addView(ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true },
-                    ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-                progressText = text(generatedCount(state.generatedTokens))
-                runningPlan = state.plan
-            }
+            is AiSummaryState.Running -> Unit
             is AiSummaryState.Ready -> {
                 current.setTitle(activity.getString(R.string.ai_summary_result_title, state.plan.chapter.title))
                 if (state.output.truncated) text(activity.getString(R.string.ai_summary_truncated))

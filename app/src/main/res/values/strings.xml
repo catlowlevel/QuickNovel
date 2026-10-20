@@ -87,6 +87,8 @@
     <string name="ai_summary_chapter_label">%1$s · Summary</string>
     <string name="ai_summary_chapter_incomplete">%1$s · Summary (incomplete)</string>
     <string name="ai_summary_source_changed">The chapter changed or is no longer loaded. Open it and try again.</string>
+    <string name="ai_summary_stop">Stop summarizing</string>
+    <string name="ai_summary_ready_for_chapter">Summary ready for %1$s.</string>
     <string name="ai_summary_generate">Summarize</string>
     <string name="ai_summary_reuse">Reuse</string>
     <string name="ai_summary_saved_configuration">Saved with %1$s</string>
@@ -100,7 +102,7 @@
         <item quantity="other">~%1$s tokens generated</item>
     </plurals>
     <string name="ai_request_token_estimate">~%1$s input tokens + output</string>
-    <string name="ai_summary_cache_failed">Summary displayed, but it could not be saved for reuse.</string>
+    <string name="ai_summary_cache_failed">Summary is available, but it could not be saved for reuse.</string>
     <string name="ai_summary_result_title">Summary · %1$s</string>
     <string name="ai_summary_unavailable">Wait for the chapter to finish loading, then try again.</string>
     <string name="ai_summary_truncated">The response reached its token limit and may be incomplete.</string>

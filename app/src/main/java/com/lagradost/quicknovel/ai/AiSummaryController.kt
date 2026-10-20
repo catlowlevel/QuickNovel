@@ -37,6 +37,8 @@ class AiSummaryController(
     fun regenerate(chapter: AiChapter, language: String) = prepare(chapter, language, reuse = false)
 
     private fun prepare(chapter: AiChapter, language: String, reuse: Boolean) {
+        // The reader stays interactive during generation. Another action must not discard a paid request.
+        if (state.value is AiSummaryState.Running) return
         close()
         val token = revision
         if (reuse) results[chapter.resultKey(language)]?.let { mutableState.value = AiSummaryState.Saved(it); return }

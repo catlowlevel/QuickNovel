@@ -537,6 +537,10 @@ class ReadActivityViewModel : ViewModel() {
         summarySourceChapter(data)
     }
 
+    fun isCurrentSummaryChapter(source: AiChapter): Boolean = ::book.isInitialized &&
+        book.playbackId() == source.bookId && currentIndex in 0 until book.size() &&
+        book.chapterId(currentIndex) == source.chapterId
+
     private fun summarySourceChapter(data: LiveChapterData) = AiChapter(book.playbackId(), book.chapterId(data.index),
         book.title(), data.title.asStringNull(context) ?: "", data.originalPlainText)
 

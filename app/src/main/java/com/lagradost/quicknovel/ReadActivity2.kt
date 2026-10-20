@@ -17,6 +17,7 @@ import android.speech.tts.Voice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
@@ -183,6 +184,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     private val viewModel: ReadActivityViewModel by viewModels()
     private val summaryViewModel: com.lagradost.quicknovel.ai.AiSummaryViewModel by viewModels()
     private lateinit var summaryDialog: com.lagradost.quicknovel.ai.ReaderSummaryDialog
+    private lateinit var aiProgressOverlay: com.lagradost.quicknovel.ai.ReaderAiProgressOverlay
     private lateinit var floatingTTSControls: FloatingTTSControls
     private lateinit var ttsAutoCentering: TTSAutoCentering
 
@@ -603,6 +605,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             ColorUtils.setAlphaComponent(config.textColor, Color.alpha(config.textColor) / 4)
         )
         floatingTTSControls.setColors(config.backgroundColor, config.textColor)
+        aiProgressOverlay.setColors(config.backgroundColor, config.textColor)
     }
 
     private fun updateReaderOverlayVisibility() {
@@ -636,7 +639,38 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     }
 
     private fun updateFloatingTTSPosition() {
+        updateAiProgressPosition()
         if (::floatingTTSControls.isInitialized) floatingTTSControls.reposition()
+    }
+
+    private fun updateAiProgressPosition() {
+        val area = binding.readerContainer
+        val panel = binding.readerAiProgress.root
+        if (!panel.isVisible || area.height == 0) return
+        val margin = 12.toPx
+        val location = IntArray(2)
+        area.getLocationInWindow(location)
+        val insets = ViewCompat.getRootWindowInsets(area)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val safeTop = maxOf(0, (insets?.top ?: 0) - location[1]).toFloat()
+        val safeBottom = maxOf(0, location[1] + area.height - (area.rootView.height - (insets?.bottom ?: 0)))
+        val left = margin + maxOf(0, (insets?.left ?: 0) - location[0])
+        val right = margin + maxOf(0, location[0] + area.width - (area.rootView.width - (insets?.right ?: 0)))
+        val params = panel.layoutParams as ViewGroup.MarginLayoutParams
+        if (params.leftMargin != left || params.rightMargin != right) {
+            params.leftMargin = left
+            params.rightMargin = right
+            panel.layoutParams = params
+        }
+        val toolbar = binding.readToolbarHolder
+        val normalVisible = binding.readNormalLayout.isVisible
+        val toolbarBottom = if (normalVisible && toolbar.isVisible) toolbar.bottom + toolbar.translationY else 0f
+        val controls = binding.readerBottomViewHolder
+        val controlsHeight = if (normalVisible && controls.isVisible) controls.height - controls.translationY else 0f
+        val footerHeight = if (normalVisible && binding.readOverlay.isVisible) binding.readOverlay.height else 0
+        val bottom = area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - panel.height - margin
+        val top = (maxOf(safeTop, toolbarBottom) + margin).coerceAtMost(maxOf(safeTop, bottom))
+        panel.translationY = top - panel.top
     }
 
     private fun ttsReadingViewport(): TTSCenteringViewport {
@@ -655,6 +689,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         if (binding.readerBottomViewHolder.isVisible) {
             binding.readerBottomViewHolder.getLocationInWindow(location)
             bottom = minOf(bottom, location[1])
+        }
+        val aiPanel = binding.readerAiProgress.root
+        if (aiPanel.isVisible) {
+            aiPanel.getLocationInWindow(location)
+            top = maxOf(top, location[1] + aiPanel.height + 12.toPx)
         }
         binding.root.rootView.getLocationInWindow(location)
         val viewport = TTSCenteringViewport(
@@ -714,13 +753,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val safeBottom = maxOf(0, location[1] + area.height - (area.rootView.height - (insets?.bottom ?: 0)))
         val toolbar = binding.readToolbarHolder
         val toolbarBottom = if (toolbar.isVisible) toolbar.bottom + toolbar.translationY else 0f
+        val aiPanel = binding.readerAiProgress.root
+        val aiBottom = if (aiPanel.isVisible) aiPanel.bottom + aiPanel.translationY else 0f
         val bottomControls = binding.readerBottomViewHolder
         val controlsHeight = if (bottomControls.isVisible) bottomControls.height - bottomControls.translationY else 0f
         val footerHeight = if (binding.readOverlay.isVisible) binding.readOverlay.height else 0
         val progressHeight = if (binding.readTtsProgress.isVisible) binding.readTtsProgress.height else 0
         return FloatingControlsBounds.forArea(
             left = safeLeft + margin,
-            top = maxOf(safeTop, toolbarBottom) + margin,
+            top = maxOf(safeTop, toolbarBottom, aiBottom) + margin,
             right = area.width - safeRight - margin,
             bottom = area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - progressHeight - margin,
             panelWidth = panel.width.toFloat(),
@@ -894,14 +935,38 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         summaryDialog = com.lagradost.quicknovel.ai.ReaderSummaryDialog(this, summaryViewModel.controller)
+        aiProgressOverlay = com.lagradost.quicknovel.ai.ReaderAiProgressOverlay(
+            binding.readerAiProgress,
+            onStop = summaryViewModel.controller::close,
+            onVisibilityChanged = ::updateFloatingTTSPosition,
+        )
+        binding.readerContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateFloatingTTSPosition()
+        }
+        binding.readerAiProgress.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateFloatingTTSPosition()
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(binding.readerAiProgress.root) { view, insets ->
+            view.post { updateFloatingTTSPosition() }
+            insets
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 summaryViewModel.controller.state.collect { state ->
+                    aiProgressOverlay.render(state)
+                    binding.readToolbar.menu.findItem(R.id.reader_summary)?.isEnabled =
+                        state !is com.lagradost.quicknovel.ai.AiSummaryState.Running &&
+                            state !is com.lagradost.quicknovel.ai.AiSummaryState.Preparing &&
+                            state !is com.lagradost.quicknovel.ai.AiSummaryState.Ready
                     if (state is com.lagradost.quicknovel.ai.AiSummaryState.Ready) {
+                        val offscreen = !viewModel.isCurrentSummaryChapter(state.plan.chapter)
                         val applied = viewModel.showSummary(state.plan.chapter, state.output)
                         summaryViewModel.controller.close()
-                        if (!applied) showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
-                        else if (state.cacheWriteFailed) showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
+                        when {
+                            !applied && !offscreen -> showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
+                            state.cacheWriteFailed -> showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
+                            offscreen -> showToast(this@ReadActivity2, getString(R.string.ai_summary_ready_for_chapter, state.plan.chapter.title))
+                        }
                     } else summaryDialog.render(state)
                 }
             }
@@ -1341,6 +1406,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     binding.readNormalLayout.isVisible = false
                 }
             }
+            updateFloatingTTSPosition()
         }
 
         binding.realText.apply {
