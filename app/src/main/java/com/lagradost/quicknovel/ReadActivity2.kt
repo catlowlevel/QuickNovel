@@ -290,6 +290,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             if (::ttsAutoCentering.isInitialized) ttsAutoCentering.cancel(clearTouch = true)
         } else {
             updateFloatingTTSPosition()
+            if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onWindowFocusRestored()
         }
     }
 
@@ -991,10 +992,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             previousSentence = { viewModel.backwardsTTS() },
             nextSentence = { viewModel.forwardsTTS() },
         )
-        binding.readNormalLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            floatingTTSControls.cancelGestures()
-            updateFloatingTTSPosition()
-        }
+        floatingTTSControls.watchContainerLayout(binding.readNormalLayout, ::updateFloatingTTSPosition)
         binding.readToolbarHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updateFloatingTTSPosition()
         }
@@ -1169,9 +1167,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         )
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                viewModel.ttsSentenceStarting.collect { line ->
+                viewModel.ttsSentenceStarting.collect { start ->
                     if (viewModel.currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
-                        ttsAutoCentering.onSentenceStarted(line)
+                        ttsAutoCentering.onSentenceStarted(start)
                     }
                 }
             }

@@ -22,8 +22,6 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.Disposable
@@ -563,10 +561,15 @@ class ReadActivityViewModel : ViewModel() {
         }
         if (::ttsBookId.isInitialized) refreshPronunciationOverrides()
 
-        // if we resume the app and the desired index is different from what we are at currently
-        // then we scroll to it
+        // Retained speech starts restore normal centering after the chapter list is committed.
+        // An ordinary bookmark seek would put the same sentence at the top and race that scroll.
         if (leftAt != null && resumeAt != null && leftAt != resumeAt) {
-            scrollToDesired(resumeAt)
+            if (autoCenterTTS && currentTTSStatus == TTSHelper.TTSStatus.IsRunning &&
+                sentenceStarts.latest.value != null) {
+                updateReadArea()
+            } else {
+                scrollToDesired(resumeAt)
+            }
         }
     }
 
@@ -713,10 +716,9 @@ class ReadActivityViewModel : ViewModel() {
         MutableLiveData<TTSHelper.TTSLine?>(null)
     val ttsLine: LiveData<TTSHelper.TTSLine?> = _ttsLine
 
-    // Announce only sentences selected for speech, before engine startup/queueing can delay centering.
-    // Events do not replay on focus return or while a paused highlight is selected.
-    private val _ttsSentenceStarting = MutableSharedFlow<TTSHelper.TTSLine>(extraBufferCapacity = 1)
-    val ttsSentenceStarting = _ttsSentenceStarting.asSharedFlow()
+    // Preserve speech starts across Home/return, independently of paused highlight selection.
+    private val sentenceStarts = TTSSentenceStarts()
+    internal val ttsSentenceStarting = sentenceStarts.latest
 
     private val _ttsProgress = MutableLiveData<TTSPlaybackProgress?>(null)
     val ttsProgress: LiveData<TTSPlaybackProgress?> = _ttsProgress
@@ -1635,6 +1637,7 @@ class ReadActivityViewModel : ViewModel() {
             _currentTTSStatus = value
             if (value == TTSHelper.TTSStatus.IsStopped) {
                 ttsPlaybackControl.reset()
+                sentenceStarts.clear()
                 _ttsProgress.postValue(null)
             } else ttsPlaybackControl.signal()
             playDummySound()
@@ -1937,7 +1940,7 @@ class ReadActivityViewModel : ViewModel() {
                             ttsInnerIndex++
                             continue
                         }
-                        _ttsSentenceStarting.emit(line)
+                        sentenceStarts.started(line)
                         // Start centering as this sentence is selected, including the first cold read.
                         val waitFor = ttsSession.speak(
                             spokenLine,

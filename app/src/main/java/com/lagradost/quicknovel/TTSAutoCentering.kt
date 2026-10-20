@@ -20,6 +20,7 @@ internal class TTSAutoCentering(
     private val enabled: () -> Boolean,
 ) {
     private var sentence: TTSHelper.TTSLine? = null
+    private val sentenceStarts = TTSSentenceStartCursor()
     private var generation = 0
     private var pendingTarget = false
     private var scrolling = false
@@ -39,9 +40,13 @@ internal class TTSAutoCentering(
         })
     }
 
-    fun onSentenceStarted(line: TTSHelper.TTSLine) {
-        sentence = line
+    fun onSentenceStarted(start: TTSSentenceStart?) {
+        sentence = sentenceStarts.take(start) ?: return
         request()
+    }
+
+    fun onWindowFocusRestored() {
+        if (pendingTarget) request()
     }
 
     fun onReaderTouchStarted() {

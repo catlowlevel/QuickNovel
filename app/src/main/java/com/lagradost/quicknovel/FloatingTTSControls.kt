@@ -79,6 +79,16 @@ internal class FloatingTTSControls(
         panel.y = y
     }
 
+    fun watchContainerLayout(container: View, updatePosition: () -> Unit) {
+        container.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            // Sentence/progress updates can lay out the same area again during a drag.
+            if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
+                cancelGestures()
+            }
+            updatePosition()
+        }
+    }
+
     fun cancelGestures() {
         buttons.forEach { it.isPressed = false }
         touchOwner = null
