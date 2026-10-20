@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.core.view.isGone
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.databinding.SimpleChapterBinding
+import com.lagradost.quicknovel.displayName
 import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
@@ -48,7 +49,7 @@ class ChapterAdapter(val viewModel: ResultViewModel) :
     override fun onBindContent(holder: ViewHolderState<Any>, item: ChapterData, position: Int) {
         val binding = holder.view as? SimpleChapterBinding ?: return
         binding.apply {
-            name.text = item.name
+            name.text = item.displayName
             releaseDate.text = item.dateOfRelease
             releaseDate.isGone = item.dateOfRelease.isNullOrBlank()
             root.setOnClickListener {

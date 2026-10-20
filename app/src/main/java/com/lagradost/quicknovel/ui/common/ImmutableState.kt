@@ -62,6 +62,7 @@ import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
+import com.lagradost.quicknovel.chapterTitleText
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.util.BlurTransformation
 import com.lagradost.quicknovel.util.ResultCached
@@ -130,6 +131,8 @@ data class ImmutableChapterData(
     val randomUuid: Uuid = Uuid.random(),
     val index: Int,
 ) {
+    val displayName: String get() = chapterTitleText(name)
+
     companion object {
         fun from(chapter: ChapterData, index: Int): ImmutableChapterData =
             ImmutableChapterData(
@@ -142,7 +145,7 @@ data class ImmutableChapterData(
     }
 
     fun matchesQuery(query: String): Boolean =
-        FuzzySearch.partialRatio(name.lowercase(), query) > 50
+        FuzzySearch.partialRatio(displayName.lowercase(), query) > 50
 }
 
 @Immutable

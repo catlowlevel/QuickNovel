@@ -326,7 +326,7 @@ fun ResultScreenImpl(
                         )
                     }
                     response.loadData?.chapters?.lastOrNull()?.let { chapter ->
-                        Text(stringResource(R.string.latest_format, chapter.name), fontSize = 14.sp)
+                        Text(stringResource(R.string.latest_format, chapter.displayName), fontSize = 14.sp)
                     }
                 }
             }
@@ -582,7 +582,7 @@ fun ChapterItem(
             )
             .padding(10.dp)
     ) {
-        Text(chapter.name, fontSize = 14.sp, lineHeight = 13.sp)
+        Text(chapter.displayName, fontSize = 14.sp, lineHeight = 13.sp)
         if (chapter.dateOfRelease != null) {
             Text(
                 chapter.dateOfRelease,

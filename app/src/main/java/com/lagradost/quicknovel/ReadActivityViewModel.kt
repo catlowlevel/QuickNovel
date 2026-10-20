@@ -270,7 +270,7 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 
     override fun getChapterTitle(index: Int): UiText {
-        return data.data[index].name.toUiText()
+        return data.data[index].displayName.toUiText()
     }
 
     override fun getLoadingStatus(index: Int): String {
@@ -380,7 +380,7 @@ class RegularBook(val data: EpubBook, private val sourceUri: String) : AbstractB
     override fun title(): String = data.title ?: "Unknown Book"
 
     override fun getChapterTitle(index: Int): UiText {
-        return allTocReferences.getOrNull(index)?.title?.toUiText()
+        return allTocReferences.getOrNull(index)?.title?.let(::chapterTitleText)?.toUiText()
             ?: txt(R.string.chapter_format, (index + 1).toString())
     }
 

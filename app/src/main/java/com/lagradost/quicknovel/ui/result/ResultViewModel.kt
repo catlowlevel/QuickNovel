@@ -40,6 +40,7 @@ import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_UNREAD
 import com.lagradost.quicknovel.RESULT_CHAPTER_SORT
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
+import com.lagradost.quicknovel.displayName
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.ui.ReadType
@@ -136,7 +137,7 @@ class ResultViewModel : ViewModel() {
                     (filterDownloaded && (state != null && state.progress > (chapterIndex(chapter)
                         ?: Int.MAX_VALUE)))
         }
-        return filterChapterTitles(eligible, chapterQuery) { it.name }.sortedBy { chapter ->
+        return filterChapterTitles(eligible, chapterQuery) { it.displayName }.sortedBy { chapter ->
             return@sortedBy when (sort) {
                 CHAPTER_SORT -> {
                     chapterIndex(chapter)?.toLong()
