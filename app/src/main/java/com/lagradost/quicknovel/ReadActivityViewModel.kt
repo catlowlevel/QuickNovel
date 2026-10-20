@@ -529,29 +529,39 @@ data class ReaderChapterInfo(val index: Int, val title: UiText, val wordCount: I
 class ReadActivityViewModel : ViewModel() {
     lateinit var book: AbstractBook
     private lateinit var markwon: Markwon
+    @Volatile
     private var isInApp: Boolean = true
+    internal val followsBackgroundNarration: Boolean get() = !isInApp
     private var leftAppAt: ScrollIndex? = null
     val translationManager = TranslationManager()
 
     fun leftApp() {
         lastChangeIndex?.let { setScrollKeys(it) }
-        isInApp = false
-        leftAppAt = desiredIndex
+        synchronized(this) {
+            leftAppAt = desiredIndex
+            isInApp = false
+        }
     }
 
     fun resumedApp() {
+        val (leftAt, resumeAt) = synchronized(this) {
+            isInApp = true
+            (leftAppAt to desiredIndex).also { leftAppAt = null }
+        }
         if (::ttsBookId.isInitialized) refreshPronunciationOverrides()
-        val leftAt = leftAppAt
-        val resumeAt = desiredIndex
-
-        leftAppAt = null
-        isInApp = false
 
         // if we resume the app and the desired index is different from what we are at currently
         // then we scroll to it
         if (leftAt != null && resumeAt != null && leftAt != resumeAt) {
             scrollToDesired(resumeAt)
         }
+    }
+
+    /** A sentence layout query may complete after resume; decide ownership when applying it. */
+    internal fun followBackgroundNarration(position: ScrollIndex): Boolean = synchronized(this) {
+        if (isInApp) return@synchronized false
+        changeIndex(position, alsoTitle = false)
+        true
     }
 
     //private lateinit var reducer: MarkwonReducer
@@ -832,7 +842,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun onScroll(visibility: ScrollVisibilityIndex?) {
-        if (visibility == null) return
+        if (visibility == null || !isInApp) return
         // dynamically increase padding in case of very small chapters with a maximum of 10 chapters
         val first = visibility.firstInMemory.index
         val last = visibility.lastInMemory.index
@@ -841,11 +851,15 @@ class ReadActivityViewModel : ViewModel() {
         val current = currentIndex
 
         val save = visibility.firstFullyVisible ?: visibility.firstInMemory
+        val central = visibility.atScreenCenter ?: save
+        // A central anchor must retain chapters still visible above it as well as below it.
+        chapterPaddingBottom = minOf(10, maxOf(chapterPaddingBottom, central.index - first))
         desiredTTSIndex = visibility.firstFullyVisibleUnderLine?.toScroll()
-        changeIndex(save.toScroll())
+        // Keep the top-line scroll bookmark so resume/rotation does not move the center to the top.
+        changeIndex(save.toScroll(), alsoTitle = current != central.index, chapter = central.index)
 
         // update the read area if changed index
-        if (current != save.index)
+        if (current != central.index)
             updateReadArea()
 
         // load forwards and backwards
@@ -1806,14 +1820,14 @@ class ReadActivityViewModel : ViewModel() {
                         // if we are outside the app, then we post new desired location
                         // as otherwise the scroll overrides it
                         // this is done to scroll to latest when we go back to the app
-                        if (!isInApp) {
+                        if (followsBackgroundNarration) {
                             innerCharToIndex(index, line.startChar)?.let {
-                                changeIndex(
+                                followBackgroundNarration(
                                     ScrollIndex(
                                         index,
                                         it,
                                         line.startChar
-                                    ), alsoTitle = false
+                                    )
                                 )
                             }
                         }
@@ -1960,9 +1974,9 @@ class ReadActivityViewModel : ViewModel() {
     /** sets the metadata and global vars used as well as keys */
     private var lastChangeIndex: ScrollIndex? = null
     private var lastScrollMs: Long = 0
-    private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
+    private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true, chapter: Int = scrollIndex.index) {
         desiredIndex = scrollIndex
-        currentIndex = scrollIndex.index
+        currentIndex = chapter
         if (alsoTitle) publishChapterInfo()
 
         // the majority of the time is spent on setKey, and because this is called from onscroll

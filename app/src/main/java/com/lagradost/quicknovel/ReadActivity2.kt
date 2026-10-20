@@ -400,24 +400,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         )
     }
 
-    /**
-
-    ________________
-    [ hello ]
-    -- screen cut --
-    [ world ]
-    [ ! ]
-    [ From kotlin ]
-    ________________
-
-    here the first index of "world" would be stored as it is the first whole line visible,
-    while "hello" would be stored as the first invisible line, this is used to scroll the exact char
-    you are on. so while rotating you would rotate to the first line that contains "world"
-
-    This is also used for TTS because TTS *must* start at the first visible whole sentence,
-    so in this case it would start at "From kotlin" because hello is not visible.
-     */
-
+    /** Body line geometry for chapter selection, reading position and narration. */
     private fun getAllLines(): ArrayList<TextVisualLine> {
         val lines: ArrayList<TextVisualLine> = arrayListOf()
 
@@ -434,6 +417,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         val topY = getTopY()
         val bottomY = getBottomY()
+        val windowLocation = IntArray(2)
+        binding.root.rootView.getLocationInWindow(windowLocation)
+        val centerY = windowLocation[1] + binding.root.rootView.height / 2
 
         viewModel.onScroll(
             ScrollVisibilityIndex(
@@ -448,6 +434,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 lastHalfVisible = lines.firstOrNull {
                     it.bottom >= bottomY
                 },
+                atScreenCenter = readerLineAtScreenCenter(lines, centerY, topY, bottomY),
             )
         )
     }
@@ -1279,10 +1266,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 val header = ChapterPickerHeaderBinding.inflate(layoutInflater)
                 header.chapterSearch.findViewById<TextView>(androidx.appcompat.R.id.search_src_text).textSize = 14f
                 builderSingle.setCustomTitle(header.root)
-                val currentChapter = viewModel.desiredIndex?.index
+                val currentChapter = viewModel.currentIndex
                 // cant be too safe here
                 val validChapter =
-                    currentChapter != null && currentChapter >= 0 && currentChapter < titles.size
+                    currentChapter in titles.indices
                 if (validChapter) {
                     header.chapterPickerTitle.text = titles[currentChapter].asString(this)
                 } else {
@@ -1533,10 +1520,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         }
                     } else {
                         updateFromCode = false
-                        onScroll()
                     }
 
                     super.onScrolled(recyclerView, dx, dy)
+                    this@ReadActivity2.onScroll()
 
                     // binding.tmpTtsEnd.fixLine((getBottomY()- remainingBottom) + 7.toPx)
                     // binding.tmpTtsStart.fixLine(remainingTop + 7.toPx)

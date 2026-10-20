@@ -123,7 +123,9 @@ data class ScrollVisibilityIndex(
     val lastHalfVisible: TextVisualLine?,
 
     // first line after the bottom bar you can see clearly
-    val firstFullyVisibleUnderLine: TextVisualLine?
+    val firstFullyVisibleUnderLine: TextVisualLine?,
+
+    val atScreenCenter: TextVisualLine? = null,
 )
 
 /** this represents a single text line split by the layout, NOT newlines,
