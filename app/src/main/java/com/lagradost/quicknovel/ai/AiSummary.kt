@@ -30,6 +30,9 @@ data class AiSummaryPlan(
 
 interface AiSummaryApi {
     suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput
+
+    suspend fun streamSummary(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
+                              onProgress: (Long) -> Unit): AiSummaryOutput = summarize(provider, config, chapter, language)
 }
 
 internal fun summaryInstruction(language: String): String =

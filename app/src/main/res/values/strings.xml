@@ -95,7 +95,10 @@
     <string name="ai_summary_regenerate">Regenerate</string>
     <string name="ai_summary_retry">Try again</string>
     <string name="ai_summary_preparing">Preparing chapter…</string>
-    <string name="ai_summary_running">Summarizing…</string>
+    <plurals name="ai_generated_token_count">
+        <item quantity="one">~%1$s token generated</item>
+        <item quantity="other">~%1$s tokens generated</item>
+    </plurals>
     <string name="ai_request_token_estimate">~%1$s input tokens + output</string>
     <string name="ai_summary_cache_failed">Summary displayed, but it could not be saved for reuse.</string>
     <string name="ai_summary_result_title">Summary · %1$s</string>

@@ -23,11 +23,19 @@ import java.text.NumberFormat
 class ReaderSummaryDialog(private val activity: AppCompatActivity, private val controller: AiSummaryController) {
     private var dialog: AlertDialog? = null
     private var contentHost: FrameLayout? = null
+    private var progressText: TextView? = null
+    private var runningPlan: AiSummaryPlan? = null
+
+    private fun generatedCount(tokens: Long): String = activity.resources.getQuantityString(
+        R.plurals.ai_generated_token_count, tokens.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
+        NumberFormat.getIntegerInstance().format(tokens))
 
     private fun dismissDialog() {
         val previous = dialog
         dialog = null
         contentHost = null
+        progressText = null
+        runningPlan = null
         // Programmatic dismissal must not cancel a request or close a later popup.
         previous?.setOnDismissListener(null)
         previous?.dismiss()
@@ -40,6 +48,13 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             dismissDialog()
             return
         }
+        val progress = progressText
+        if (state is AiSummaryState.Running && runningPlan === state.plan && dialog?.isShowing == true && progress != null) {
+            progress.text = generatedCount(state.generatedTokens)
+            return
+        }
+        progressText = null
+        runningPlan = null
         // AlertDialog retains its custom view after dismissal; every new dialog owns a new host.
         val host = contentHost ?: FrameLayout(activity).also { contentHost = it }
         val current = dialog ?: AlertDialog.Builder(activity)
@@ -53,6 +68,8 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                     if (dialog === dismissed) {
                         dialog = null
                         contentHost = null
+                        progressText = null
+                        runningPlan = null
                         controller.close()
                     }
                 }
@@ -65,8 +82,8 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             setPadding(inset, (16 * density).toInt(), inset, (16 * density).toInt())
         }
         fun text(value: String, selectable: Boolean = false, prominent: Boolean = false,
-                 secondary: Boolean = false, lines: Int = Int.MAX_VALUE) {
-            content.addView(TextView(activity).apply {
+                 secondary: Boolean = false, lines: Int = Int.MAX_VALUE): TextView {
+            val label = TextView(activity).apply {
                 this.text = value
                 textSize = if (secondary) 14f else 16f
                 if (prominent) setTypeface(typeface, Typeface.BOLD)
@@ -74,9 +91,11 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 maxLines = lines
                 ellipsize = TextUtils.TruncateAt.END
                 setTextIsSelectable(selectable)
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            }
+            content.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 if (content.childCount > 0) topMargin = (12 * density).toInt()
             })
+            return label
         }
         fun words(value: String): String {
             val count = countWords(value)
@@ -127,7 +146,8 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 text(state.plan.chapter.title)
                 content.addView(ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true },
                     ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-                text(activity.getString(R.string.ai_summary_running))
+                progressText = text(generatedCount(state.generatedTokens))
+                runningPlan = state.plan
             }
             is AiSummaryState.Ready -> {
                 current.setTitle(activity.getString(R.string.ai_summary_result_title, state.plan.chapter.title))

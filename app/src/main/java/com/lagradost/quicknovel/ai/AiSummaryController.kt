@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface AiSummaryState {
@@ -12,7 +13,7 @@ sealed interface AiSummaryState {
     data class Preparing(val chapter: AiChapter) : AiSummaryState
     data class Saved(val result: Ready) : AiSummaryState
     data class Confirm(val plan: AiSummaryPlan, val regenerating: Boolean = false) : AiSummaryState
-    data class Running(val plan: AiSummaryPlan) : AiSummaryState
+    data class Running(val plan: AiSummaryPlan, val generatedTokens: Long = 0) : AiSummaryState
     data class Ready(val plan: AiSummaryPlan, val output: AiSummaryOutput, val cacheWriteFailed: Boolean = false) : AiSummaryState
     data class Failed(val chapter: AiChapter, val language: String, val reason: AiFailure) : AiSummaryState
 }
@@ -27,6 +28,7 @@ class AiSummaryController(
     private val mutableState = MutableStateFlow<AiSummaryState>(AiSummaryState.Closed)
     val state = mutableState.asStateFlow()
     private var job: Job? = null
+    @Volatile
     private var revision = 0L
     private val results = linkedMapOf<String, AiSummaryState.Ready>()
 
@@ -78,7 +80,13 @@ class AiSummaryController(
         mutableState.value = AiSummaryState.Running(plan)
         job = scope.launch {
             try {
-                val output = api.summarize(plan.provider, plan.config, plan.chapter, plan.language)
+                val output = api.streamSummary(plan.provider, plan.config, plan.chapter, plan.language) { count ->
+                    mutableState.update { current ->
+                        if (revision == token && current is AiSummaryState.Running && current.plan === plan) {
+                            current.copy(generatedTokens = maxOf(current.generatedTokens, count))
+                        } else current
+                    }
+                }
                 if (output.text.isBlank()) throw AiProviderException(AiFailure.EMPTY_RESPONSE)
                 if (revision == token) {
                     val cacheWriteFailed = if (cache == null) false else try {

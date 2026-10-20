@@ -38,6 +38,22 @@ class AiProviderClient internal constructor(
         .callTimeout(180, TimeUnit.SECONDS).readTimeout(180, TimeUnit.SECONDS).build()
 
     override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput {
+        return summaryOutput(provider, get(summaryRequest(provider, config, chapter, language, streaming = false),
+            generationClient, generation = true))
+    }
+
+    override suspend fun streamSummary(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
+                                       onProgress: (Long) -> Unit): AiSummaryOutput {
+        return execute(summaryRequest(provider, config, chapter, language, streaming = true), generationClient, generation = true) { response ->
+            if (response.body.contentType()?.subtype == "json") {
+                // Some compatible servers ignore stream=true. Consume that same response; never resend a paid request.
+                summaryOutput(provider, json(response))
+            } else AiEventStreamParser(provider, onProgress).read(response.body.source())
+        }
+    }
+
+    private fun summaryRequest(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
+                               streaming: Boolean): Request {
         validateSummaryChapter(chapter)
         val validated = validatedAiConfig(provider, config, requireModel = true)
         val base = if (validated.baseUrl.isEmpty()) endpoint(provider) else aiApiBaseUrlOrNull(validated.baseUrl)!!
@@ -72,16 +88,20 @@ class AiProviderClient internal constructor(
                 }
             }
         }
+        if (streaming && provider != AiProvider.GEMINI) body.put("stream", true)
         val url = base.newBuilder().apply {
             when (provider) {
                 AiProvider.OPENAI -> addPathSegment("chat").addPathSegment("completions")
-                AiProvider.GEMINI -> addPathSegment("models").addPathSegment("${validated.model}:generateContent")
+                AiProvider.GEMINI -> {
+                    addPathSegment("models").addPathSegment("${validated.model}:${if (streaming) "streamGenerateContent" else "generateContent"}")
+                    if (streaming) addQueryParameter("alt", "sse")
+                }
                 AiProvider.CLAUDE -> addPathSegment("messages")
             }
         }.build()
-        val request = request(provider, validated).newBuilder().url(url)
+        return request(provider, validated).newBuilder().url(url)
+            .header("Accept", if (streaming) "text/event-stream" else "application/json")
             .post(DataStore.mapper.writeValueAsBytes(body).toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-        return summaryOutput(provider, get(request, generationClient, generation = true))
     }
 
     private fun summaryOutput(provider: AiProvider, root: JsonNode): AiSummaryOutput {
@@ -225,7 +245,11 @@ class AiProviderClient internal constructor(
         } else AiFailure.INVALID_RESPONSE
     }
 
-    private suspend fun get(request: Request, transport: OkHttpClient = client, generation: Boolean = false): JsonNode = suspendCancellableCoroutine { continuation ->
+    private suspend fun get(request: Request, transport: OkHttpClient = client, generation: Boolean = false): JsonNode =
+        execute(request, transport, generation, ::json)
+
+    private suspend fun <T> execute(request: Request, transport: OkHttpClient, generation: Boolean,
+                                    read: (Response) -> T): T = suspendCancellableCoroutine { continuation ->
         val call = transport.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
@@ -252,7 +276,7 @@ class AiProviderClient internal constructor(
                             in 500..599 -> AiFailure.SERVER
                             else -> AiFailure.INVALID_RESPONSE
                         }, it.code)
-                        json(it)
+                        read(it)
                     }
                     if (continuation.isActive) continuation.resume(result)
                 } catch (e: Exception) {
