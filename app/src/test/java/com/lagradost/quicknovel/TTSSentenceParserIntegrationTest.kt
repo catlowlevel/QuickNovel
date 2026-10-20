@@ -5,11 +5,11 @@ import org.junit.Test
 
 class TTSSentenceParserIntegrationTest {
     @Test
-    fun speechCleanupPreservesSourceCoordinatesForRulesAfterEllipsesAndHyphens() {
+    fun speechPreservesSourceCoordinatesForRulesAfterEllipsesAndHyphens() {
         val text = "“Well-known...” said Dr. Smith. Then he left."
         val lines = TTSHelper.ttsParseText(text, 6)
         assertEquals(2, lines.size)
-        for (line in lines) assertEquals(line.endChar - line.startChar, line.speakOutMsg.length)
+        for (line in lines) assertEquals(text.substring(line.startChar, line.endChar), line.speakOutMsg)
         val highlights = TTSReaderOverrideHighlights().apply {
             updateRules(listOf(TTSWordOverride(find = "Smith", replacement = "Smyth")))
         }

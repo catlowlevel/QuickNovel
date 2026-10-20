@@ -52,12 +52,13 @@ class TTSReaderOverrideHighlightsTest {
     }
 
     @Test
-    fun speechCleanupStillMapsMatchedWordsToTheirOriginalCharacterPositions() {
+    fun preservedPunctuationStillMapsMatchedWordsToTheirDisplayedCharacterPositions() {
         val highlights = TTSReaderOverrideHighlights()
         highlights.updateRules(listOf(TTSWordOverride(find = "Li", replacement = "Lee")))
-        // Playback replaces the leading hyphen in the displayed '-Li spoke.' with a space.
-        val line = TTSHelper.TTSLine(" Li spoke.", 10, 20, 2)
-        assertEquals(listOf(TTSOverrideMatch(1, 3)), highlights.forParagraph(listOf(line), 2, 10, 20))
+        val text = "-Li spoke."
+        val lines = TTSHelper.ttsParseText(text, 2)
+        assertEquals(text, lines.single().speakOutMsg)
+        assertEquals(listOf(TTSOverrideMatch(1, 3)), highlights.forParagraph(lines, 2, 0, text.length))
     }
 
     @Test

@@ -594,13 +594,8 @@ object TTSHelper {
 
     fun ttsParseText(text: String, tag: Int): ArrayList<TTSLine> =
         TTSSentenceParser.split(text).mapTo(ArrayList()) { sentence ->
-            // Keep one UTF-16 code unit per source character: reader rule highlights use these offsets.
-            val speech = buildString(sentence.end - sentence.start) {
-                for (index in sentence.start until sentence.end) {
-                    val character = text[index]
-                    append(if (character in "-<>_^«»「」—–¿*~\u200c") ' ' else character)
-                }
-            }
+            // Formatting is rendered upstream. Preserve meaningful symbols and exact rule offsets.
+            val speech = text.substring(sentence.start, sentence.end)
             TTSLine(speech, sentence.start, sentence.end, tag)
         }
 }
