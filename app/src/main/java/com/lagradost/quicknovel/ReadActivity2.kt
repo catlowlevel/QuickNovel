@@ -460,14 +460,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     private fun scrollToDesired() {
         val desired: ScrollIndex = viewModel.desiredIndex ?: return
         val adapterPosition =
-            cachedChapter.indexOfFirst { display -> display.index == desired.index && display.innerIndex == desired.innerIndex }
+            cachedChapter.indexOfFirst { display ->
+                display.index == desired.index && display.innerIndex == desired.innerIndex &&
+                    (desired.char <= 0 || display is TextSpan)
+            }
         if (adapterPosition == -1) return
 
         //val offset = 7.toPx
         textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
 
-        // don't inner-seek if zero because that is chapter break
-        if (desired.innerIndex == 0) return
+        // A long first paragraph can contain the saved character well below the chapter header.
+        if (desired.char <= 0) return
 
         binding.realText.post {
             getAllLines().also { postLines(it) }.firstOrNull { line ->
@@ -1983,6 +1986,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 readSettingsAuthorNotes.setOnCheckedChangeListener { _, isChecked ->
                     viewModel.authorNotes = isChecked
                     viewModel.refreshChapters()
+                }
+
+                readSettingsJoinParagraphs.isChecked = viewModel.joinBrokenParagraphs
+                readSettingsJoinParagraphs.setOnCheckedChangeListener { _, isChecked ->
+                    viewModel.setParagraphFormatting(isChecked)
                 }
 
                 readSettingsShowBionic.isChecked = viewModel.bionicReading

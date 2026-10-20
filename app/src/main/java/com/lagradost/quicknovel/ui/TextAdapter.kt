@@ -40,6 +40,7 @@ import com.lagradost.quicknovel.SpanDisplay
 import com.lagradost.quicknovel.TTSHelper
 import com.lagradost.quicknovel.TTSWordOverride
 import com.lagradost.quicknovel.TTSReaderOverrideHighlights
+import com.lagradost.quicknovel.joinedHighlightsForParagraph
 import com.lagradost.quicknovel.upcomingTTSBlurRange
 import com.lagradost.quicknovel.LiveChapterData
 import com.lagradost.quicknovel.TextSpan
@@ -727,6 +728,9 @@ class TextAdapter(
                     val matches = if (overrideHighlights.enabled && chapter != null) {
                         overrideHighlights.forParagraph(chapter.ttsLines, obj.index, obj.start, obj.end)
                     } else emptyList()
+                    val joined = joinedHighlightsForParagraph(
+                        chapter?.joinedSentences.orEmpty(), obj.start, obj.end, matches
+                    )
                     val blur = upcomingTTSBlurRange(
                         blurUpcomingEnabled, blurPlaybackStatus, currentTTSLine, obj.index, obj.start, obj.end
                     )
@@ -734,7 +738,12 @@ class TextAdapter(
                     // the layer when a recycled/rebound row becomes readable again.
                     val layer = if (blur == null) View.LAYER_TYPE_NONE else View.LAYER_TYPE_SOFTWARE
                     if (layerType != layer) setLayerType(layer, null)
-                    text = if (matches.isEmpty() && blur == null) original else SpannableString(original).apply {
+                    text = if (matches.isEmpty() && joined.isEmpty() && blur == null) original else SpannableString(original).apply {
+                        val joinedColor = ColorUtils.blendARGB(config.backgroundColor, 0xFFFFB74D.toInt(), .23f)
+                        joined.forEach { sentence ->
+                            setSpan(BackgroundColorSpan(joinedColor), sentence.start, sentence.end,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
                         val color = ColorUtils.setAlphaComponent(config.textColor, 45)
                         matches.forEach { match ->
                             val start = match.start.coerceIn(0, length)

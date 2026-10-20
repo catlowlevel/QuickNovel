@@ -478,10 +478,37 @@ data class LiveChapterData(
 
     val title: UiText,
     val rawText: String,
+    private val paragraphSource: LiveChapterData? = null,
     //val ttsLines: List<TTSHelper.TTSLine>
 ) {
     val originalPlainText: String = originalRendered.toString().trim()
     val wordCount: Int = countWords(rendered)
+
+    private val paragraphPlan by lazy { paragraphFormatPlan(rendered) }
+    private val joinedParagraphs by lazy {
+        if (paragraphPlan.joins.isEmpty()) this else {
+            val formatted = paragraphPlan.apply(rendered)
+            copy(rendered = formatted, spans = parseTextToSpans(formatted, index), paragraphSource = this)
+        }
+    }
+
+    internal fun paragraphs(join: Boolean): LiveChapterData {
+        val source = paragraphSource ?: this
+        return if (join) source.joinedParagraphs else source
+    }
+
+    internal fun sourceCharacter(character: Int): Int = paragraphSource?.paragraphPlan
+        ?.sourceCharacter(character) ?: character.coerceIn(0, rendered.length)
+
+    internal fun displayCharacter(character: Int): Int = paragraphSource?.paragraphPlan
+        ?.displayCharacter(character) ?: character.coerceIn(0, rendered.length)
+
+    internal val joinedSentences by lazy {
+        paragraphSource?.paragraphPlan?.let { joinedSentenceRanges(rendered.toString(), it) } ?: emptyList()
+    }
+
+    internal fun scrollAt(character: Int) = ScrollIndex(index,
+        spans.lastOrNull { it.start <= character }?.innerIndex ?: 0, character)
 
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
@@ -581,7 +608,7 @@ class ReadActivityViewModel : ViewModel() {
         book.title(), data.title.asStringNull(context) ?: "", data.originalPlainText)
 
     private fun displayedChapter(data: LiveChapterData): LiveChapterData =
-        summaryTextViews.displayed(summarySourceChapter(data))?.content ?: data
+        (summaryTextViews.displayed(summarySourceChapter(data))?.content ?: data).paragraphs(joinBrokenParagraphs)
 
     private fun displayedWordCount(index: Int): Int? = (chapterData[index] as? Resource.Success)
         ?.value?.let { displayedChapter(it).wordCount } ?: chapterWordCounts[index]
@@ -606,7 +633,7 @@ class ReadActivityViewModel : ViewModel() {
         val rendered = output.text.toSpanned()
         val content = data.copy(rendered = rendered, spans = parseTextToSpans(rendered, index))
         val position = desiredIndex?.takeIf { it.index == index }
-            ?.let { AiOriginalPosition(it.innerIndex, it.char) } ?: AiOriginalPosition()
+            ?.let { AiOriginalPosition(it.innerIndex, displayedChapter(data).sourceCharacter(it.char)) } ?: AiOriginalPosition()
         summaryTextViews.show(source, output, content, position)
         stopNarrationForTextSwitch(index)
         if (currentIndex == index) {
@@ -620,8 +647,8 @@ class ReadActivityViewModel : ViewModel() {
         val data = (chapterData[currentIndex] as? Resource.Success)?.value ?: return@withLock false
         val position = summaryTextViews.restore(summarySourceChapter(data)) ?: return@withLock false
         stopNarrationForTextSwitch(data.index)
-        val scroll = ScrollIndex(data.index, position.innerIndex.coerceIn(0, data.spans.lastIndex.coerceAtLeast(0)),
-            position.character.coerceIn(0, data.rendered.length))
+        val displayed = displayedChapter(data)
+        val scroll = displayed.scrollAt(displayed.displayCharacter(position.character))
         desiredTTSIndex = scroll
         scrollToDesired(scroll)
         true
@@ -1374,10 +1401,14 @@ class ReadActivityViewModel : ViewModel() {
                     showToast("Resize $loadedChapterIndex -> $currentIndex", Toast.LENGTH_LONG)
                 }
 
-                val char = getKey(
+                val sourceChar = getKey(
                     EPUB_CURRENT_POSITION_SCROLL_CHAR, book.title()
                 ) ?: 0
-
+                val char = chapterMutex.withLock {
+                    (chapterData[currentIndex] as? Resource.Success)?.value?.let {
+                        displayedChapter(it).displayCharacter(sourceChar)
+                    }
+                } ?: sourceChar
                 val innerIndex = innerCharToIndex(currentIndex, char) ?: 0
 
                 // don't update as you want to seek on update
@@ -1670,7 +1701,14 @@ class ReadActivityViewModel : ViewModel() {
                 var index = resumeChapter ?: visible?.index?.coerceIn(0, book.size() - 1) ?: return@withLock
                 val initialLines = awaitLines(index) ?: return@withLock
                 var ttsInnerIndex = if (resumeChapter != null) {
-                    bookmark?.resolveSentence(initialLines.size) ?: 0
+                    chapterMutex.withLock {
+                        val data = (chapterData[index] as? Resource.Success)?.value
+                        if (data == null) bookmark?.resolveSentence(initialLines.size) ?: 0
+                        else {
+                            val displayed = displayedChapter(data)
+                            bookmark?.resolveSentence(initialLines, displayed::displayCharacter, data.ttsLines) ?: 0
+                        }
+                    }
                 } else {
                     initialLines.sentenceAtCharacter(visible?.char ?: 0) ?: 0
                 }
@@ -1688,9 +1726,15 @@ class ReadActivityViewModel : ViewModel() {
                     }
                 }
 
-                fun savePosition(chapter: Int, sentence: Int) {
+                suspend fun savePosition(chapter: Int, sentence: Int, line: TTSHelper.TTSLine) {
                     if (showingSummary(chapter)) return
-                    val position = TTSPlaybackBookmark(chapter, sentence, book.chapterId(chapter))
+                    val character = chapterMutex.withLock {
+                        if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) return
+                        (chapterData[chapter] as? Resource.Success)?.value?.let {
+                            displayedChapter(it).sourceCharacter(line.startChar)
+                        }
+                    }
+                    val position = TTSPlaybackBookmark(chapter, sentence, book.chapterId(chapter), character)
                     if (ttsBookmark == position) return
                     setKey(EPUB_TTS_POSITION, ttsBookId, position)
                     ttsBookmark = position
@@ -1752,7 +1796,8 @@ class ReadActivityViewModel : ViewModel() {
 
                         val line = lines[ttsInnerIndex]
                         val nextLine = lines.getOrNull(ttsInnerIndex + 1)
-                        savePosition(index, ttsInnerIndex)
+                        savePosition(index, ttsInnerIndex, line)
+                        if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
 
                         // if we are outside the app, then we post new desired location
                         // as otherwise the scroll overrides it
@@ -1903,7 +1948,7 @@ class ReadActivityViewModel : ViewModel() {
         return runBlocking {
             chapterMutex.withLock { chapterData[index] }?.letInner { live ->
                 // todo binary search, but strip all but TextSpan first
-                displayedChapter(live).spans.firstOrNull { it.start >= char }?.innerIndex
+                displayedChapter(live).spans.lastOrNull { it.start <= char }?.innerIndex
             }
         }
     }
@@ -1928,6 +1973,9 @@ class ReadActivityViewModel : ViewModel() {
     private fun setScrollKeys(scrollIndex: ScrollIndex) {
         val originalCharacter = if (scrollIndex.index in 0 until book.size())
             summaryTextViews.originalPosition(book.playbackId(), book.chapterId(scrollIndex.index))?.character else null
+        val sourceCharacter = (chapterData[scrollIndex.index] as? Resource.Success)?.value?.let {
+            displayedChapter(it).sourceCharacter(scrollIndex.char)
+        } ?: scrollIndex.char
         setKey(
             EPUB_CURRENT_POSITION_READ_AT,
             "${book.title()}/${scrollIndex.index}",
@@ -1937,7 +1985,7 @@ class ReadActivityViewModel : ViewModel() {
         setKey(
             EPUB_CURRENT_POSITION_SCROLL_CHAR,
             book.title(),
-            originalCharacter ?: scrollIndex.char
+            originalCharacter ?: sourceCharacter
         )
         setKey(EPUB_CURRENT_POSITION, book.title(), scrollIndex.index)
 
@@ -2057,6 +2105,40 @@ class ReadActivityViewModel : ViewModel() {
 
     var scrollWithVolume by PreferenceDelegate(EPUB_SCROLL_VOL, true, Boolean::class)
     var authorNotes by PreferenceDelegate(EPUB_AUTHOR_NOTES, true, Boolean::class)
+    private var paragraphFormattingEnabled by PreferenceDelegate(EPUB_JOIN_BROKEN_PARAGRAPHS, false, Boolean::class)
+    val joinBrokenParagraphs: Boolean get() = paragraphFormattingEnabled
+
+    fun setParagraphFormatting(enabled: Boolean) = viewModelScope.launch {
+        chapterMutex.withLock {
+            if (enabled == joinBrokenParagraphs) return@withLock
+            fun remap(position: ScrollIndex?): ScrollIndex? {
+                position ?: return null
+                val data = (chapterData[position.index] as? Resource.Success)?.value ?: return position
+                val before = displayedChapter(data)
+                val after = before.paragraphs(enabled)
+                return after.scrollAt(after.displayCharacter(before.sourceCharacter(position.char)))
+            }
+            val reading = remap(desiredIndex)
+            val narration = remap(desiredTTSIndex)
+            val starting = remap(ttsStartIndex)
+            val leftAt = remap(leftAppAt)
+            // Existing utterances/highlights refer to the old paragraph coordinates.
+            stopTTS()
+            ttsSession?.interruptTTS()
+            _ttsLine.postValue(null)
+            paragraphFormattingEnabled = enabled
+            desiredTTSIndex = narration
+            ttsStartIndex = starting
+            leftAppAt = leftAt
+            if (reading != null) {
+                changeIndex(reading)
+                setScrollKeys(reading)
+            }
+            publishChapterInfo()
+            updateReadArea(seekToDesired = true)
+        }
+    }
+
     var ttsLock by PreferenceDelegate(EPUB_TTS_LOCK, true, Boolean::class)
     //var ttsOSSpeed by PreferenceDelegate(EPUB_TTS_OS_SPEED, true, Boolean::class)
 

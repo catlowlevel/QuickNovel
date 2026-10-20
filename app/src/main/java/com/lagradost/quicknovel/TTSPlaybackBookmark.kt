@@ -7,6 +7,8 @@ internal data class TTSPlaybackBookmark(
     val chapter: Int,
     val sentence: Int,
     val chapterId: String,
+    /** Character in the chapter before paragraph formatting; null for older saved positions. */
+    val character: Int? = null,
 ) {
     fun resolveChapter(chapterIds: List<String>): Int? {
         if (chapter < 0 || sentence < 0 || chapterId.isBlank()) return null
@@ -17,6 +19,16 @@ internal data class TTSPlaybackBookmark(
     fun resolveSentence(sentenceCount: Int): Int? {
         if (sentence < 0 || sentenceCount <= 0) return null
         return sentence.coerceAtMost(sentenceCount - 1)
+    }
+
+    fun resolveSentence(
+        lines: List<TTSHelper.TTSLine>,
+        displayCharacter: (Int) -> Int,
+        originalLines: List<TTSHelper.TTSLine>,
+    ): Int? {
+        if (sentence < 0) return null
+        val source = character?.takeIf { it >= 0 } ?: originalLines.getOrNull(sentence)?.startChar
+        return if (source != null) lines.sentenceAtCharacter(displayCharacter(source)) else resolveSentence(lines.size)
     }
 }
 

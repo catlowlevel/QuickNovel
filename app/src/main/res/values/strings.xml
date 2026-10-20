@@ -1,4 +1,5 @@
 <resources>
+    <string name="join_broken_paragraphs">Join broken paragraphs</string>
     <string name="app_name">QuickNovel</string>
     <string name="title_search">Search</string>
     <string name="title_history">History</string>
