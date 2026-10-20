@@ -109,6 +109,8 @@
     <string name="ai_summary_stop">Stop summarizing</string>
     <string name="ai_summary_ready_for_chapter">Summary ready for %1$s.</string>
     <string name="ai_summary_generate">Summarize</string>
+    <string name="ai_summary_choose_profile">Choose AI profile</string>
+    <string name="ai_summary_profile_choice">AI profile: %1$s</string>
     <string name="ai_summary_reuse">Reuse</string>
     <string name="ai_summary_saved_configuration">Saved with %1$s</string>
     <string name="ai_summary_saved_length">Summary: %1$s · Original: %2$s</string>

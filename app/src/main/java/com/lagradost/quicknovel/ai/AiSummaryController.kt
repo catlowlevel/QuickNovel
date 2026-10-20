@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class AiSummaryKey(val provider: AiProvider, val id: String, val name: String, val model: String)
+
 sealed interface AiSummaryState {
     data object Closed : AiSummaryState
     data class Preparing(val chapter: AiChapter) : AiSummaryState
@@ -50,6 +52,16 @@ class AiSummaryController(
     @Volatile
     private var revision = 0L
     private val results = linkedMapOf<String, AiSummaryState.Ready>()
+    private var savedSettings: AiSettings? = null
+    private var keySelection: Pair<AiProvider, String>? = null
+    val savedKeys: List<AiSummaryKey> get() = AiProvider.entries.flatMap { provider ->
+        savedSettings?.profiles?.get(provider).orEmpty().map { AiSummaryKey(provider, it.id, it.name, it.config.model) }
+    }
+    val selectedKey: AiSummaryKey? get() {
+        val settings = savedSettings ?: return null
+        val (provider, id) = keySelection ?: (settings.provider to settings.profile().id)
+        return savedKeys.firstOrNull { it.provider == provider && it.id == id }
+    }
     private var chapterSource: AiSummaryChapterSource? = null
     val canContinue: Boolean get() = chapterSource != null
 
@@ -74,6 +86,23 @@ class AiSummaryController(
 
     fun regenerate(chapter: AiChapter, language: String) = prepare(chapter, language, reuse = false)
 
+    fun selectKey(provider: AiProvider, id: String) {
+        val current = state.value
+        if (current !is AiSummaryState.Confirm && current !is AiSummaryState.Failed) return
+        val profile = savedSettings?.profiles?.get(provider)?.firstOrNull { it.id == id } ?: return
+        keySelection = provider to id
+        if (current is AiSummaryState.Confirm) {
+            try {
+                val config = validatedAiConfig(provider, profile.config, requireModel = true)
+                mutableState.value = current.copy(plan = current.plan.copy(
+                    provider = provider, profileName = profile.name, config = config))
+            } catch (error: AiProviderException) {
+                mutableState.value = AiSummaryState.Failed(current.plan.chapter, current.plan.language,
+                    error.failure, current.continuous, current.reusedFirst)
+            }
+        } else retry()
+    }
+
     private fun prepare(chapter: AiChapter, language: String, reuse: Boolean,
                         continuous: Boolean = false, reusedFirst: AiSummaryState.Ready? = null) {
         if (isProcessing()) return
@@ -95,10 +124,16 @@ class AiSummaryController(
                 val settings = try { store.load().normalized() } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) { throw AiProviderException(AiFailure.LOAD_SETTINGS) }
-                val config = validatedAiConfig(settings.provider, settings.config(), requireModel = true)
+                if (revision != token) return@launchWork
+                savedSettings = settings
+                val (provider, id) = keySelection ?: (settings.provider to settings.profile().id)
+                val profile = if (keySelection == null) settings.profile() else
+                    settings.profiles[provider]?.firstOrNull { it.id == id }
+                        ?: throw AiProviderException(AiFailure.MISSING_KEY)
+                val config = validatedAiConfig(provider, profile.config, requireModel = true)
                 val following = chapterSource?.loadedAfter(chapter).orEmpty()
                 if (revision == token) mutableState.value = AiSummaryState.Confirm(
-                    AiSummaryPlan(chapter, settings.provider, settings.profile().name, config, language),
+                    AiSummaryPlan(chapter, provider, profile.name, config, language),
                     regenerating = !reuse && reusedFirst == null, continuous = continuous,
                     reusedFirst = reusedFirst, following = following)
             } catch (e: CancellationException) {

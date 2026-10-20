@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import com.google.android.material.button.MaterialButton
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.util.countWords
 import com.lagradost.quicknovel.ui.settings.AiSettingsActivity
@@ -23,8 +24,37 @@ import java.text.NumberFormat
 class ReaderSummaryDialog(private val activity: AppCompatActivity, private val controller: AiSummaryController) {
     private var dialog: AlertDialog? = null
     private var contentHost: FrameLayout? = null
+    private var keyPicker: AlertDialog? = null
+
+    private fun chooseKey() {
+        val keys = controller.savedKeys
+        if (keys.isEmpty() || keyPicker != null) return
+        val labels = keys.map { key ->
+            val name = key.name.trim().ifBlank { key.provider.displayName }
+            val title = if (name.equals(key.provider.displayName, ignoreCase = true)) name
+                else "$name · ${key.provider.displayName}"
+            "$title\n${key.model}"
+        }.toTypedArray()
+        val selected = keys.indexOf(controller.selectedKey)
+        val picker = AlertDialog.Builder(activity)
+            .setTitle(R.string.ai_summary_choose_profile)
+            .setSingleChoiceItems(labels, selected) { selection, index ->
+                selection.dismiss()
+                controller.selectKey(keys[index].provider, keys[index].id)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.ai_provider_settings) { _, _ ->
+                controller.close()
+                activity.startActivity(Intent(activity, AiSettingsActivity::class.java))
+            }.create()
+        keyPicker = picker
+        picker.setOnDismissListener { if (keyPicker === it) keyPicker = null }
+        picker.show()
+    }
 
     private fun dismissDialog() {
+        keyPicker?.dismiss()
+        keyPicker = null
         val previous = dialog
         dialog = null
         contentHost = null
@@ -132,7 +162,9 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                         NumberFormat.getIntegerInstance().format(state.knownInputTokens))
                     else activity.getString(R.string.chapter_word_count_format, words(plan.chapter.text),
                         activity.getString(R.string.ai_request_token_estimate, NumberFormat.getIntegerInstance().format(plan.inputTokens)))
-                    bind(plan.chapter.title, "$name · ${plan.config.model}", estimate, host.takeUnless { it == defaultHost })
+                    bind(plan.chapter.title, name, estimate, host.takeUnless { it == defaultHost },
+                        onConfigurationClick = if (controller.savedKeys.isEmpty()) null else ::chooseKey,
+                        configurationDetail = plan.config.model)
                 })
                 continuousToggle(state.continuous)
                 if (state.continuous) text(activity.getString(
@@ -149,6 +181,14 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 text(state.chapter.title)
                 if (state.continuous) text(activity.getString(R.string.ai_summary_continuous_stopped), secondary = true)
                 text(activity.getString(state.reason.messageRes()))
+                if (controller.savedKeys.isNotEmpty()) content.addView(MaterialButton(activity, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                    setText(R.string.ai_summary_choose_profile)
+                    isAllCaps = false
+                    setOnClickListener { chooseKey() }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = (12 * density).toInt()
+                })
                 button(AlertDialog.BUTTON_POSITIVE, R.string.ai_summary_retry, controller::retry)
                 button(AlertDialog.BUTTON_NEUTRAL, R.string.ai_provider_settings) {
                     controller.close()
