@@ -6,7 +6,9 @@ import okhttp3.Response
 
 internal interface BrowserCookieStore {
     fun cookies(url: String): String?
+
     fun saveCookie(url: String, cookie: String)
+
     fun userAgent(url: String): String?
 }
 
@@ -16,8 +18,9 @@ private data class BrowserRequestOrigin(val url: HttpUrl, val cookies: String?, 
 internal class BrowserRequestOriginInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val origin = request.tag(BrowserRequestOrigin::class.java)
-            ?: BrowserRequestOrigin(request.url, request.header("Cookie"), request.header("User-Agent"))
+        val origin =
+            request.tag(BrowserRequestOrigin::class.java)
+                ?: BrowserRequestOrigin(request.url, request.header("Cookie"), request.header("User-Agent"))
         return chain.proceed(request.newBuilder().tag(BrowserRequestOrigin::class.java, origin).build())
     }
 }
@@ -26,17 +29,21 @@ internal class BrowserRequestOriginInterceptor : Interceptor {
 internal class BrowserSessionInterceptor(private val store: BrowserCookieStore) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val original = request.tag(BrowserRequestOrigin::class.java)
-            ?: BrowserRequestOrigin(request.url, request.header("Cookie"), request.header("User-Agent"))
+        val original =
+            request.tag(BrowserRequestOrigin::class.java)
+                ?: BrowserRequestOrigin(request.url, request.header("Cookie"), request.header("User-Agent"))
         val url = request.url.toString()
         val shared = cookiePairs(store.cookies(url))
-        val sameOrigin = request.url.scheme == original.url.scheme && request.url.host == original.url.host &&
-            request.url.port == original.url.port
+        val sameOrigin =
+            request.url.scheme == original.url.scheme &&
+                request.url.host == original.url.host &&
+                request.url.port == original.url.port
         val cookies = (if (sameOrigin) cookiePairs(original.cookies) else emptyMap()) + shared
-        val builder = request.newBuilder()
-            .removeHeader("Cookie").removeHeader("User-Agent")
-        if (cookies.isNotEmpty()) builder.header("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
-        val providerAgent = if (sameOrigin) request.header("User-Agent") ?: original.userAgent
+        val builder = request.newBuilder().removeHeader("Cookie").removeHeader("User-Agent")
+        if (cookies.isNotEmpty())
+            builder.header("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
+        val providerAgent =
+            if (sameOrigin) request.header("User-Agent") ?: original.userAgent
             else original.userAgent ?: request.header("User-Agent")
         val agent = if (shared.containsKey("cf_clearance")) store.userAgent(url) ?: providerAgent else providerAgent
         if (agent != null) builder.header("User-Agent", agent)

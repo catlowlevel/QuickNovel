@@ -7,14 +7,26 @@ import javax.crypto.KeyGenerator
 
 class AiSettingsEncryptionTest {
     private fun key() = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
-    private val settings = AiSettings(AiProvider.CLAUDE,
-        profiles = AiProvider.entries.associateWith { provider ->
-            listOf("first", "second").map { key -> AiKeyProfile("${provider.name}-$key", key,
-                AiProviderConfig("private-key-for-${provider.name}-$key", "chosen-${provider.name}-$key",
-                    "https://$key-${provider.name.lowercase()}.example/api/v1/")) }
-        },
-        selectedProfiles = AiProvider.entries.associateWith { "${it.name}-second" },
-    )
+
+    private val settings =
+        AiSettings(
+            AiProvider.CLAUDE,
+            profiles =
+                AiProvider.entries.associateWith { provider ->
+                    listOf("first", "second").map { key ->
+                        AiKeyProfile(
+                            "${provider.name}-$key",
+                            key,
+                            AiProviderConfig(
+                                "private-key-for-${provider.name}-$key",
+                                "chosen-${provider.name}-$key",
+                                "https://$key-${provider.name.lowercase()}.example/api/v1/",
+                            ),
+                        )
+                    }
+                },
+            selectedProfiles = AiProvider.entries.associateWith { "${it.name}-second" },
+        )
 
     @Test
     fun encryptedSettingsRoundTripEveryProvidersCredentialsModelsAndActiveChoice() {
@@ -22,7 +34,9 @@ class AiSettingsEncryptionTest {
         val encryption = AiSettingsEncryption { key }
         val encoded = encryption.encode(settings)
         assertEquals(settings, encryption.decode(encoded))
-        AiProvider.entries.forEach { assertFalse(encoded.toString(Charsets.UTF_8).contains(settings.config(it).apiKey)) }
+        AiProvider.entries.forEach {
+            assertFalse(encoded.toString(Charsets.UTF_8).contains(settings.config(it).apiKey))
+        }
     }
 
     @Test
@@ -58,22 +72,26 @@ class AiSettingsEncryptionTest {
     @Test
     fun existingSingleKeyEncryptedSettingsMigrateWithoutLosingAnyProviderOrModel() {
         val key = key()
-        val legacy = """{"provider":"CLAUDE","configs":{
+        val legacy =
+            """{"provider":"CLAUDE","configs":{
             "GEMINI":{"apiKey":"old-gemini","model":"gemini-model"},
             "OPENAI":{"apiKey":"old-openai","model":"openai-model"},
             "CLAUDE":{"apiKey":"old-claude","model":"claude-model"}}}"""
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.ENCRYPT_MODE, key)
-            updateAAD(byteArrayOf(1))
-        }
+        val cipher =
+            Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.ENCRYPT_MODE, key)
+                updateAAD(byteArrayOf(1))
+            }
         val bytes = byteArrayOf(1) + cipher.iv + cipher.doFinal(legacy.toByteArray())
         val encryption = AiSettingsEncryption { key }
         val migrated = encryption.decode(bytes)
         assertEquals(AiProvider.CLAUDE, migrated.provider)
         for (provider in AiProvider.entries) {
             assertEquals(1, migrated.keyProfiles(provider).size)
-            assertEquals(AiProviderConfig("old-${provider.name.lowercase()}", "${provider.name.lowercase()}-model"),
-                migrated.config(provider))
+            assertEquals(
+                AiProviderConfig("old-${provider.name.lowercase()}", "${provider.name.lowercase()}-model"),
+                migrated.config(provider),
+            )
         }
         assertEquals(migrated, encryption.decode(encryption.encode(migrated)))
         assertEquals(migrated, encryption.decode(bytes))
@@ -82,13 +100,15 @@ class AiSettingsEncryptionTest {
     @Test
     fun profilesSavedBeforeCustomUrlsKeepTheirKeysAndUseTheDefaultEndpoint() {
         val key = key()
-        val old = """{"provider":"OPENAI","profiles":{"OPENAI":[
+        val old =
+            """{"provider":"OPENAI","profiles":{"OPENAI":[
             {"id":"saved-id","name":"Existing key","config":{"apiKey":"existing-key","model":"existing-model"}}]},
             "selectedProfiles":{"OPENAI":"saved-id"}}"""
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.ENCRYPT_MODE, key)
-            updateAAD(byteArrayOf(1))
-        }
+        val cipher =
+            Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.ENCRYPT_MODE, key)
+                updateAAD(byteArrayOf(1))
+            }
         val bytes = byteArrayOf(1) + cipher.iv + cipher.doFinal(old.toByteArray())
         val loaded = AiSettingsEncryption { key }.decode(bytes)
         assertEquals(AiProvider.OPENAI, loaded.provider)

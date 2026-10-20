@@ -1,36 +1,37 @@
 package com.lagradost.quicknovel.ui
 
 import android.content.res.ColorStateList
-import android.graphics.Typeface
 import android.graphics.BlurMaskFilter
+import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
-import android.text.style.CharacterStyle
-import android.text.style.RelativeSizeSpan
-import android.text.style.BackgroundColorSpan
-import android.text.style.MaskFilterSpan
 import android.text.method.LinkMovementMethod
+import android.text.style.BackgroundColorSpan
+import android.text.style.CharacterStyle
+import android.text.style.MaskFilterSpan
+import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.core.text.getSpans
 import androidx.core.graphics.ColorUtils
+import androidx.core.text.getSpans
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
-import com.lagradost.quicknovel.ChapterLoadSpanned
 import com.lagradost.quicknovel.BrowserActivity
+import com.lagradost.quicknovel.ChapterLoadSpanned
 import com.lagradost.quicknovel.ChapterOverscrollSpanned
 import com.lagradost.quicknovel.ChapterStartSpanned
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.FailedSpanned
+import com.lagradost.quicknovel.LiveChapterData
 import com.lagradost.quicknovel.LoadingSpanned
 import com.lagradost.quicknovel.MLException
 import com.lagradost.quicknovel.QuickBook
@@ -38,11 +39,8 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ReadActivityViewModel
 import com.lagradost.quicknovel.SpanDisplay
 import com.lagradost.quicknovel.TTSHelper
-import com.lagradost.quicknovel.TTSWordOverride
 import com.lagradost.quicknovel.TTSReaderOverrideHighlights
-import com.lagradost.quicknovel.joinedHighlightsForParagraph
-import com.lagradost.quicknovel.upcomingTTSBlurRange
-import com.lagradost.quicknovel.LiveChapterData
+import com.lagradost.quicknovel.TTSWordOverride
 import com.lagradost.quicknovel.TextSpan
 import com.lagradost.quicknovel.databinding.SingleFailedBinding
 import com.lagradost.quicknovel.databinding.SingleFinishedChapterBinding
@@ -52,7 +50,9 @@ import com.lagradost.quicknovel.databinding.SingleLoadingBinding
 import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
 import com.lagradost.quicknovel.databinding.SingleSeparatorBinding
 import com.lagradost.quicknovel.databinding.SingleTextBinding
+import com.lagradost.quicknovel.joinedHighlightsForParagraph
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.upcomingTTSBlurRange
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
@@ -727,15 +727,21 @@ class TextAdapter(
                         obj.text
                     }
                     val chapter = ttsChapters[obj.index]
-                    val matches = if (overrideHighlights.enabled && chapter != null) {
-                        overrideHighlights.forParagraph(chapter.ttsLines, obj.index, obj.start, obj.end)
-                    } else emptyList()
-                    val joined = joinedHighlightsForParagraph(
-                        chapter?.joinedSentences.orEmpty(), obj.start, obj.end, matches
-                    )
-                    val blur = upcomingTTSBlurRange(
-                        blurUpcomingEnabled, blurPlaybackStatus, currentTTSLine, obj.index, obj.start, obj.end
-                    )
+                    val matches =
+                        if (overrideHighlights.enabled && chapter != null) {
+                            overrideHighlights.forParagraph(chapter.ttsLines, obj.index, obj.start, obj.end)
+                        } else emptyList()
+                    val joined =
+                        joinedHighlightsForParagraph(chapter?.joinedSentences.orEmpty(), obj.start, obj.end, matches)
+                    val blur =
+                        upcomingTTSBlurRange(
+                            blurUpcomingEnabled,
+                            blurPlaybackStatus,
+                            currentTTSLine,
+                            obj.index,
+                            obj.start,
+                            obj.end,
+                        )
                     // Mask filters require software drawing. Limit it to affected rows, and reset
                     // the layer when a recycled/rebound row becomes readable again.
                     val layer = if (blur == null) View.LAYER_TYPE_NONE else View.LAYER_TYPE_SOFTWARE
@@ -950,8 +956,11 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name && oldItem.wordCount == newItem.wordCount &&
-                        oldItem.showingSummary == newItem.showingSummary && oldItem.summaryTruncated == newItem.summaryTruncated
+                    newItem.id == oldItem.id &&
+                        oldItem.name == newItem.name &&
+                        oldItem.wordCount == newItem.wordCount &&
+                        oldItem.showingSummary == newItem.showingSummary &&
+                        oldItem.summaryTruncated == newItem.summaryTruncated
                 }
 
                 is ChapterLoadSpanned -> {

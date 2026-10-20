@@ -16,8 +16,11 @@ import com.lagradost.quicknovel.R
 
 @Composable
 internal fun BrowserRecovery(onRetry: () -> Unit, onOpenBrowser: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier.padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(stringResource(R.string.error_loading))
         Text(stringResource(R.string.browser_recovery_hint))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

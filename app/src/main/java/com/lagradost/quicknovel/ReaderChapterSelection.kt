@@ -13,10 +13,13 @@ internal fun readerLineAtScreenCenter(
     val visible = lines.filter { it.bottom > it.top && it.bottom > viewportTop && it.top < viewportBottom }
     val target = screenCenter.coerceIn(viewportTop, viewportBottom)
     return visible.firstOrNull { it.top <= target && it.bottom > target }
-        ?: visible.minWithOrNull(compareBy<TextVisualLine> {
-            when {
-                target < it.top -> it.top - target
-                else -> target - it.bottom
-            }
-        }.thenByDescending { it.top })
+        ?: visible.minWithOrNull(
+            compareBy<TextVisualLine> {
+                    when {
+                        target < it.top -> it.top - target
+                        else -> target - it.bottom
+                    }
+                }
+                .thenByDescending { it.top }
+        )
 }

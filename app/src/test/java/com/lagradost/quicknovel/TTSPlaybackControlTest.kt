@@ -23,10 +23,11 @@ class TTSPlaybackControlTest {
     @Test
     fun pausedWorkerWakesOnNavigationWithoutAPollingInterval() = runBlocking {
         val control = TTSPlaybackControl()
-        val worker = async(start = CoroutineStart.UNDISPATCHED) {
-            control.awaitWhile { !control.hasPendingSkip }
-            control.takeSkip()
-        }
+        val worker =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                control.awaitWhile { !control.hasPendingSkip }
+                control.takeSkip()
+            }
         assertFalse(worker.isCompleted)
         control.skip(1)
         assertEquals(1, withTimeout(5_000) { worker.await() })
@@ -52,9 +53,7 @@ class TTSPlaybackControlTest {
     fun statusAndCompletionSignalsRecheckStateWithoutInventingNavigation() = runBlocking {
         val control = TTSPlaybackControl()
         var waiting = true
-        val worker = async(start = CoroutineStart.UNDISPATCHED) {
-            control.awaitWhile { waiting }
-        }
+        val worker = async(start = CoroutineStart.UNDISPATCHED) { control.awaitWhile { waiting } }
         control.signal() // A stale utterance callback must not end a paused wait.
         yield()
         assertFalse(worker.isCompleted)

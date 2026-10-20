@@ -10,31 +10,58 @@ import org.junit.rules.TemporaryFolder
 import java.io.IOException
 
 class AiSummaryCacheControllerTest {
-    @get:Rule
-    val temp = TemporaryFolder()
+    @get:Rule val temp = TemporaryFolder()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val chapter = AiChapter("book", "chapter-4", "Novel", "Chapter 4", "Original chapter text.")
+
     private class Store : AiSettingsPersistence {
         var loads = 0
         var fail = false
         var value = AiSettings().withConfig(AiProviderConfig("private-key", "chosen-model"))
-        override suspend fun load(): AiSettings { loads++; if (fail) throw IOException("Offline key storage"); return value }
-        override suspend fun save(settings: AiSettings) { error("Must not save credentials") }
+
+        override suspend fun load(): AiSettings {
+            loads++
+            if (fail) throw IOException("Offline key storage")
+            return value
+        }
+
+        override suspend fun save(settings: AiSettings) {
+            error("Must not save credentials")
+        }
     }
+
     private class Api : AiSummaryApi {
         var calls = 0
         var answer: suspend () -> AiSummaryOutput = { AiSummaryOutput("Generated recap") }
-        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput {
+
+        override suspend fun summarize(
+            provider: AiProvider,
+            config: AiProviderConfig,
+            chapter: AiChapter,
+            language: String,
+        ): AiSummaryOutput {
             calls++
             return answer()
         }
     }
-    private fun record() = AiCachedSummary(chapter.resultKey("en"), "en", AiProvider.OPENAI,
-        "Saved key", "saved-model", AiSummaryOutput("Saved recap"))
+
+    private fun record() =
+        AiCachedSummary(
+            chapter.resultKey("en"),
+            "en",
+            AiProvider.OPENAI,
+            "Saved key",
+            "saved-model",
+            AiSummaryOutput("Saved recap"),
+        )
+
     private suspend inline fun <reified T : AiSummaryState> AiSummaryController.await(): T =
         withTimeout(3000) { state.first { it is T } as T }
+
     @After
-    fun tearDown() { scope.cancel() }
+    fun tearDown() {
+        scope.cancel()
+    }
 
     @Test
     fun generationSurvivesControllerRestartAndOfflineReuseDoesNotReadCredentialsOrCallTheApi() = runBlocking {
@@ -134,7 +161,6 @@ class AiSummaryCacheControllerTest {
         assertEquals(1, api.calls)
     }
 
-
     @Test
     fun cancellingSavedSummaryChoiceLeavesTheCacheAvailableWithoutApplyingOrRegenerating() = runBlocking {
         val cache = FileAiSummaryCache(temp.newFolder())
@@ -178,10 +204,15 @@ class AiSummaryCacheControllerTest {
     @Test
     fun aLateCacheLookupCannotReopenAClosedDialogOrLoadCredentials() = runBlocking {
         val result = CompletableDeferred<AiCachedSummary?>()
-        val cache = object : AiSummaryCache {
-            override suspend fun load(chapter: AiChapter, language: String) = withContext(NonCancellable) { result.await() }
-            override suspend fun save(result: AiCachedSummary) { error("No generation expected") }
-        }
+        val cache =
+            object : AiSummaryCache {
+                override suspend fun load(chapter: AiChapter, language: String) =
+                    withContext(NonCancellable) { result.await() }
+
+                override suspend fun save(result: AiCachedSummary) {
+                    error("No generation expected")
+                }
+            }
         val store = Store()
         val api = Api()
         val controller = AiSummaryController(scope, store, api, cache)

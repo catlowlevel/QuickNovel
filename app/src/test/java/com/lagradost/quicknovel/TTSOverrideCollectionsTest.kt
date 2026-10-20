@@ -26,7 +26,8 @@ class TTSOverrideCollectionsTest {
         val sibling = TTSWordOverride(find = "Wu", replacement = "Woo")
         val existing = original.copy(id = "existing", replacement = "other")
         val saved = TTSOverrideCollections(local = listOf(original, sibling), global = listOf(existing))
-        val draft = original.copy(replacement = "\$1", find = "(Li)", isRegex = true, caseSensitive = true, enabled = false)
+        val draft =
+            original.copy(replacement = "\$1", find = "(Li)", isRegex = true, caseSensitive = true, enabled = false)
         val moved = saved.saveRule(draft, TTSOverrideScope.Local, TTSOverrideScope.Global)
         assertEquals(listOf(sibling), moved.local)
         assertEquals(listOf(existing, draft), moved.global)
@@ -39,7 +40,12 @@ class TTSOverrideCollectionsTest {
         val global = TTSWordOverride(find = "Li", replacement = "global")
         val local = global.copy(id = "local", find = "X", replacement = "local")
         val saved = TTSOverrideCollections(local = listOf(local), global = listOf(global))
-        val preview = saved.saveRule(global.copy(find = "Wu", replacement = "draft"), TTSOverrideScope.Global, TTSOverrideScope.Local)
+        val preview =
+            saved.saveRule(
+                global.copy(find = "Wu", replacement = "draft"),
+                TTSOverrideScope.Global,
+                TTSOverrideScope.Local,
+            )
         assertTrue(preview.global.isEmpty())
         assertEquals("Li draft", TTSOverrideEngine(preview.effectiveRules()).preview("Li Wu").text)
         assertEquals("global Wu", TTSOverrideEngine(saved.effectiveRules()).replace("Li Wu"))
@@ -51,8 +57,9 @@ class TTSOverrideCollectionsTest {
     fun editorMoveDoesNotOverwriteAnExistingDestinationIdentity() {
         val source = TTSWordOverride(id = "shared", find = "Li", replacement = "Lee")
         val destination = source.copy(find = "Wu", replacement = "Woo")
-        val moved = TTSOverrideCollections(local = listOf(destination), global = listOf(source))
-            .saveRule(source.copy(replacement = "edited"), TTSOverrideScope.Global, TTSOverrideScope.Local)
+        val moved =
+            TTSOverrideCollections(local = listOf(destination), global = listOf(source))
+                .saveRule(source.copy(replacement = "edited"), TTSOverrideScope.Global, TTSOverrideScope.Local)
         assertTrue(moved.global.isEmpty())
         assertEquals(destination, moved.local.first())
         assertNotEquals(destination.id, moved.local.last().id)
@@ -85,10 +92,11 @@ class TTSOverrideCollectionsTest {
     fun disabledOrInvalidLocalsFallBackToTheValidGlobalRule() {
         val global = TTSWordOverride(find = "(Li)", replacement = "Lee", isRegex = true)
         val base = TTSOverrideCollections(global = listOf(global))
-        for (local in listOf(
-            global.copy(id = "local-disabled", replacement = "local", enabled = false),
-            global.copy(id = "local-invalid", replacement = "\$2"),
-        )) {
+        for (local in
+            listOf(
+                global.copy(id = "local-disabled", replacement = "local", enabled = false),
+                global.copy(id = "local-invalid", replacement = "\$2"),
+            )) {
             val collections = base.copy(local = listOf(local))
             assertFalse(collections.overridesGlobal(global))
             assertEquals("Lee", TTSOverrideEngine(collections.effectiveRules()).replace("Li"))
@@ -103,7 +111,8 @@ class TTSOverrideCollectionsTest {
         val strict = TTSWordOverride(find = "A", replacement = "strict", caseSensitive = true)
         val regex = TTSWordOverride(find = "A", replacement = "regex", isRegex = true)
         val last = TTSWordOverride(find = "C", replacement = "D")
-        val collections = TTSOverrideCollections(local = listOf(first, second), global = listOf(duplicate, strict, regex, last))
+        val collections =
+            TTSOverrideCollections(local = listOf(first, second), global = listOf(duplicate, strict, regex, last))
         assertEquals(listOf(first, second, strict, regex, last), collections.effectiveRules())
         assertEquals("D", TTSOverrideEngine(collections.effectiveRules()).replace("A"))
     }
@@ -138,8 +147,9 @@ class TTSOverrideCollectionsTest {
     fun movingGlobalToLocalDoesNotOverwriteACollidingDestinationIdentity() {
         val global = TTSWordOverride(id = "shared", find = "Li", replacement = "Lee")
         val local = global.copy(find = "Wu", replacement = "Woo")
-        val moved = TTSOverrideCollections(local = listOf(local), global = listOf(global))
-            .transfer(global.id, TTSOverrideScope.Global, copy = false)
+        val moved =
+            TTSOverrideCollections(local = listOf(local), global = listOf(global))
+                .transfer(global.id, TTSOverrideScope.Global, copy = false)
         assertTrue(moved.global.isEmpty())
         assertEquals(local, moved.local.first())
         assertNotEquals(local.id, moved.local.last().id)
@@ -152,18 +162,24 @@ class TTSOverrideCollectionsTest {
         val local = global.copy(id = "local", replacement = "local")
         val a = ttsPlaybackBookKey("quick", "Provider A", "Author", "Same Title")
         val b = ttsPlaybackBookKey("quick", "Provider B", "Author", "Same Title")
-        val values = mapOf(
-            EPUB_TTS_WORD_OVERRIDES to DataStore.mapper.writeValueAsString(TTSWordOverrides(listOf(global))),
-            ttsLocalOverrideKey(a) to DataStore.mapper.writeValueAsString(TTSWordOverrides(listOf(local))),
-        )
+        val values =
+            mapOf(
+                EPUB_TTS_WORD_OVERRIDES to DataStore.mapper.writeValueAsString(TTSWordOverrides(listOf(global))),
+                ttsLocalOverrideKey(a) to DataStore.mapper.writeValueAsString(TTSWordOverrides(listOf(local))),
+            )
         fun load(bookId: String): TTSOverrideCollections {
-            fun rules(key: String) = values[key]?.let {
-                DataStore.mapper.readValue(it, TTSWordOverrides::class.java).rules
-            }.orEmpty()
-            return TTSOverrideCollections(local = rules(ttsLocalOverrideKey(bookId)), global = rules(EPUB_TTS_WORD_OVERRIDES))
+            fun rules(key: String) =
+                values[key]?.let { DataStore.mapper.readValue(it, TTSWordOverrides::class.java).rules }.orEmpty()
+            return TTSOverrideCollections(
+                local = rules(ttsLocalOverrideKey(bookId)),
+                global = rules(EPUB_TTS_WORD_OVERRIDES),
+            )
         }
         assertNotEquals(ttsLocalOverrideKey(a), ttsLocalOverrideKey(b))
-        assertEquals(ttsLocalOverrideKey(a), ttsLocalOverrideKey(ttsPlaybackBookKey("quick", "Provider A", "Author", "Same Title")))
+        assertEquals(
+            ttsLocalOverrideKey(a),
+            ttsLocalOverrideKey(ttsPlaybackBookKey("quick", "Provider A", "Author", "Same Title")),
+        )
         assertEquals("local", TTSOverrideEngine(load(a).effectiveRules()).replace("Li"))
         assertEquals("global", TTSOverrideEngine(load(b).effectiveRules()).replace("Li"))
     }
@@ -179,7 +195,10 @@ class TTSOverrideCollectionsTest {
         assertEquals("local", engine.prepare(TTSHelper.TTSLine("Li", 100, 102, 4))!!.speakOutMsg)
         val highlights = TTSReaderOverrideHighlights()
         highlights.updateRules(combined)
-        assertEquals(listOf(TTSOverrideMatch(0, 2)), highlights.forParagraph(listOf(TTSHelper.TTSLine("Li", 100, 102, 4)), 4, 100, 102))
+        assertEquals(
+            listOf(TTSOverrideMatch(0, 2)),
+            highlights.forParagraph(listOf(TTSHelper.TTSLine("Li", 100, 102, 4)), 4, 100, 102),
+        )
         assertTrue(saved.local.isEmpty())
         assertEquals("global", TTSOverrideEngine(saved.effectiveRules()).replace("Li"))
     }

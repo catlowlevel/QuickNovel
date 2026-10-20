@@ -2,29 +2,34 @@ package com.lagradost.quicknovel
 
 import java.util.UUID
 
-internal enum class TTSOverrideScope { Local, Global }
+internal enum class TTSOverrideScope {
+    Local,
+    Global,
+}
 
 internal fun TTSWordOverride.hasSameMatch(other: TTSWordOverride): Boolean =
-    isRegex == other.isRegex && caseSensitive == other.caseSensitive &&
+    isRegex == other.isRegex &&
+        caseSensitive == other.caseSensitive &&
         find.equals(other.find, ignoreCase = !isRegex && !caseSensitive)
 
 internal data class TTSOverrideCollections(
     val local: List<TTSWordOverride> = emptyList(),
     val global: List<TTSWordOverride> = emptyList(),
 ) {
-    fun rules(scope: TTSOverrideScope): List<TTSWordOverride> = when (scope) {
-        TTSOverrideScope.Local -> local
-        TTSOverrideScope.Global -> global
-    }
+    fun rules(scope: TTSOverrideScope): List<TTSWordOverride> =
+        when (scope) {
+            TTSOverrideScope.Local -> local
+            TTSOverrideScope.Global -> global
+        }
 
-    fun withRules(scope: TTSOverrideScope, rules: List<TTSWordOverride>): TTSOverrideCollections = when (scope) {
-        TTSOverrideScope.Local -> copy(local = rules.toList())
-        TTSOverrideScope.Global -> copy(global = rules.toList())
-    }
+    fun withRules(scope: TTSOverrideScope, rules: List<TTSWordOverride>): TTSOverrideCollections =
+        when (scope) {
+            TTSOverrideScope.Local -> copy(local = rules.toList())
+            TTSOverrideScope.Global -> copy(global = rules.toList())
+        }
 
-    fun overridesGlobal(rule: TTSWordOverride): Boolean = local.any {
-        it.enabled && it.validationError() == null && it.hasSameMatch(rule)
-    }
+    fun overridesGlobal(rule: TTSWordOverride): Boolean =
+        local.any { it.enabled && it.validationError() == null && it.hasSameMatch(rule) }
 
     /** Matching options define duplicates; disabled rules still deserve a warning. */
     fun duplicateScopes(rule: TTSWordOverride, source: TTSOverrideScope?): List<TTSOverrideScope> =
@@ -48,7 +53,8 @@ internal data class TTSOverrideCollections(
         val rule = rules(from).firstOrNull { it.id == id } ?: return this
         val to = if (from == TTSOverrideScope.Local) TTSOverrideScope.Global else TTSOverrideScope.Local
         val destination = rules(to)
-        val inserted = if (copy || destination.any { it.id == id }) rule.copy(id = UUID.randomUUID().toString()) else rule
+        val inserted =
+            if (copy || destination.any { it.id == id }) rule.copy(id = UUID.randomUUID().toString()) else rule
         val updated = withRules(to, destination + inserted)
         return if (copy) updated else updated.withRules(from, rules(from).filterNot { it.id == id })
     }

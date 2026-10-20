@@ -63,7 +63,10 @@ class TTSCenteringTest {
         val target = TTSCenteringTarget(TTSVerticalBounds(0, 400), TTSVerticalBounds(240, 280))
         assertEquals(-270, target.scrollBy(viewport))
         // A sentence initially under the panel can become clear through normal paragraph centering.
-        assertEquals(300, TTSCenteringTarget(TTSVerticalBounds(600, 1_000), TTSVerticalBounds(620, 660)).scrollBy(viewport))
+        assertEquals(
+            300,
+            TTSCenteringTarget(TTSVerticalBounds(600, 1_000), TTSVerticalBounds(620, 660)).scrollBy(viewport),
+        )
     }
 
     @Test
@@ -101,12 +104,13 @@ class TTSCenteringTest {
 
     @Test
     fun selectsOnlyTheSpokenChapterAndParagraphUsingExclusiveCharacterEnds() {
-        val lines = listOf(
-            TextVisualLine(0, 10, 1, 0, -200, -160),
-            TextVisualLine(0, 10, 2, 0, 100, 140),
-            TextVisualLine(10, 20, 2, 0, 140, 180),
-            TextVisualLine(21, 40, 2, 1, 200, 240),
-        )
+        val lines =
+            listOf(
+                TextVisualLine(0, 10, 1, 0, -200, -160),
+                TextVisualLine(0, 10, 2, 0, 100, 140),
+                TextVisualLine(10, 20, 2, 0, 140, 180),
+                TextVisualLine(21, 40, 2, 1, 200, 240),
+            )
         val target = ttsCenteringTarget(lines, TTSHelper.TTSLine("Sentence.", 10, 20, 2))!!
         assertEquals(TTSVerticalBounds(100, 180), target.paragraph)
         assertEquals(TTSVerticalBounds(140, 180), target.sentence)

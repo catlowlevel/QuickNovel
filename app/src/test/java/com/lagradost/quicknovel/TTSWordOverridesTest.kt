@@ -17,7 +17,10 @@ class TTSWordOverridesTest {
     fun caseSensitivityIsOptionalAndIgnoringCaseHandlesNonAsciiText() {
         val rule = TTSWordOverride(find = "Élan", replacement = "elan")
         assertEquals("elan elan elan", TTSOverrideEngine(listOf(rule)).replace("Élan élan ÉLAN"))
-        assertEquals("elan élan ÉLAN", TTSOverrideEngine(listOf(rule.copy(caseSensitive = true))).replace("Élan élan ÉLAN"))
+        assertEquals(
+            "elan élan ÉLAN",
+            TTSOverrideEngine(listOf(rule.copy(caseSensitive = true))).replace("Élan élan ÉLAN"),
+        )
     }
 
     @Test
@@ -57,10 +60,12 @@ class TTSWordOverridesTest {
 
     @Test
     fun namedAndOptionalGroupsExpandWithUnmatchedGroupsAsEmptyText() {
-        val rule = TTSWordOverride(
-            find = "(?<given>Li)(?:\\s+(?<family>Wei))?",
-            replacement = "\${family}/\${given}", isRegex = true,
-        )
+        val rule =
+            TTSWordOverride(
+                find = "(?<given>Li)(?:\\s+(?<family>Wei))?",
+                replacement = "\${family}/\${given}",
+                isRegex = true,
+            )
         assertNull(rule.validationError())
         assertEquals("Wei/Li and /Li", TTSOverrideEngine(listOf(rule)).replace("Li Wei and Li"))
     }
@@ -84,7 +89,11 @@ class TTSWordOverridesTest {
     fun invalidReferencesAreRejectedEvenWhenThePatternCannotMatchThePreview() {
         val rule = TTSWordOverride(find = "(?!)((Li))", isRegex = true)
         for (replacement in listOf("\$3", "\${missing}", "\$", "\\", "\${")) {
-            assertEquals(replacement, TTSWordOverride.Error.InvalidReplacement, rule.copy(replacement = replacement).validationError())
+            assertEquals(
+                replacement,
+                TTSWordOverride.Error.InvalidReplacement,
+                rule.copy(replacement = replacement).validationError(),
+            )
         }
         // These characters still need no escaping in ordinary text rules.
         assertNull(rule.copy(find = "Li", replacement = "\$3\\", isRegex = false).validationError())
@@ -125,11 +134,12 @@ class TTSWordOverridesTest {
 
     @Test
     fun damagedSavedRulesDoNotPreventValidRulesOrNarrationFromWorking() {
-        val rules = listOf(
-            TTSWordOverride(find = "[", isRegex = true),
-            TTSWordOverride(find = "", replacement = "bad"),
-            TTSWordOverride(find = "Li", replacement = "Lee"),
-        )
+        val rules =
+            listOf(
+                TTSWordOverride(find = "[", isRegex = true),
+                TTSWordOverride(find = "", replacement = "bad"),
+                TTSWordOverride(find = "Li", replacement = "Lee"),
+            )
         assertEquals("Lee spoke.", TTSOverrideEngine(rules).replace("Li spoke."))
     }
 
@@ -150,7 +160,8 @@ class TTSWordOverridesTest {
     @Test
     fun speechReplacementsPreserveOriginalChapterAndCharacterPositions() {
         val original = TTSHelper.TTSLine("Li spoke.", 200, 209, 4)
-        val engine = TTSOverrideEngine(listOf(TTSWordOverride(find = "Li", replacement = "a much longer pronunciation")))
+        val engine =
+            TTSOverrideEngine(listOf(TTSWordOverride(find = "Li", replacement = "a much longer pronunciation")))
         val spoken = engine.prepare(original)!!
         assertEquals("a much longer pronunciation spoke.", spoken.speakOutMsg)
         assertEquals(original.startChar, spoken.startChar)
@@ -202,10 +213,13 @@ class TTSWordOverridesTest {
 
     @Test
     fun rulesSurviveAppJsonStorageWithTheirOrderIdentityAndOptions() {
-        val saved = TTSWordOverrides(listOf(
-            TTSWordOverride(find = "\\bLi\\b", replacement = "Lee", isRegex = true, caseSensitive = true),
-            TTSWordOverride(find = "\"old\"", replacement = "\$1\\new\n", enabled = false),
-        ))
+        val saved =
+            TTSWordOverrides(
+                listOf(
+                    TTSWordOverride(find = "\\bLi\\b", replacement = "Lee", isRegex = true, caseSensitive = true),
+                    TTSWordOverride(find = "\"old\"", replacement = "\$1\\new\n", enabled = false),
+                )
+            )
         val json = DataStore.mapper.writeValueAsString(saved)
         val restored = DataStore.mapper.readValue(json, TTSWordOverrides::class.java)
         assertEquals(saved, restored)

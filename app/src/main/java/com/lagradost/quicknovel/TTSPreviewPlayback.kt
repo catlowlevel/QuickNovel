@@ -2,8 +2,11 @@ package com.lagradost.quicknovel
 
 internal interface TTSPreviewOutput {
     val maxInputLength: Int
+
     fun prepare(ready: (Boolean) -> Unit)
+
     fun speak(text: String, finished: (Boolean) -> Unit)
+
     fun close()
 }
 
@@ -16,6 +19,7 @@ internal class TTSPreviewPlayback(
 ) {
     var isReading = false
         private set
+
     private var generation = 0
     private var output: TTSPreviewOutput? = null
     private var closed = false
@@ -46,7 +50,8 @@ internal class TTSPreviewPlayback(
                 }
                 speech.speak(chunks[index++]) { success ->
                     if (request != generation || closed) return@speak
-                    if (success) next() else {
+                    if (success) next()
+                    else {
                         stop()
                         failed()
                     }

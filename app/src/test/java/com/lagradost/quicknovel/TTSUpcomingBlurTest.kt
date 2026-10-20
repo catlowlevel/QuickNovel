@@ -66,8 +66,14 @@ class TTSUpcomingBlurTest {
     fun forwardAndBackwardNavigationRecomputeBlurFromTheSelectedSentence() {
         for (status in listOf(TTSHelper.TTSStatus.IsRunning, TTSHelper.TTSStatus.IsPaused)) {
             assertEquals(TTSBlurRange(20, 50), range(status = status))
-            assertEquals(TTSBlurRange(40, 50), range(status = status, current = sentence.copy(startChar = 111, endChar = 130)))
-            assertEquals(TTSBlurRange(10, 50), range(status = status, current = sentence.copy(startChar = 90, endChar = 100)))
+            assertEquals(
+                TTSBlurRange(40, 50),
+                range(status = status, current = sentence.copy(startChar = 111, endChar = 130)),
+            )
+            assertEquals(
+                TTSBlurRange(10, 50),
+                range(status = status, current = sentence.copy(startChar = 90, endChar = 100)),
+            )
             assertNull(range(status = status, current = sentence.copy(startChar = 131, endChar = 140)))
         }
     }
@@ -75,8 +81,9 @@ class TTSUpcomingBlurTest {
     @Test
     fun pronunciationReplacementsCannotMoveTheBlurBoundaryInTheDisplayedBook() {
         val original = TTSHelper.TTSLine("Li.", 100, 103, 4)
-        val spoken = TTSOverrideEngine(listOf(TTSWordOverride(find = "Li", replacement = "A much longer pronunciation")))
-            .prepare(original)!!
+        val spoken =
+            TTSOverrideEngine(listOf(TTSWordOverride(find = "Li", replacement = "A much longer pronunciation")))
+                .prepare(original)!!
         assertEquals(103, spoken.endChar)
         assertEquals(TTSBlurRange(13, 50), range(current = original))
         assertEquals(range(current = original), range(current = spoken))
@@ -86,8 +93,12 @@ class TTSUpcomingBlurTest {
     fun unicodeOffsetsPreserveTheWholeSpokenSentenceAndTheNextEmoji() {
         val text = "Read😀. Next😀."
         val spoken = "Read😀."
-        val blur = range(current = sentence.copy(speakOutMsg = spoken, startChar = 0, endChar = spoken.length),
-            start = 0, end = text.length)!!
+        val blur =
+            range(
+                current = sentence.copy(speakOutMsg = spoken, startChar = 0, endChar = spoken.length),
+                start = 0,
+                end = text.length,
+            )!!
         assertEquals(" Next😀.", text.substring(blur.start, blur.end))
         assertEquals(spoken, text.substring(0, blur.start))
     }

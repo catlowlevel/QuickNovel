@@ -20,17 +20,30 @@ class ReaderSummaryDialogTest {
         ActivityScenario.launch(AiSettingsActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-                val store = object : AiSettingsPersistence {
-                    override suspend fun load() = AiSettings().withConfig(AiProviderConfig("fixture-key", "fixture-model"))
-                    override suspend fun save(settings: AiSettings) = error("No settings writes expected")
-                }
-                val api = object : AiSummaryApi {
-                    override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String) =
-                        AiSummaryOutput("Fixture summary")
-                }
+                val store =
+                    object : AiSettingsPersistence {
+                        override suspend fun load() =
+                            AiSettings().withConfig(AiProviderConfig("fixture-key", "fixture-model"))
+
+                        override suspend fun save(settings: AiSettings) = error("No settings writes expected")
+                    }
+                val api =
+                    object : AiSummaryApi {
+                        override suspend fun summarize(
+                            provider: AiProvider,
+                            config: AiProviderConfig,
+                            chapter: AiChapter,
+                            language: String,
+                        ) = AiSummaryOutput("Fixture summary")
+                    }
                 val controller = AiSummaryController(scope, store, api)
                 val dialog = ReaderSummaryDialog(activity, controller)
-                try { test(controller, dialog) } finally { dialog.dismissForDestroy(); scope.cancel() }
+                try {
+                    test(controller, dialog)
+                } finally {
+                    dialog.dismissForDestroy()
+                    scope.cancel()
+                }
             }
         }
     }

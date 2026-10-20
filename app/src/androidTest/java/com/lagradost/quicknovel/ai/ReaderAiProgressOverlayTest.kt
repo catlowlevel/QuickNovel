@@ -13,8 +13,8 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.databinding.ReaderAiProgressBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
+import com.lagradost.quicknovel.databinding.ReaderAiProgressBinding
 import com.lagradost.quicknovel.ui.settings.AiSettingsActivity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -47,36 +47,61 @@ class ReaderAiProgressOverlayTest {
                     readerUi = ReadMainBinding.inflate(activity.layoutInflater)
                     readerUi.readNormalLayout.visibility = View.VISIBLE
                     readerUi.readNormalLayout.alpha = 1f
-                    val reader = Button(activity).apply {
-                        text = "Reader touch target"
-                        setOnClickListener { readerTaps++ }
-                    }
-                    readerUi.readNormalLayout.addView(reader,
-                        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                    binding = readerUi.readerAiProgress
-                    binding.root.layoutParams = (binding.root.layoutParams as FrameLayout.LayoutParams).apply {
-                        topMargin = (96 * activity.resources.displayMetrics.density).toInt()
-                    }
-                    activity.setContentView(readerUi.root)
-                    val store = object : AiSettingsPersistence {
-                        override suspend fun load() = AiSettings().withConfig(AiProviderConfig("fixture-key", "fixture-model"))
-                        override suspend fun save(settings: AiSettings) = error("No settings writes expected")
-                    }
-                    val api = object : AiSummaryApi {
-                        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput =
-                            error("Streaming is expected")
-
-                        override suspend fun streamSummary(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
-                                                           onProgress: (Long) -> Unit): AiSummaryOutput {
-                            progress = onProgress
-                            return reply.await()
+                    val reader =
+                        Button(activity).apply {
+                            text = "Reader touch target"
+                            setOnClickListener { readerTaps++ }
                         }
-                    }
+                    readerUi.readNormalLayout.addView(
+                        reader,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        ),
+                    )
+                    binding = readerUi.readerAiProgress
+                    binding.root.layoutParams =
+                        (binding.root.layoutParams as FrameLayout.LayoutParams).apply {
+                            topMargin = (96 * activity.resources.displayMetrics.density).toInt()
+                        }
+                    activity.setContentView(readerUi.root)
+                    val store =
+                        object : AiSettingsPersistence {
+                            override suspend fun load() =
+                                AiSettings().withConfig(AiProviderConfig("fixture-key", "fixture-model"))
+
+                            override suspend fun save(settings: AiSettings) = error("No settings writes expected")
+                        }
+                    val api =
+                        object : AiSummaryApi {
+                            override suspend fun summarize(
+                                provider: AiProvider,
+                                config: AiProviderConfig,
+                                chapter: AiChapter,
+                                language: String,
+                            ): AiSummaryOutput = error("Streaming is expected")
+
+                            override suspend fun streamSummary(
+                                provider: AiProvider,
+                                config: AiProviderConfig,
+                                chapter: AiChapter,
+                                language: String,
+                                onProgress: (Long) -> Unit,
+                            ): AiSummaryOutput {
+                                progress = onProgress
+                                return reply.await()
+                            }
+                        }
                     controller = AiSummaryController(scope, store, api)
-                    overlay = ReaderAiProgressOverlay(binding, onStop = {
-                        controller.close()
-                        overlay.render(controller.state.value)
-                    }, onVisibilityChanged = {})
+                    overlay =
+                        ReaderAiProgressOverlay(
+                            binding,
+                            onStop = {
+                                controller.close()
+                                overlay.render(controller.state.value)
+                            },
+                            onVisibilityChanged = {},
+                        )
                     dialog = ReaderSummaryDialog(activity, controller)
                     controller.open(AiChapter("book", "chapter", "Novel", "Chapter 4", "Original text"), "en")
                     dialog!!.render(controller.state.value)
@@ -91,8 +116,12 @@ class ReaderAiProgressOverlayTest {
                     assertTrue(controller.state.value is AiSummaryState.Running)
                     progress(23)
                     overlay.render(controller.state.value)
-                    expectedCount = activity.resources.getQuantityString(R.plurals.ai_generated_token_count, 23,
-                        NumberFormat.getIntegerInstance().format(23))
+                    expectedCount =
+                        activity.resources.getQuantityString(
+                            R.plurals.ai_generated_token_count,
+                            23,
+                            NumberFormat.getIntegerInstance().format(23),
+                        )
                 }
                 onView(withId(R.id.count)).check(matches(withText(expectedCount)))
                 scenario.onActivity {

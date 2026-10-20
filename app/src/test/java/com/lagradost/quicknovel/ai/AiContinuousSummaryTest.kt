@@ -10,45 +10,75 @@ import java.io.IOException
 class AiContinuousSummaryTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val chapters = (0..3).map { AiChapter("book", "chapter-$it", "Novel", "Chapter $it", "Original text $it.") }
+
     private class Store : AiSettingsPersistence {
         var loads = 0
         var value = AiSettings().withConfig(AiProviderConfig("approved-key", "approved-model"))
-        override suspend fun load(): AiSettings { loads++; return value }
+
+        override suspend fun load(): AiSettings {
+            loads++
+            return value
+        }
+
         override suspend fun save(settings: AiSettings) = error("No settings writes")
     }
+
     private class Api : AiSummaryApi {
         val calls = mutableListOf<AiSummaryPlan>()
         val callbacks = mutableListOf<(Long) -> Unit>()
         var answer: suspend (AiChapter) -> AiSummaryOutput = { AiSummaryOutput("Recap for ${it.chapterId}") }
-        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput =
-            error("Use streaming")
 
-        override suspend fun streamSummary(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
-                                           onProgress: (Long) -> Unit): AiSummaryOutput {
+        override suspend fun summarize(
+            provider: AiProvider,
+            config: AiProviderConfig,
+            chapter: AiChapter,
+            language: String,
+        ): AiSummaryOutput = error("Use streaming")
+
+        override suspend fun streamSummary(
+            provider: AiProvider,
+            config: AiProviderConfig,
+            chapter: AiChapter,
+            language: String,
+            onProgress: (Long) -> Unit,
+        ): AiSummaryOutput {
             calls += AiSummaryPlan(chapter, provider, "", config, language)
             callbacks += onProgress
             onProgress(4)
             return answer(chapter)
         }
     }
+
     private class Cache : AiSummaryCache {
         val records = mutableMapOf<String, AiCachedSummary>()
         var failWrites = false
+
         override suspend fun load(chapter: AiChapter, language: String) = records[chapter.resultKey(language)]
+
         override suspend fun save(result: AiCachedSummary) {
             if (failWrites) throw IOException("Unavailable disk")
             records[result.sourceKey] = result
         }
+
         fun seed(chapter: AiChapter, truncated: Boolean = false) {
-            records[chapter.resultKey("en")] = AiCachedSummary(chapter.resultKey("en"), "en", AiProvider.OPENAI,
-                "Old profile", "old-model", AiSummaryOutput("Saved ${chapter.chapterId}", truncated))
+            records[chapter.resultKey("en")] =
+                AiCachedSummary(
+                    chapter.resultKey("en"),
+                    "en",
+                    AiProvider.OPENAI,
+                    "Old profile",
+                    "old-model",
+                    AiSummaryOutput("Saved ${chapter.chapterId}", truncated),
+                )
         }
     }
+
     private open class Source(private val chapters: List<AiChapter>, loaded: Set<Int>) : AiSummaryChapterSource {
         override val changes = MutableStateFlow(0L)
         val loaded = loaded.toMutableSet()
         var nextChecks = 0
         var changed = false
+
         override suspend fun next(after: AiChapter): AiNextSummaryChapter {
             nextChecks++
             val index = chapters.indexOf(after)
@@ -60,13 +90,19 @@ class AiContinuousSummaryTest {
                 else -> AiNextSummaryChapter.Waiting(chapters[next].title)
             }
         }
+
         override suspend fun loadedAfter(after: AiChapter): List<AiChapter> {
             val index = chapters.indexOf(after)
             if (changed || index < 0) throw AiProviderException(AiFailure.SOURCE_CHANGED)
             return chapters.drop(index + 1).takeWhile { chapters.indexOf(it) in loaded }
         }
-        fun load(index: Int) { loaded += index; changes.value++ }
+
+        fun load(index: Int) {
+            loaded += index
+            changes.value++
+        }
     }
+
     private fun controller(api: Api, source: Source, cache: Cache = Cache(), store: Store = Store()) =
         AiSummaryController(scope, store, api, cache).apply { attachChapterSource(source) }
 
@@ -75,11 +111,15 @@ class AiContinuousSummaryTest {
         setContinuous(true)
         generate()
     }
+
     private fun AiSummaryController.ready(): AiSummaryState.Ready = state.value as AiSummaryState.Ready
+
     private fun AiSummaryController.accept() = acknowledge(ready())
 
     @After
-    fun tearDown() { scope.cancel() }
+    fun tearDown() {
+        scope.cancel()
+    }
 
     @Test
     fun oneChapterRemainsTheDefaultAndSelectingContinuousDoesNotSendRequestsBeforeConfirmation() {
@@ -130,8 +170,14 @@ class AiContinuousSummaryTest {
         controller.accept()
         assertEquals(AiSummaryState.Finished(3, AiSummaryFinishReason.END), controller.state.value)
         assertEquals(listOf(chapters[0], chapters[2]), api.calls.map { it.chapter })
-        assertTrue(api.calls.all { it.provider == AiProvider.GEMINI && it.config.apiKey == "approved-key" &&
-            it.config.model == "approved-model" && it.language == "en" })
+        assertTrue(
+            api.calls.all {
+                it.provider == AiProvider.GEMINI &&
+                    it.config.apiKey == "approved-key" &&
+                    it.config.model == "approved-model" &&
+                    it.language == "en"
+            }
+        )
         assertEquals(1, store.loads)
         controller.close()
         controller.open(chapters[1], "en")
@@ -192,7 +238,16 @@ class AiContinuousSummaryTest {
     fun stopDuringGenerationCancelsTransportAndRejectsLateCountsAndOutput() {
         val pending = CompletableDeferred<AiSummaryOutput>()
         var cancelled = false
-        val api = Api().apply { answer = { try { pending.await() } finally { cancelled = true } } }
+        val api =
+            Api().apply {
+                answer = {
+                    try {
+                        pending.await()
+                    } finally {
+                        cancelled = true
+                    }
+                }
+            }
         val cache = Cache()
         val source = Source(chapters, setOf(0, 1, 2, 3))
         val controller = controller(api, source, cache)
@@ -210,10 +265,13 @@ class AiContinuousSummaryTest {
 
     @Test
     fun providerFailureStopsTheQueueAndRetryRequiresFreshContinuousConfirmation() {
-        val api = Api().apply { answer = {
-            if (it == chapters[1]) throw AiProviderException(AiFailure.RATE_LIMIT)
-            AiSummaryOutput("Good output")
-        } }
+        val api =
+            Api().apply {
+                answer = {
+                    if (it == chapters[1]) throw AiProviderException(AiFailure.RATE_LIMIT)
+                    AiSummaryOutput("Good output")
+                }
+            }
         val cache = Cache()
         val source = Source(chapters.take(3), setOf(0, 1, 2))
         val controller = controller(api, source, cache)
@@ -245,8 +303,13 @@ class AiContinuousSummaryTest {
             controller.start()
             assertEquals("Paid output", controller.ready().output.text)
             controller.accept()
-            assertEquals(AiSummaryState.Finished(1,
-                if (incomplete) AiSummaryFinishReason.INCOMPLETE else AiSummaryFinishReason.CACHE_WRITE_FAILED), controller.state.value)
+            assertEquals(
+                AiSummaryState.Finished(
+                    1,
+                    if (incomplete) AiSummaryFinishReason.INCOMPLETE else AiSummaryFinishReason.CACHE_WRITE_FAILED,
+                ),
+                controller.state.value,
+            )
             assertEquals(1, api.calls.size)
             controller.close()
             controller.open(chapters[0], "en")
@@ -287,7 +350,11 @@ class AiContinuousSummaryTest {
     @Test
     fun explicitContinuousRegenerationReplacesOnlyTheFirstSavedResultAndReusesTheRest() {
         val api = Api()
-        val cache = Cache().apply { seed(chapters[0]); seed(chapters[1]) }
+        val cache =
+            Cache().apply {
+                seed(chapters[0])
+                seed(chapters[1])
+            }
         val controller = controller(api, Source(chapters.take(2), setOf(0, 1)), cache)
         controller.open(chapters[0], "en")
         controller.setContinuous(true)
@@ -306,17 +373,20 @@ class AiContinuousSummaryTest {
     fun retryAfterSettingsFailurePreservesTheExplicitChoiceToReuseTheFirstSummary() {
         val api = Api()
         var settingsAvailable = false
-        val store = object : AiSettingsPersistence {
-            override suspend fun load(): AiSettings {
-                if (!settingsAvailable) throw IOException("Cannot read settings yet")
-                return AiSettings().withConfig(AiProviderConfig("key", "model"))
+        val store =
+            object : AiSettingsPersistence {
+                override suspend fun load(): AiSettings {
+                    if (!settingsAvailable) throw IOException("Cannot read settings yet")
+                    return AiSettings().withConfig(AiProviderConfig("key", "model"))
+                }
+
+                override suspend fun save(settings: AiSettings) = error("No settings writes")
             }
-            override suspend fun save(settings: AiSettings) = error("No settings writes")
-        }
         val cache = Cache().apply { seed(chapters[0]) }
-        val controller = AiSummaryController(scope, store, api, cache).apply {
-            attachChapterSource(Source(chapters.take(2), setOf(0, 1)))
-        }
+        val controller =
+            AiSummaryController(scope, store, api, cache).apply {
+                attachChapterSource(Source(chapters.take(2), setOf(0, 1)))
+            }
         controller.open(chapters[0], "en")
         controller.setContinuous(true)
         controller.reuse()
@@ -338,17 +408,19 @@ class AiContinuousSummaryTest {
     @Test
     fun aLoadSignalDuringTheNextChapterQueryCannotBeMissed() {
         val api = Api()
-        val source = object : Source(chapters.take(2), setOf(0)) {
-            var race = true
-            override suspend fun next(after: AiChapter): AiNextSummaryChapter {
-                if (race) {
-                    race = false
-                    load(1)
-                    return AiNextSummaryChapter.Waiting(chapters[1].title)
+        val source =
+            object : Source(chapters.take(2), setOf(0)) {
+                var race = true
+
+                override suspend fun next(after: AiChapter): AiNextSummaryChapter {
+                    if (race) {
+                        race = false
+                        load(1)
+                        return AiNextSummaryChapter.Waiting(chapters[1].title)
+                    }
+                    return super.next(after)
                 }
-                return super.next(after)
             }
-        }
         val controller = controller(api, source)
         controller.start()
         controller.accept()
@@ -361,9 +433,10 @@ class AiContinuousSummaryTest {
     fun lateSourceQueriesAndBookChangesCannotRestartAStoppedQueueOrSendAnotherBooksText() {
         val api = Api()
         val late = CompletableDeferred<AiNextSummaryChapter>()
-        val source = object : Source(chapters, setOf(0)) {
-            override suspend fun next(after: AiChapter) = withContext(NonCancellable) { late.await() }
-        }
+        val source =
+            object : Source(chapters, setOf(0)) {
+                override suspend fun next(after: AiChapter) = withContext(NonCancellable) { late.await() }
+            }
         val controller = controller(api, source)
         controller.start()
         controller.accept()

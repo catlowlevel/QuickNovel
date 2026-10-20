@@ -15,8 +15,11 @@ data class AiSummaryKey(val provider: AiProvider, val id: String, val name: Stri
 
 sealed interface AiSummaryState {
     data object Closed : AiSummaryState
+
     data class Preparing(val chapter: AiChapter) : AiSummaryState
+
     data class Saved(val result: Ready, val continuous: Boolean = false) : AiSummaryState
+
     data class Confirm(
         val plan: AiSummaryPlan,
         val regenerating: Boolean = false,
@@ -24,18 +27,42 @@ sealed interface AiSummaryState {
         val reusedFirst: Ready? = null,
         val following: List<AiChapter> = emptyList(),
     ) : AiSummaryState {
-        val loadedCount: Int get() = 1 + following.size
-        val knownInputTokens: Long get() = (if (reusedFirst == null) plan.inputTokens else 0) +
-            following.sumOf { plan.copy(chapter = it).inputTokens }
+        val loadedCount: Int
+            get() = 1 + following.size
+
+        val knownInputTokens: Long
+            get() =
+                (if (reusedFirst == null) plan.inputTokens else 0) +
+                    following.sumOf { plan.copy(chapter = it).inputTokens }
     }
-    data class Running(val plan: AiSummaryPlan, val generatedTokens: Long = 0,
-                       val continuous: Boolean = false, val completedChapters: Int = 0) : AiSummaryState
-    data class Ready(val plan: AiSummaryPlan, val output: AiSummaryOutput, val cacheWriteFailed: Boolean = false,
-                     val continuous: Boolean = false, val completedChapters: Int = 0, val reused: Boolean = false) : AiSummaryState
+
+    data class Running(
+        val plan: AiSummaryPlan,
+        val generatedTokens: Long = 0,
+        val continuous: Boolean = false,
+        val completedChapters: Int = 0,
+    ) : AiSummaryState
+
+    data class Ready(
+        val plan: AiSummaryPlan,
+        val output: AiSummaryOutput,
+        val cacheWriteFailed: Boolean = false,
+        val continuous: Boolean = false,
+        val completedChapters: Int = 0,
+        val reused: Boolean = false,
+    ) : AiSummaryState
+
     data class Waiting(val chapter: AiChapter, val completedChapters: Int, val nextTitle: String) : AiSummaryState
+
     data class Finished(val completedChapters: Int, val reason: AiSummaryFinishReason) : AiSummaryState
-    data class Failed(val chapter: AiChapter, val language: String, val reason: AiFailure,
-                      val continuous: Boolean = false, val reusedFirst: Ready? = null) : AiSummaryState
+
+    data class Failed(
+        val chapter: AiChapter,
+        val language: String,
+        val reason: AiFailure,
+        val continuous: Boolean = false,
+        val reusedFirst: Ready? = null,
+    ) : AiSummaryState
 }
 
 /** Paid work starts only after confirmation; continuous confirmation also covers later loaded chapters. */
@@ -49,31 +76,40 @@ class AiSummaryController(
     val state = mutableState.asStateFlow()
     private var job: Job? = null
     private var pendingAcknowledgement: CompletableDeferred<Unit>? = null
-    @Volatile
-    private var revision = 0L
+    @Volatile private var revision = 0L
     private val results = linkedMapOf<String, AiSummaryState.Ready>()
     private var savedSettings: AiSettings? = null
     private var keySelection: Pair<AiProvider, String>? = null
-    val savedKeys: List<AiSummaryKey> get() = AiProvider.entries.flatMap { provider ->
-        savedSettings?.profiles?.get(provider).orEmpty().map { AiSummaryKey(provider, it.id, it.name, it.config.model) }
-    }
-    val selectedKey: AiSummaryKey? get() {
-        val settings = savedSettings ?: return null
-        val (provider, id) = keySelection ?: (settings.provider to settings.profile().id)
-        return savedKeys.firstOrNull { it.provider == provider && it.id == id }
-    }
+    val savedKeys: List<AiSummaryKey>
+        get() =
+            AiProvider.entries.flatMap { provider ->
+                savedSettings?.profiles?.get(provider).orEmpty().map {
+                    AiSummaryKey(provider, it.id, it.name, it.config.model)
+                }
+            }
+
+    val selectedKey: AiSummaryKey?
+        get() {
+            val settings = savedSettings ?: return null
+            val (provider, id) = keySelection ?: (settings.provider to settings.profile().id)
+            return savedKeys.firstOrNull { it.provider == provider && it.id == id }
+        }
+
     private var chapterSource: AiSummaryChapterSource? = null
-    val canContinue: Boolean get() = chapterSource != null
+    val canContinue: Boolean
+        get() = chapterSource != null
 
     fun attachChapterSource(source: AiSummaryChapterSource) {
         chapterSource = source
     }
 
-    fun isProcessing(): Boolean = when (val current = state.value) {
-        is AiSummaryState.Running, is AiSummaryState.Waiting -> true
-        is AiSummaryState.Ready -> current.continuous
-        else -> false
-    }
+    fun isProcessing(): Boolean =
+        when (val current = state.value) {
+            is AiSummaryState.Running,
+            is AiSummaryState.Waiting -> true
+            is AiSummaryState.Ready -> current.continuous
+            else -> false
+        }
 
     // Assign before starting: a synchronous completion/acknowledgement cannot overwrite a newer job.
     private fun launchWork(block: suspend () -> Unit) {
@@ -94,17 +130,30 @@ class AiSummaryController(
         if (current is AiSummaryState.Confirm) {
             try {
                 val config = validatedAiConfig(provider, profile.config, requireModel = true)
-                mutableState.value = current.copy(plan = current.plan.copy(
-                    provider = provider, profileName = profile.name, config = config))
+                mutableState.value =
+                    current.copy(
+                        plan = current.plan.copy(provider = provider, profileName = profile.name, config = config)
+                    )
             } catch (error: AiProviderException) {
-                mutableState.value = AiSummaryState.Failed(current.plan.chapter, current.plan.language,
-                    error.failure, current.continuous, current.reusedFirst)
+                mutableState.value =
+                    AiSummaryState.Failed(
+                        current.plan.chapter,
+                        current.plan.language,
+                        error.failure,
+                        current.continuous,
+                        current.reusedFirst,
+                    )
             }
         } else retry()
     }
 
-    private fun prepare(chapter: AiChapter, language: String, reuse: Boolean,
-                        continuous: Boolean = false, reusedFirst: AiSummaryState.Ready? = null) {
+    private fun prepare(
+        chapter: AiChapter,
+        language: String,
+        reuse: Boolean,
+        continuous: Boolean = false,
+        reusedFirst: AiSummaryState.Ready? = null,
+    ) {
         if (isProcessing()) return
         close()
         val token = revision
@@ -121,26 +170,45 @@ class AiSummaryController(
                         return@launchWork
                     }
                 }
-                val settings = try { store.load().normalized() } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { throw AiProviderException(AiFailure.LOAD_SETTINGS) }
+                val settings =
+                    try {
+                        store.load().normalized()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        throw AiProviderException(AiFailure.LOAD_SETTINGS)
+                    }
                 if (revision != token) return@launchWork
                 savedSettings = settings
                 val (provider, id) = keySelection ?: (settings.provider to settings.profile().id)
-                val profile = if (keySelection == null) settings.profile() else
-                    settings.profiles[provider]?.firstOrNull { it.id == id }
-                        ?: throw AiProviderException(AiFailure.MISSING_KEY)
+                val profile =
+                    if (keySelection == null) settings.profile()
+                    else
+                        settings.profiles[provider]?.firstOrNull { it.id == id }
+                            ?: throw AiProviderException(AiFailure.MISSING_KEY)
                 val config = validatedAiConfig(provider, profile.config, requireModel = true)
                 val following = chapterSource?.loadedAfter(chapter).orEmpty()
-                if (revision == token) mutableState.value = AiSummaryState.Confirm(
-                    AiSummaryPlan(chapter, provider, profile.name, config, language),
-                    regenerating = !reuse && reusedFirst == null, continuous = continuous,
-                    reusedFirst = reusedFirst, following = following)
+                if (revision == token)
+                    mutableState.value =
+                        AiSummaryState.Confirm(
+                            AiSummaryPlan(chapter, provider, profile.name, config, language),
+                            regenerating = !reuse && reusedFirst == null,
+                            continuous = continuous,
+                            reusedFirst = reusedFirst,
+                            following = following,
+                        )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (revision == token) mutableState.value = AiSummaryState.Failed(chapter, language,
-                    (e as? AiProviderException)?.failure ?: AiFailure.INVALID_RESPONSE, continuous, reusedFirst)
+                if (revision == token)
+                    mutableState.value =
+                        AiSummaryState.Failed(
+                            chapter,
+                            language,
+                            (e as? AiProviderException)?.failure ?: AiFailure.INVALID_RESPONSE,
+                            continuous,
+                            reusedFirst,
+                        )
             }
         }
     }
@@ -150,9 +218,10 @@ class AiSummaryController(
         mutableState.update { current ->
             when (current) {
                 is AiSummaryState.Saved -> current.copy(continuous = enabled)
-                is AiSummaryState.Confirm -> if (!enabled && current.reusedFirst != null) {
-                    AiSummaryState.Saved(current.reusedFirst)
-                } else current.copy(continuous = enabled)
+                is AiSummaryState.Confirm ->
+                    if (!enabled && current.reusedFirst != null) {
+                        AiSummaryState.Saved(current.reusedFirst)
+                    } else current.copy(continuous = enabled)
                 else -> current
             }
         }
@@ -176,7 +245,8 @@ class AiSummaryController(
                     if (revision != token) return@launchWork
                     val result = saved ?: requestSummary(plan, token, source != null, completed)
                     if (revision != token) return@launchWork
-                    val ready = result.copy(continuous = source != null, completedChapters = completed, reused = saved != null)
+                    val ready =
+                        result.copy(continuous = source != null, completedChapters = completed, reused = saved != null)
                     remember(ready)
                     val acknowledged = CompletableDeferred<Unit>()
                     pendingAcknowledgement = acknowledged
@@ -188,8 +258,12 @@ class AiSummaryController(
                     pendingAcknowledgement = null
                     completed++
                     if (ready.cacheWriteFailed || ready.output.truncated) {
-                        mutableState.value = AiSummaryState.Finished(completed,
-                            if (ready.cacheWriteFailed) AiSummaryFinishReason.CACHE_WRITE_FAILED else AiSummaryFinishReason.INCOMPLETE)
+                        mutableState.value =
+                            AiSummaryState.Finished(
+                                completed,
+                                if (ready.cacheWriteFailed) AiSummaryFinishReason.CACHE_WRITE_FAILED
+                                else AiSummaryFinishReason.INCOMPLETE,
+                            )
                         return@launchWork
                     }
                     var next: AiChapter? = null
@@ -199,7 +273,10 @@ class AiSummaryController(
                         if (revision != token) return@launchWork
                         when (available) {
                             is AiNextSummaryChapter.Loaded -> {
-                                if (available.chapter.bookId != plan.chapter.bookId || available.chapter.chapterId == plan.chapter.chapterId) {
+                                if (
+                                    available.chapter.bookId != plan.chapter.bookId ||
+                                        available.chapter.chapterId == plan.chapter.chapterId
+                                ) {
                                     throw AiProviderException(AiFailure.SOURCE_CHANGED)
                                 }
                                 next = available.chapter
@@ -209,7 +286,8 @@ class AiSummaryController(
                                 source.changes.first { it != before }
                             }
                             AiNextSummaryChapter.End -> {
-                                if (revision == token) mutableState.value = AiSummaryState.Finished(completed, AiSummaryFinishReason.END)
+                                if (revision == token)
+                                    mutableState.value = AiSummaryState.Finished(completed, AiSummaryFinishReason.END)
                                 return@launchWork
                             }
                             AiNextSummaryChapter.SourceChanged -> throw AiProviderException(AiFailure.SOURCE_CHANGED)
@@ -222,44 +300,88 @@ class AiSummaryController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (revision == token) mutableState.value = AiSummaryState.Failed(plan.chapter, plan.language,
-                    (e as? AiProviderException)?.failure ?: AiFailure.NETWORK, source != null)
+                if (revision == token)
+                    mutableState.value =
+                        AiSummaryState.Failed(
+                            plan.chapter,
+                            plan.language,
+                            (e as? AiProviderException)?.failure ?: AiFailure.NETWORK,
+                            source != null,
+                        )
             }
         }
     }
 
-    private suspend fun requestSummary(plan: AiSummaryPlan, token: Long, continuous: Boolean, completed: Int): AiSummaryState.Ready {
+    private suspend fun requestSummary(
+        plan: AiSummaryPlan,
+        token: Long,
+        continuous: Boolean,
+        completed: Int,
+    ): AiSummaryState.Ready {
         if (revision != token) throw CancellationException()
         mutableState.value = AiSummaryState.Running(plan, continuous = continuous, completedChapters = completed)
-        val output = api.streamSummary(plan.provider, plan.config, plan.chapter, plan.language) { count ->
-            mutableState.update { current ->
-                if (revision == token && current is AiSummaryState.Running && current.plan === plan) {
-                    current.copy(generatedTokens = maxOf(current.generatedTokens, count))
-                } else current
+        val output =
+            api.streamSummary(plan.provider, plan.config, plan.chapter, plan.language) { count ->
+                mutableState.update { current ->
+                    if (revision == token && current is AiSummaryState.Running && current.plan === plan) {
+                        current.copy(generatedTokens = maxOf(current.generatedTokens, count))
+                    } else current
+                }
             }
-        }
         if (output.text.isBlank()) throw AiProviderException(AiFailure.EMPTY_RESPONSE)
         if (revision != token) throw CancellationException()
-        val cacheWriteFailed = if (cache == null) false else try {
-            cache.save(AiCachedSummary(plan.chapter.resultKey(plan.language), plan.language,
-                plan.provider, plan.profileName, plan.config.model, output))
-            false
-        } catch (e: CancellationException) { throw e } catch (_: Exception) { true }
+        val cacheWriteFailed =
+            if (cache == null) false
+            else
+                try {
+                    cache.save(
+                        AiCachedSummary(
+                            plan.chapter.resultKey(plan.language),
+                            plan.language,
+                            plan.provider,
+                            plan.profileName,
+                            plan.config.model,
+                            output,
+                        )
+                    )
+                    false
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    true
+                }
         return AiSummaryState.Ready(plan, output, cacheWriteFailed)
     }
 
     private suspend fun findSaved(chapter: AiChapter, language: String): AiSummaryState.Ready? {
-        results[chapter.resultKey(language)]?.let { return it }
-        val cached = try { cache?.load(chapter, language) } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) { null } ?: return null
-        val ready = AiSummaryState.Ready(AiSummaryPlan(chapter, cached.provider, cached.profileName,
-            AiProviderConfig(model = cached.model), language), cached.output)
+        results[chapter.resultKey(language)]?.let {
+            return it
+        }
+        val cached =
+            try {
+                cache?.load(chapter, language)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            } ?: return null
+        val ready =
+            AiSummaryState.Ready(
+                AiSummaryPlan(
+                    chapter,
+                    cached.provider,
+                    cached.profileName,
+                    AiProviderConfig(model = cached.model),
+                    language,
+                ),
+                cached.output,
+            )
         return ready
     }
 
     private fun remember(ready: AiSummaryState.Ready) {
-        results[ready.plan.chapter.resultKey(ready.plan.language)] = ready.copy(continuous = false, completedChapters = 0, reused = false)
+        results[ready.plan.chapter.resultKey(ready.plan.language)] =
+            ready.copy(continuous = false, completedChapters = 0, reused = false)
         if (results.size > 16) results.remove(results.keys.first())
     }
 
@@ -270,25 +392,42 @@ class AiSummaryController(
 
     fun reuse() {
         val saved = state.value as? AiSummaryState.Saved ?: return
-        if (saved.continuous) prepare(saved.result.plan.chapter, saved.result.plan.language,
-            reuse = false, continuous = true, reusedFirst = saved.result)
+        if (saved.continuous)
+            prepare(
+                saved.result.plan.chapter,
+                saved.result.plan.language,
+                reuse = false,
+                continuous = true,
+                reusedFirst = saved.result,
+            )
         else mutableState.value = saved.result
     }
 
     fun regenerate() {
         val current = state.value
-        val ready = when (current) {
-            is AiSummaryState.Saved -> current.result
-            is AiSummaryState.Ready -> current
-            else -> return
-        }
-        prepare(ready.plan.chapter, ready.plan.language, reuse = false,
-            continuous = (current as? AiSummaryState.Saved)?.continuous == true)
+        val ready =
+            when (current) {
+                is AiSummaryState.Saved -> current.result
+                is AiSummaryState.Ready -> current
+                else -> return
+            }
+        prepare(
+            ready.plan.chapter,
+            ready.plan.language,
+            reuse = false,
+            continuous = (current as? AiSummaryState.Saved)?.continuous == true,
+        )
     }
 
     fun retry() {
         val failed = state.value as? AiSummaryState.Failed ?: return
-        prepare(failed.chapter, failed.language, reuse = false, continuous = failed.continuous, reusedFirst = failed.reusedFirst)
+        prepare(
+            failed.chapter,
+            failed.language,
+            reuse = false,
+            continuous = failed.continuous,
+            reusedFirst = failed.reusedFirst,
+        )
     }
 
     fun close() {

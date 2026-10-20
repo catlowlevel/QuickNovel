@@ -74,7 +74,7 @@ class AiChapterTextViewsTest {
         try {
             views.show(chapter, AiSummaryOutput(" "), "empty", AiOriginalPosition())
             fail("Blank output must not replace a readable summary")
-        } catch (_: IllegalArgumentException) { }
+        } catch (_: IllegalArgumentException) {}
         assertEquals("first-book", views.displayed(chapter)?.content)
         assertEquals(AiOriginalPosition(1, 150), views.restore(chapter))
         assertEquals("second-book", views.displayed(other)?.content)

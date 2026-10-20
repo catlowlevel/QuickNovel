@@ -14,9 +14,8 @@ internal object WebViewBrowserCookies : BrowserCookieStore {
         runCatching { CookieManager.getInstance().setCookie(url, cookie) }
     }
 
-    override fun userAgent(url: String): String? = url.toHttpUrlOrNull()?.host?.let { host ->
-        getKey<String>(USER_AGENTS, host)
-    }
+    override fun userAgent(url: String): String? =
+        url.toHttpUrlOrNull()?.host?.let { host -> getKey<String>(USER_AGENTS, host) }
 
     fun recordUserAgent(url: String, agent: String) {
         val host = url.toHttpUrlOrNull()?.host ?: return

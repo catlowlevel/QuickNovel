@@ -11,11 +11,7 @@ internal fun browserUrlOrNull(value: String?): String? {
 }
 
 /** Resolve the requested chapter, including failed/preloaded rows, rather than the visible one. */
-internal fun chapterBrowserUrlOrNull(
-    chapters: List<ChapterData>,
-    index: Int,
-    resolveUrl: (String) -> String,
-): String? {
+internal fun chapterBrowserUrlOrNull(chapters: List<ChapterData>, index: Int, resolveUrl: (String) -> String): String? {
     val chapter = chapters.getOrNull(index)?.url?.takeIf { it.isNotBlank() } ?: return null
     return browserUrlOrNull(runCatching { resolveUrl(chapter) }.getOrNull())
 }

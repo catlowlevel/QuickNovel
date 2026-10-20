@@ -23,28 +23,37 @@ class BrowserSessionInterceptorTest {
         val cookies = mutableListOf<Cookie>()
         val agents = mutableMapOf<String, String>()
         val saved = mutableListOf<Pair<String, String>>()
+
         override fun cookies(url: String): String? {
             val target = url.toHttpUrl()
-            return cookies.filter { it.expiresAt > System.currentTimeMillis() && it.matches(target) }
+            return cookies
+                .filter { it.expiresAt > System.currentTimeMillis() && it.matches(target) }
                 .sortedByDescending { it.path.length }
-                .joinToString("; ") { "${it.name}=${it.value}" }.takeIf { it.isNotEmpty() }
+                .joinToString("; ") { "${it.name}=${it.value}" }
+                .takeIf { it.isNotEmpty() }
         }
+
         override fun saveCookie(url: String, cookie: String) {
             saved += url to cookie
             val parsed = Cookie.parse(url.toHttpUrl(), cookie) ?: return
             cookies.removeAll { it.name == parsed.name && it.domain == parsed.domain && it.path == parsed.path }
             cookies += parsed
         }
+
         override fun userAgent(url: String) = agents[url.toHttpUrl().host]
     }
 
     private data class Seen(val path: String, val host: String, val cookies: String?, val agent: String?)
+
     private lateinit var server: MockWebServer
     private lateinit var client: OkHttpClient
     private lateinit var store: Store
     private val seen = CopyOnWriteArrayList<Seen>()
     @Volatile private var respond: (RecordedRequest) -> MockResponse = { MockResponse().setBody("ok") }
-    private fun url(path: String = "/", host: String = "127.0.0.1") = server.url(path).newBuilder().host(host).build().toString()
+
+    private fun url(path: String = "/", host: String = "127.0.0.1") =
+        server.url(path).newBuilder().host(host).build().toString()
+
     private fun get(path: String = "/", headers: Map<String, String> = emptyMap()) {
         val request = Request.Builder().url(url(path)).header("User-Agent", "provider-agent")
         headers.forEach { (name, value) -> request.header(name, value) }
@@ -57,16 +66,25 @@ class BrowserSessionInterceptorTest {
     @Before
     fun setUp() {
         store = Store()
-        client = OkHttpClient.Builder().addInterceptor(BrowserRequestOriginInterceptor())
-            .addNetworkInterceptor(BrowserSessionInterceptor(store)).build()
+        client =
+            OkHttpClient.Builder()
+                .addInterceptor(BrowserRequestOriginInterceptor())
+                .addNetworkInterceptor(BrowserSessionInterceptor(store))
+                .build()
         server = MockWebServer()
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse {
-                seen += Seen(request.path.orEmpty(), request.getHeader("Host").orEmpty(),
-                    request.getHeader("Cookie"), request.getHeader("User-Agent"))
-                return respond(request)
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    seen +=
+                        Seen(
+                            request.path.orEmpty(),
+                            request.getHeader("Host").orEmpty(),
+                            request.getHeader("Cookie"),
+                            request.getHeader("User-Agent"),
+                        )
+                    return respond(request)
+                }
             }
-        }
         server.start(InetAddress.getByName("127.0.0.1"), 0)
     }
 
@@ -97,9 +115,7 @@ class BrowserSessionInterceptorTest {
 
     @Test
     fun responseCookiesAreAvailableToTheNextRequestWithoutLosingEqualsSigns() {
-        respond = {
-            MockResponse().addHeader("Set-Cookie", "session=a=b=c; Path=/; HttpOnly")
-        }
+        respond = { MockResponse().addHeader("Set-Cookie", "session=a=b=c; Path=/; HttpOnly") }
         get()
         get()
         assertNull(seen.first().cookies)
@@ -129,7 +145,9 @@ class BrowserSessionInterceptorTest {
         store.saveCookie(url(), "cf_clearance=old; Path=/")
         respond = { request ->
             if (request.path == "/redirect") {
-                MockResponse().setResponseCode(302).addHeader("Location", "/target")
+                MockResponse()
+                    .setResponseCode(302)
+                    .addHeader("Location", "/target")
                     .addHeader("Set-Cookie", "cf_clearance=new; Path=/")
             } else MockResponse()
         }
@@ -185,11 +203,16 @@ class BrowserSessionInterceptorTest {
 
     @Test
     fun intentionalSameOriginUserAgentChangesFromOtherInterceptorsArePreserved() {
-        val adjusted = client.newBuilder().addInterceptor { chain ->
-            chain.proceed(chain.request().newBuilder().header("User-Agent", "intentional-agent").build())
-        }.build()
-        adjusted.newCall(Request.Builder().url(url()).header("User-Agent", "provider-agent").build())
-            .execute().use { it.body?.string() }
+        val adjusted =
+            client
+                .newBuilder()
+                .addInterceptor { chain ->
+                    chain.proceed(chain.request().newBuilder().header("User-Agent", "intentional-agent").build())
+                }
+                .build()
+        adjusted.newCall(Request.Builder().url(url()).header("User-Agent", "provider-agent").build()).execute().use {
+            it.body?.string()
+        }
         assertEquals("intentional-agent", seen.single().agent)
     }
 }

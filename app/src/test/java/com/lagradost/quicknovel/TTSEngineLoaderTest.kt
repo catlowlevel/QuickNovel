@@ -21,11 +21,15 @@ class TTSEngineLoaderTest {
     private class Fixture {
         val engines = mutableListOf<Engine>()
         var supported = true
-        val loader = TTSEngineLoader(
-            create = { ready -> Engine(ready).also(engines::add) },
-            configure = { engine -> engine.configurations++; supported },
-            dispose = { engine -> engine.releases++ },
-        )
+        val loader =
+            TTSEngineLoader(
+                create = { ready -> Engine(ready).also(engines::add) },
+                configure = { engine ->
+                    engine.configurations++
+                    supported
+                },
+                dispose = { engine -> engine.releases++ },
+            )
     }
 
     @Test
@@ -52,7 +56,15 @@ class TTSEngineLoaderTest {
     @Test
     fun synchronousInitializationCannotLoseItsReadyCallback() = runBlocking {
         val engine = Any()
-        val loader = TTSEngineLoader(create = { ready -> ready(true); engine }, configure = { true }, dispose = {})
+        val loader =
+            TTSEngineLoader(
+                create = { ready ->
+                    ready(true)
+                    engine
+                },
+                configure = { true },
+                dispose = {},
+            )
         assertSame(engine, loader.acquire())
         assertSame(engine, loader.acquire())
         loader.release()

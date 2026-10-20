@@ -33,32 +33,31 @@ import androidx.core.animation.doOnEnd
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
-import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.launch
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.lagradost.quicknovel.CommonActivity.showToast
-import com.lagradost.quicknovel.ai.AiSummaryState
-import com.lagradost.quicknovel.ai.AiSummaryFinishReason
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.DataStore.setKey
 import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
-import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
+import com.lagradost.quicknovel.ai.AiSummaryFinishReason
+import com.lagradost.quicknovel.ai.AiSummaryState
 import com.lagradost.quicknovel.databinding.ChapterPickerHeaderBinding
+import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
@@ -87,6 +86,7 @@ import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.divCeil
 import com.lagradost.quicknovel.util.filterChapterTitles
 import com.lagradost.quicknovel.util.toPx
+import kotlinx.coroutines.launch
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
 import java.util.Locale
@@ -449,7 +449,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val desired: ScrollIndex = viewModel.desiredIndex ?: return
         val adapterPosition =
             cachedChapter.indexOfFirst { display ->
-                display.index == desired.index && display.innerIndex == desired.innerIndex &&
+                display.index == desired.index &&
+                    display.innerIndex == desired.innerIndex &&
                     (desired.char <= 0 || display is TextSpan)
             }
         if (adapterPosition == -1) return
@@ -594,30 +595,32 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         config.setArgs(binding.readWordCount, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readLoadingBar)
         binding.readTtsProgress.progressTintList = ColorStateList.valueOf(config.textColor)
-        binding.readTtsProgress.progressBackgroundTintList = ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(config.textColor, Color.alpha(config.textColor) / 4)
-        )
+        binding.readTtsProgress.progressBackgroundTintList =
+            ColorStateList.valueOf(ColorUtils.setAlphaComponent(config.textColor, Color.alpha(config.textColor) / 4))
         floatingTTSControls.setColors(config.backgroundColor, config.textColor)
         aiProgressOverlay.setColors(config.backgroundColor, config.textColor)
     }
 
     private fun updateReaderOverlayVisibility() {
-        binding.readOverlay.isVisible = binding.readBattery.isVisible ||
-                binding.readTimeClock.isVisible || binding.readWordCount.isVisible
+        binding.readOverlay.isVisible =
+            binding.readBattery.isVisible || binding.readTimeClock.isVisible || binding.readWordCount.isVisible
         updateTTSProgressPosition()
     }
 
     private fun updateTTSProgress() {
         val progress = viewModel.ttsProgress.value
-        binding.readTtsProgress.isVisible = progress != null &&
-                viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped
+        binding.readTtsProgress.isVisible =
+            progress != null && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped
         if (progress != null) {
             binding.readTtsProgress.max = TTSPlaybackProgress.MAX
             binding.readTtsProgress.progress = progress.progress
-            binding.readTtsProgress.contentDescription = getString(
-                R.string.tts_chapter_progress,
-                progress.chapter + 1, progress.sentenceIndex + 1, progress.sentenceCount
-            )
+            binding.readTtsProgress.contentDescription =
+                getString(
+                    R.string.tts_chapter_progress,
+                    progress.chapter + 1,
+                    progress.sentenceIndex + 1,
+                    progress.sentenceCount,
+                )
         }
         updateTTSProgressPosition()
     }
@@ -643,8 +646,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val margin = 12.toPx
         val location = IntArray(2)
         area.getLocationInWindow(location)
-        val insets = ViewCompat.getRootWindowInsets(area)?.getInsets(
-            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val insets =
+            ViewCompat.getRootWindowInsets(area)
+                ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
         val safeTop = maxOf(0, (insets?.top ?: 0) - location[1]).toFloat()
         val safeBottom = maxOf(0, location[1] + area.height - (area.rootView.height - (insets?.bottom ?: 0)))
         val left = margin + maxOf(0, (insets?.left ?: 0) - location[0])
@@ -661,7 +665,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val controls = binding.readerBottomViewHolder
         val controlsHeight = if (normalVisible && controls.isVisible) controls.height - controls.translationY else 0f
         val footerHeight = if (normalVisible && binding.readOverlay.isVisible) binding.readOverlay.height else 0
-        val bottom = area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - panel.height - margin
+        val bottom =
+            area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - panel.height - margin
         val top = (maxOf(safeTop, toolbarBottom) + margin).coerceAtMost(maxOf(safeTop, bottom))
         panel.translationY = top - panel.top
     }
@@ -670,9 +675,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         var top = getTopY()
         var bottom = getBottomY()
         val location = IntArray(2)
-        val insets = ViewCompat.getRootWindowInsets(binding.realText)?.getInsets(
-            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-        )
+        val insets =
+            ViewCompat.getRootWindowInsets(binding.realText)
+                ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
         top = maxOf(top, insets?.top ?: 0)
         bottom = minOf(bottom, binding.root.rootView.height - (insets?.bottom ?: 0))
         if (binding.readToolbarHolder.isVisible) {
@@ -689,10 +694,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             top = maxOf(top, location[1] + aiPanel.height + 12.toPx)
         }
         binding.root.rootView.getLocationInWindow(location)
-        val viewport = TTSCenteringViewport(
-            bounds = TTSVerticalBounds(top, maxOf(top, bottom)),
-            screenCenter = location[1] + binding.root.rootView.height / 2,
-        )
+        val viewport =
+            TTSCenteringViewport(
+                bounds = TTSVerticalBounds(top, maxOf(top, bottom)),
+                screenCenter = location[1] + binding.root.rootView.height / 2,
+            )
         val panel = binding.floatingTtsControls.root
         if (!panel.isVisible) return viewport
         binding.realText.getLocationInWindow(location)
@@ -701,7 +707,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         panel.getLocationInWindow(location)
         if (location[0] >= readerRight || location[0] + panel.width <= readerLeft) return viewport
         val clearance = 12.toPx
-        return viewport.copy(obstruction = TTSVerticalBounds(location[1] - clearance, location[1] + panel.height + clearance))
+        return viewport.copy(
+            obstruction = TTSVerticalBounds(location[1] - clearance, location[1] + panel.height + clearance)
+        )
     }
 
     private fun updateTTSControls() {
@@ -715,19 +723,21 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         binding.readActionTts.setImageResource(
             if (floating) R.drawable.ic_baseline_stop_24 else R.drawable.ic_baseline_volume_up_24
         )
-        binding.readActionTts.setContentDescription(getString(
-            if (floating) R.string.tts_stop_playback else R.string.read_action_tts
-        ))
+        binding.readActionTts.setContentDescription(
+            getString(if (floating) R.string.tts_stop_playback else R.string.read_action_tts)
+        )
         binding.readActionTts.isLongClickable = !floating
 
         binding.ttsActionPausePlay.setImageResource(
             if (status == TTSHelper.TTSStatus.IsRunning) R.drawable.ic_baseline_pause_24
             else R.drawable.ic_baseline_play_arrow_24
         )
-        binding.ttsActionPausePlay.setContentDescription(getString(
-            if (status == TTSHelper.TTSStatus.IsRunning) R.string.tts_pause_playback
-            else R.string.tts_resume_playback
-        ))
+        binding.ttsActionPausePlay.setContentDescription(
+            getString(
+                if (status == TTSHelper.TTSStatus.IsRunning) R.string.tts_pause_playback
+                else R.string.tts_resume_playback
+            )
+        )
     }
 
     private fun floatingTTSBounds(): FloatingControlsBounds {
@@ -736,9 +746,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         val margin = 12.toPx.toFloat()
         val location = IntArray(2)
         area.getLocationInWindow(location)
-        val insets = ViewCompat.getRootWindowInsets(area)?.getInsets(
-            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-        )
+        val insets =
+            ViewCompat.getRootWindowInsets(area)
+                ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
         // Account only for insets overlapping the reader; decor fitting may already exclude them.
         val safeLeft = maxOf(0, (insets?.left ?: 0) - location[0]).toFloat()
         val safeTop = maxOf(0, (insets?.top ?: 0) - location[1]).toFloat()
@@ -756,7 +766,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             left = safeLeft + margin,
             top = maxOf(safeTop, toolbarBottom, aiBottom) + margin,
             right = area.width - safeRight - margin,
-            bottom = area.height - maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) - progressHeight - margin,
+            bottom =
+                area.height -
+                    maxOf(safeBottom.toFloat(), controlsHeight, footerHeight.toFloat()) -
+                    progressHeight -
+                    margin,
             panelWidth = panel.width.toFloat(),
             panelHeight = panel.height.toFloat(),
         )
@@ -929,14 +943,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         setContentView(binding.root)
         summaryViewModel.controller.attachChapterSource(viewModel.summaryChapterSource)
         summaryDialog = com.lagradost.quicknovel.ai.ReaderSummaryDialog(this, summaryViewModel.controller)
-        aiProgressOverlay = com.lagradost.quicknovel.ai.ReaderAiProgressOverlay(
-            binding.readerAiProgress,
-            onStop = summaryViewModel.controller::close,
-            onVisibilityChanged = ::updateFloatingTTSPosition,
-        )
-        binding.readerContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateFloatingTTSPosition()
-        }
+        aiProgressOverlay =
+            com.lagradost.quicknovel.ai.ReaderAiProgressOverlay(
+                binding.readerAiProgress,
+                onStop = summaryViewModel.controller::close,
+                onVisibilityChanged = ::updateFloatingTTSPosition,
+            )
+        binding.readerContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateFloatingTTSPosition() }
         binding.readerAiProgress.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updateFloatingTTSPosition()
         }
@@ -951,8 +964,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     // Cached results may reach Ready before the collector observes Running.
                     summaryDialog.render(state)
                     binding.readToolbar.menu.findItem(R.id.reader_summary)?.isEnabled =
-                        !summaryViewModel.controller.isProcessing() && state !is AiSummaryState.Preparing &&
-                            state !is AiSummaryState.Ready && state !is AiSummaryState.Finished
+                        !summaryViewModel.controller.isProcessing() &&
+                            state !is AiSummaryState.Preparing &&
+                            state !is AiSummaryState.Ready &&
+                            state !is AiSummaryState.Finished
                     when (state) {
                         is AiSummaryState.Ready -> {
                             val offscreen = !viewModel.isCurrentSummaryChapter(state.plan.chapter)
@@ -962,19 +977,35 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                                 showToast(this@ReadActivity2, R.string.ai_summary_source_changed)
                             } else {
                                 summaryViewModel.controller.acknowledge(state)
-                                if (!state.continuous) when {
-                                    state.cacheWriteFailed -> showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
-                                    offscreen -> showToast(this@ReadActivity2, getString(R.string.ai_summary_ready_for_chapter, state.plan.chapter.title))
-                                }
+                                if (!state.continuous)
+                                    when {
+                                        state.cacheWriteFailed ->
+                                            showToast(this@ReadActivity2, R.string.ai_summary_cache_failed)
+                                        offscreen ->
+                                            showToast(
+                                                this@ReadActivity2,
+                                                getString(
+                                                    R.string.ai_summary_ready_for_chapter,
+                                                    state.plan.chapter.title,
+                                                ),
+                                            )
+                                    }
                             }
                         }
                         is AiSummaryState.Finished -> {
-                            val message = when (state.reason) {
-                                AiSummaryFinishReason.END -> resources.getQuantityString(R.plurals.ai_summary_continuous_done,
-                                    state.completedChapters, state.completedChapters)
-                                AiSummaryFinishReason.CACHE_WRITE_FAILED -> getString(R.string.ai_summary_continuous_cache_failed)
-                                AiSummaryFinishReason.INCOMPLETE -> getString(R.string.ai_summary_continuous_incomplete)
-                            }
+                            val message =
+                                when (state.reason) {
+                                    AiSummaryFinishReason.END ->
+                                        resources.getQuantityString(
+                                            R.plurals.ai_summary_continuous_done,
+                                            state.completedChapters,
+                                            state.completedChapters,
+                                        )
+                                    AiSummaryFinishReason.CACHE_WRITE_FAILED ->
+                                        getString(R.string.ai_summary_continuous_cache_failed)
+                                    AiSummaryFinishReason.INCOMPLETE ->
+                                        getString(R.string.ai_summary_continuous_incomplete)
+                                }
                             summaryViewModel.controller.close()
                             showToast(this@ReadActivity2, message)
                         }
@@ -983,22 +1014,20 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
         }
-        floatingTTSControls = FloatingTTSControls(
-            binding.floatingTtsControls,
-            initialPosition = getKey<FloatingControlsPosition>(EPUB_TTS_FLOATING_POSITION) ?: FloatingControlsPosition(),
-            bounds = ::floatingTTSBounds,
-            savePosition = { setKey(EPUB_TTS_FLOATING_POSITION, it) },
-            togglePlayback = { viewModel.pausePlayTTS() },
-            previousSentence = { viewModel.backwardsTTS() },
-            nextSentence = { viewModel.forwardsTTS() },
-        )
+        floatingTTSControls =
+            FloatingTTSControls(
+                binding.floatingTtsControls,
+                initialPosition =
+                    getKey<FloatingControlsPosition>(EPUB_TTS_FLOATING_POSITION) ?: FloatingControlsPosition(),
+                bounds = ::floatingTTSBounds,
+                savePosition = { setKey(EPUB_TTS_FLOATING_POSITION, it) },
+                togglePlayback = { viewModel.pausePlayTTS() },
+                previousSentence = { viewModel.backwardsTTS() },
+                nextSentence = { viewModel.forwardsTTS() },
+            )
         floatingTTSControls.watchContainerLayout(binding.readNormalLayout, ::updateFloatingTTSPosition)
-        binding.readToolbarHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateFloatingTTSPosition()
-        }
-        binding.readOverlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateTTSProgressPosition()
-        }
+        binding.readToolbarHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateFloatingTTSPosition() }
+        binding.readOverlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateTTSProgressPosition() }
         binding.readerBottomViewHolder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updateTTSProgressPosition()
         }
@@ -1043,7 +1072,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                             if (!viewModel.restoreOriginalChapter()) {
                                 val chapter = viewModel.summaryChapter()
                                 if (chapter == null) showToast(this@ReadActivity2, R.string.ai_summary_unavailable)
-                                else summaryViewModel.controller.open(chapter, java.util.Locale.getDefault().toLanguageTag())
+                                else
+                                    summaryViewModel.controller.open(
+                                        chapter,
+                                        java.util.Locale.getDefault().toLanguageTag(),
+                                    )
                             }
                         }
                         true
@@ -1109,13 +1142,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateReaderOverlayVisibility()
         }
 
-        observe(viewModel.floatingTTSControlsLive) {
-            updateTTSControls()
-        }
+        observe(viewModel.floatingTTSControlsLive) { updateTTSControls() }
 
-        observe(viewModel.pronunciationOverridesLive) { rules ->
-            textAdapter.updatePronunciationRules(rules)
-        }
+        observe(viewModel.pronunciationOverridesLive) { rules -> textAdapter.updatePronunciationRules(rules) }
 
         observe(viewModel.blurUpcomingTTSLive) { enabled ->
             textAdapter.updateUpcomingBlur(enabled, viewModel.currentTTSStatus)
@@ -1124,10 +1153,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.autoCenterTTSLive) { enabled ->
             updateTTSLine(viewModel.ttsLine.value)
             if (!enabled) ttsAutoCentering.cancel()
-            if (!enabled) binding.realText.doOnNextLayout {
-                // Rebuild the legacy lock after removing temporary centering space.
-                if (!viewModel.autoCenterTTS) updateTTSLine(viewModel.ttsLine.value)
-            }
+            if (!enabled)
+                binding.realText.doOnNextLayout {
+                    // Rebuild the legacy lock after removing temporary centering space.
+                    if (!viewModel.autoCenterTTS) updateTTSLine(viewModel.ttsLine.value)
+                }
         }
 
         observe(viewModel.screenAwakeLive) { awake ->
@@ -1157,14 +1187,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         textLayoutManager = LinearLayoutManager(binding.realText.context)
-        ttsAutoCentering = TTSAutoCentering(
-            reader = binding.realText,
-            layout = textLayoutManager,
-            adapter = textAdapter,
-            items = { cachedChapter },
-            viewport = ::ttsReadingViewport,
-            enabled = { viewModel.autoCenterTTS && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped },
-        )
+        ttsAutoCentering =
+            TTSAutoCentering(
+                reader = binding.realText,
+                layout = textLayoutManager,
+                adapter = textAdapter,
+                items = { cachedChapter },
+                viewport = ::ttsReadingViewport,
+                enabled = { viewModel.autoCenterTTS && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped },
+            )
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 viewModel.ttsSentenceStarting.collect { start ->
@@ -1230,9 +1261,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTTSLine(line)
         }
 
-        observeNullable(viewModel.ttsProgress) {
-            updateTTSProgress()
-        }
+        observeNullable(viewModel.ttsProgress) { updateTTSProgress() }
 
         observe(viewModel.title) { title ->
             binding.readToolbar.title = title
@@ -1241,19 +1270,28 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.chapterInfo) { chapter ->
             binding.readToolbar.menu.findItem(R.id.reader_open_browser).isVisible =
                 viewModel.chapterBrowserUrl(chapter.index) != null
-            binding.readToolbar.menu.findItem(R.id.reader_summary).setTitle(
-                if (chapter.showingSummary) R.string.ai_summary_restore else R.string.ai_summary_generate)
+            binding.readToolbar.menu
+                .findItem(R.id.reader_summary)
+                .setTitle(if (chapter.showingSummary) R.string.ai_summary_restore else R.string.ai_summary_generate)
             val originalTitle = chapter.title.asString(this)
-            val title = if (chapter.showingSummary) getString(
-                if (chapter.summaryTruncated) R.string.ai_summary_chapter_incomplete else R.string.ai_summary_chapter_label,
-                originalTitle) else originalTitle
+            val title =
+                if (chapter.showingSummary)
+                    getString(
+                        if (chapter.summaryTruncated) R.string.ai_summary_chapter_incomplete
+                        else R.string.ai_summary_chapter_label,
+                        originalTitle,
+                    )
+                else originalTitle
             val count = chapter.wordCount
             val label = count?.let { resources.getQuantityString(R.plurals.word_count, it, it) }
-            binding.readToolbar.subtitle = if (label == null) title else {
-                getString(R.string.chapter_word_count_format, label, title)
-            }
-            binding.readWordCount.text = if (chapter.showingSummary && label != null)
-                getString(R.string.ai_summary_status_count, label) else label
+            binding.readToolbar.subtitle =
+                if (label == null) title
+                else {
+                    getString(R.string.chapter_word_count_format, label, title)
+                }
+            binding.readWordCount.text =
+                if (chapter.showingSummary && label != null) getString(R.string.ai_summary_status_count, label)
+                else label
             binding.readWordCount.isVisible = count != null
             updateReaderOverlayVisibility()
         }
@@ -1308,9 +1346,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     dialog.listView.clearChoices()
                     val selectedPosition = visibleChapters.indexOfFirst { it.index == currentChapter }
                     if (selectedPosition >= 0) dialog.listView.setItemChecked(selectedPosition, true)
-                    dialog.listView.setSelection(
-                        if (query.isBlank() && selectedPosition >= 0) selectedPosition else 0
-                    )
+                    dialog.listView.setSelection(if (query.isBlank() && selectedPosition >= 0) selectedPosition else 0)
                 }
 
                 header.chapterSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
@@ -1550,18 +1586,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     scrollToDesired()
                     onScroll()
                     ttsAutoCentering.onContentChanged()
-                    binding.realText.post {
-                        if (viewModel.onReaderContentDisplayed()) onScroll()
-                    }
+                    binding.realText.post { if (viewModel.onReaderContentDisplayed()) onScroll() }
                 }
             } else {
                 textAdapter.submitList(chapter.data) {
                     viewModel._loadingStatus.postValue(Resource.Success(true))
                     onScroll()
                     ttsAutoCentering.onContentChanged()
-                    binding.realText.post {
-                        if (viewModel.onReaderContentDisplayed()) onScroll()
-                    }
+                    binding.realText.post { if (viewModel.onReaderContentDisplayed()) onScroll() }
                 }
             }
         }
@@ -2025,7 +2057,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                             AndroidTTSPreviewOutput(this@ReadActivity2, viewModel.ttsSpeed, viewModel.ttsPitch)
                         },
                         pauseNarration = viewModel::pauseForTTSPreview,
-                    ).show()
+                    )
+                    .show()
                 }
 
                 readSettingsShowTime.isChecked = viewModel.showTime

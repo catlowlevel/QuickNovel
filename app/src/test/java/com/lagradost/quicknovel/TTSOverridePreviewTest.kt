@@ -15,23 +15,28 @@ class TTSOverridePreviewTest {
         assertEquals(1, sensitive.matchCount)
         val insensitive = TTSOverrideEngine(listOf(rule.copy(caseSensitive = false))).preview(input)
         assertEquals("😀 li! Li! LI! Lily", insensitive.text)
-        assertEquals(listOf(TTSOverrideMatch(3, 5), TTSOverrideMatch(6, 8), TTSOverrideMatch(9, 11)), insensitive.matches)
+        assertEquals(
+            listOf(TTSOverrideMatch(3, 5), TTSOverrideMatch(6, 8), TTSOverrideMatch(9, 11)),
+            insensitive.matches,
+        )
         assertEquals(3, insensitive.matchCount)
     }
 
     @Test
     fun disabledAndInvalidRulesCannotProduceHighlightsOrCounts() {
-        val rules = listOf(
-            TTSWordOverride(find = "Li", replacement = "Lee", enabled = false),
-            TTSWordOverride(find = "(", isRegex = true),
-            TTSWordOverride(find = "(Li)", replacement = "\$2", isRegex = true),
-        )
+        val rules =
+            listOf(
+                TTSWordOverride(find = "Li", replacement = "Lee", enabled = false),
+                TTSWordOverride(find = "(", isRegex = true),
+                TTSWordOverride(find = "(Li)", replacement = "\$2", isRegex = true),
+            )
         assertEquals(TTSOverridePreview("Li", emptyList(), 0), TTSOverrideEngine(rules).preview("Li"))
     }
 
     @Test
     fun captureExpansionHighlightsTheWholeSourceMatchAndMatchesActualSpeech() {
-        val engine = TTSOverrideEngine(listOf(TTSWordOverride(find = "(Li) (Wei)", replacement = "\$2, \$1", isRegex = true)))
+        val engine =
+            TTSOverrideEngine(listOf(TTSWordOverride(find = "(Li) (Wei)", replacement = "\$2, \$1", isRegex = true)))
         val input = "Li Wei spoke."
         val preview = engine.preview(input)
         assertEquals("Wei, Li spoke.", preview.text)
@@ -42,10 +47,11 @@ class TTSOverridePreviewTest {
 
     @Test
     fun aLaterRuleWhoseContextWasRemovedDoesNotFalselyHighlightOriginalText() {
-        val rules = listOf(
-            TTSWordOverride(find = "abc", replacement = "x"),
-            TTSWordOverride(find = "(?<=abc )d", replacement = "Y", isRegex = true),
-        )
+        val rules =
+            listOf(
+                TTSWordOverride(find = "abc", replacement = "x"),
+                TTSWordOverride(find = "(?<=abc )d", replacement = "Y", isRegex = true),
+            )
         val preview = TTSOverrideEngine(rules).preview("abc d")
         assertEquals("x d", preview.text)
         assertEquals(listOf(TTSOverrideMatch(0, 3)), preview.matches)
@@ -54,10 +60,13 @@ class TTSOverridePreviewTest {
 
     @Test
     fun laterMatchesOnReplacementTextTraceBackToTheOriginalWord() {
-        val engine = TTSOverrideEngine(listOf(
-            TTSWordOverride(find = "cat", replacement = "dog"),
-            TTSWordOverride(find = "\\bdog\\b", replacement = "wolf", isRegex = true),
-        ))
+        val engine =
+            TTSOverrideEngine(
+                listOf(
+                    TTSWordOverride(find = "cat", replacement = "dog"),
+                    TTSWordOverride(find = "\\bdog\\b", replacement = "wolf", isRegex = true),
+                )
+            )
         val preview = engine.preview("cat dog")
         assertEquals("wolf wolf", preview.text)
         assertEquals(engine.replace("cat dog"), preview.text)
@@ -67,10 +76,13 @@ class TTSOverridePreviewTest {
 
     @Test
     fun deletedTextAndMatchesAcrossADeletionRemainHighlightedInTheOriginalInput() {
-        val engine = TTSOverrideEngine(listOf(
-            TTSWordOverride(find = "X", replacement = ""),
-            TTSWordOverride(find = "ab", replacement = "word"),
-        ))
+        val engine =
+            TTSOverrideEngine(
+                listOf(
+                    TTSWordOverride(find = "X", replacement = ""),
+                    TTSWordOverride(find = "ab", replacement = "word"),
+                )
+            )
         val preview = engine.preview("aXb")
         assertEquals("word", preview.text)
         assertEquals(engine.replace("aXb"), preview.text)
@@ -83,10 +95,13 @@ class TTSOverridePreviewTest {
 
     @Test
     fun zeroWidthInsertionsAreCountedWithoutFalselyHighlightingAdjacentLetters() {
-        val engine = TTSOverrideEngine(listOf(
-            TTSWordOverride(find = "^", replacement = "cat ", isRegex = true),
-            TTSWordOverride(find = "cat", replacement = "dog"),
-        ))
+        val engine =
+            TTSOverrideEngine(
+                listOf(
+                    TTSWordOverride(find = "^", replacement = "cat ", isRegex = true),
+                    TTSWordOverride(find = "cat", replacement = "dog"),
+                )
+            )
         val preview = engine.preview("Hi")
         assertEquals("dog Hi", preview.text)
         assertEquals(engine.replace("Hi"), preview.text)

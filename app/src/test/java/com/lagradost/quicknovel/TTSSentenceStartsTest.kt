@@ -17,9 +17,10 @@ class TTSSentenceStartsTest {
         val starts = TTSSentenceStarts()
         val cursor = TTSSentenceStartCursor()
         val centered = mutableListOf<TTSHelper.TTSLine>()
-        fun collect() = launch(start = CoroutineStart.UNDISPATCHED) {
-            starts.latest.filterNotNull().collect { cursor.take(it)?.let(centered::add) }
-        }
+        fun collect() =
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                starts.latest.filterNotNull().collect { cursor.take(it)?.let(centered::add) }
+            }
         val first = line(3)
         val skippedWhileAway = line(3, 15)
         val current = line(4)

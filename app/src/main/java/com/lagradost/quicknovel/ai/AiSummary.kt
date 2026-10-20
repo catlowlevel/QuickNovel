@@ -9,9 +9,10 @@ data class AiChapter(
     val title: String,
     val text: String,
 ) {
-    fun resultKey(language: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(listOf(bookId, chapterId, title, text, language).joinToString("\u0000").toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+    fun resultKey(language: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(listOf(bookId, chapterId, title, text, language).joinToString("\u0000").toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     override fun toString(): String = "AiChapter(title=$title, text=[omitted])"
 }
@@ -25,14 +26,25 @@ data class AiSummaryPlan(
     val config: AiProviderConfig,
     val language: String,
 ) {
-    val inputTokens: Long get() = estimateSummaryTokens(summaryInstruction(language) + summarySource(chapter))
+    val inputTokens: Long
+        get() = estimateSummaryTokens(summaryInstruction(language) + summarySource(chapter))
 }
 
 interface AiSummaryApi {
-    suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput
+    suspend fun summarize(
+        provider: AiProvider,
+        config: AiProviderConfig,
+        chapter: AiChapter,
+        language: String,
+    ): AiSummaryOutput
 
-    suspend fun streamSummary(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String,
-                              onProgress: (Long) -> Unit): AiSummaryOutput = summarize(provider, config, chapter, language)
+    suspend fun streamSummary(
+        provider: AiProvider,
+        config: AiProviderConfig,
+        chapter: AiChapter,
+        language: String,
+        onProgress: (Long) -> Unit,
+    ): AiSummaryOutput = summarize(provider, config, chapter, language)
 }
 
 internal fun summaryInstruction(language: String): String =

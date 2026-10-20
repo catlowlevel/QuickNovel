@@ -7,10 +7,7 @@ import okio.Buffer
 import okio.BufferedSource
 
 /** Consumes provider events privately; only numeric progress escapes before a successful finish. */
-internal class AiEventStreamParser(
-    private val provider: AiProvider,
-    onProgress: (Long) -> Unit,
-) {
+internal class AiEventStreamParser(private val provider: AiProvider, onProgress: (Long) -> Unit) {
     private val output = StringBuilder()
     private val tokens = AiStreamTokenCounter(onProgress)
     private val blocks = mutableMapOf<Int, String>()
@@ -57,7 +54,8 @@ internal class AiEventStreamParser(
                 continue
             }
             afterCarriageReturn = byte == 13
-            if (byte == 10 || byte == 13) readLine() else {
+            if (byte == 10 || byte == 13) readLine()
+            else {
                 if (line.size >= 256_000) invalid()
                 line.writeByte(byte)
             }
@@ -76,11 +74,12 @@ internal class AiEventStreamParser(
             finished = true
             return
         }
-        val root = try {
-            DataStore.mapper.readTree(data)?.takeIf { it.isObject } ?: invalid()
-        } catch (_: JsonProcessingException) {
-            invalid()
-        }
+        val root =
+            try {
+                DataStore.mapper.readTree(data)?.takeIf { it.isObject } ?: invalid()
+            } catch (_: JsonProcessingException) {
+                invalid()
+            }
         if (event == "error" || root.path("type").asText() == "error" || root.hasNonNull("error")) {
             throw AiProviderException(streamFailure(root.path("error")))
         }
@@ -109,14 +108,19 @@ internal class AiEventStreamParser(
         tokens.report(root.path("usage").tokenCount("completion_tokens"))
         val choice = root.path("choices").firstOrNull { it.path("index").asInt(0) == 0 } ?: return
         val delta = choice.path("delta")
-        if (!delta.path("refusal").asText("").isNullOrBlank() || choice.path("finish_reason").asText() == "content_filter") {
+        if (
+            !delta.path("refusal").asText("").isNullOrBlank() ||
+                choice.path("finish_reason").asText() == "content_filter"
+        ) {
             throw AiProviderException(AiFailure.RESPONSE_BLOCKED)
         }
         delta.get("reasoning_content")?.takeIf { it.isTextual }?.asText()?.let { append(it, visible = false) }
         delta.get("content")?.takeIf { it.isTextual }?.asText()?.let { append(it) }
-        choice.get("finish_reason")?.takeIf { it.isTextual }?.asText()?.let {
-            finish(it, setOf("stop", "length"), "length")
-        }
+        choice
+            .get("finish_reason")
+            ?.takeIf { it.isTextual }
+            ?.asText()
+            ?.let { finish(it, setOf("stop", "length"), "length") }
     }
 
     private fun gemini(root: JsonNode) {
@@ -125,13 +129,21 @@ internal class AiEventStreamParser(
         tokens.report(usage.tokenCount("candidatesTokenCount") + usage.tokenCount("thoughtsTokenCount"))
         val candidate = root.path("candidates").firstOrNull { it.path("index").asInt(0) == 0 } ?: return
         candidate.path("content").path("parts").forEach { part ->
-            part.get("text")?.takeIf { it.isTextual }?.asText()?.let { append(it, visible = !part.path("thought").asBoolean(false)) }
+            part
+                .get("text")
+                ?.takeIf { it.isTextual }
+                ?.asText()
+                ?.let { append(it, visible = !part.path("thought").asBoolean(false)) }
         }
-        candidate.get("finishReason")?.takeIf { it.isTextual }?.asText()?.let {
-            if (it !in setOf("STOP", "MAX_TOKENS")) throw AiProviderException(AiFailure.RESPONSE_BLOCKED)
-            finish(it, setOf("STOP", "MAX_TOKENS"), "MAX_TOKENS")
-            finished = true
-        }
+        candidate
+            .get("finishReason")
+            ?.takeIf { it.isTextual }
+            ?.asText()
+            ?.let {
+                if (it !in setOf("STOP", "MAX_TOKENS")) throw AiProviderException(AiFailure.RESPONSE_BLOCKED)
+                finish(it, setOf("STOP", "MAX_TOKENS"), "MAX_TOKENS")
+                finished = true
+            }
     }
 
     private fun claude(root: JsonNode, event: String) {
@@ -165,24 +177,32 @@ internal class AiEventStreamParser(
             "content_block_stop" -> blocks.remove(root.path("index").asInt(-1))
             "message_delta" -> {
                 tokens.report(root.path("usage").tokenCount("output_tokens"))
-                root.path("delta").get("stop_reason")?.takeIf { it.isTextual }?.asText()?.let {
-                    if (it == "refusal") throw AiProviderException(AiFailure.RESPONSE_BLOCKED)
-                    finish(it, setOf("end_turn", "stop_sequence", "max_tokens"), "max_tokens")
-                }
+                root
+                    .path("delta")
+                    .get("stop_reason")
+                    ?.takeIf { it.isTextual }
+                    ?.asText()
+                    ?.let {
+                        if (it == "refusal") throw AiProviderException(AiFailure.RESPONSE_BLOCKED)
+                        finish(it, setOf("end_turn", "stop_sequence", "max_tokens"), "max_tokens")
+                    }
             }
             "message_stop" -> finished = true
-            // Ping and future event types carry no visible summary text.
+        // Ping and future event types carry no visible summary text.
         }
     }
 
-    private fun JsonNode.tokenCount(field: String): Long = path(field).takeIf {
-        it.isIntegralNumber && it.canConvertToLong()
-    }?.asLong()?.takeIf { it in 0..Int.MAX_VALUE.toLong() } ?: 0L
+    private fun JsonNode.tokenCount(field: String): Long =
+        path(field)
+            .takeIf { it.isIntegralNumber && it.canConvertToLong() }
+            ?.asLong()
+            ?.takeIf { it in 0..Int.MAX_VALUE.toLong() } ?: 0L
 
     private fun streamFailure(error: JsonNode): AiFailure {
         val codes = listOf(error.path("type").asText(), error.path("status").asText(), error.path("code").asText())
         return when {
-            codes.any { it in setOf("401", "authentication_error", "UNAUTHENTICATED", "invalid_api_key") } -> AiFailure.AUTHENTICATION
+            codes.any { it in setOf("401", "authentication_error", "UNAUTHENTICATED", "invalid_api_key") } ->
+                AiFailure.AUTHENTICATION
             codes.any { it in setOf("403", "permission_error", "PERMISSION_DENIED") } -> AiFailure.FORBIDDEN
             codes.any { it in setOf("429", "rate_limit_error", "RESOURCE_EXHAUSTED") } -> AiFailure.RATE_LIMIT
             codes.any { it in setOf("408", "DEADLINE_EXCEEDED") } -> AiFailure.TIMEOUT

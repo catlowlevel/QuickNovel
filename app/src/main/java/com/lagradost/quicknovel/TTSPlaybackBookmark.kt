@@ -35,8 +35,9 @@ internal data class TTSPlaybackBookmark(
 /** Length-prefix identity parts so books with similar titles/providers cannot share a bookmark. */
 internal fun ttsPlaybackBookKey(vararg identity: String): String {
     val source = identity.joinToString("") { "${it.length}:$it" }
-    return MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+    return MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8)).joinToString("") {
+        "%02x".format(it)
+    }
 }
 
 internal fun List<TTSHelper.TTSLine>.sentenceAtCharacter(character: Int): Int? {

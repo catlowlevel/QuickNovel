@@ -12,7 +12,9 @@ data class AiSummaryTextView<T>(
 /** Reader-session presentations; source data and its saved reading position remain separate. */
 class AiChapterTextViews<T> {
     private data class Key(val book: String, val chapter: String)
+
     private data class Entry<T>(val sourceText: String, val view: AiSummaryTextView<T>)
+
     private val entries = hashMapOf<Key, Entry<T>>()
 
     @Synchronized
@@ -26,16 +28,25 @@ class AiChapterTextViews<T> {
         return entry.view
     }
 
-    @Synchronized
-    fun displayed(source: AiChapter): AiSummaryTextView<T>? = saved(source)?.takeIf { it.showing }
+    @Synchronized fun displayed(source: AiChapter): AiSummaryTextView<T>? = saved(source)?.takeIf { it.showing }
 
     @Synchronized
-    fun show(source: AiChapter, output: AiSummaryOutput, content: T, position: AiOriginalPosition): AiSummaryTextView<T> {
+    fun show(
+        source: AiChapter,
+        output: AiSummaryOutput,
+        content: T,
+        position: AiOriginalPosition,
+    ): AiSummaryTextView<T> {
         require(output.text.isNotBlank())
         val previous = saved(source)
         if (previous?.showing == true && previous.output == output) return previous
-        val view = AiSummaryTextView(output, content,
-            if (previous?.showing == true) previous.originalPosition else position, showing = true)
+        val view =
+            AiSummaryTextView(
+                output,
+                content,
+                if (previous?.showing == true) previous.originalPosition else position,
+                showing = true,
+            )
         entries[Key(source.bookId, source.chapterId)] = Entry(source.text, view)
         return view
     }

@@ -3,8 +3,11 @@ package com.lagradost.quicknovel
 /** A press becomes a drag only after touch slop; a drag can never become a click again. */
 internal class FloatingControlsGesture(private val touchSlop: Float) {
     private data class Start(val touchX: Float, val touchY: Float, val panelX: Float, val panelY: Float)
+
     private var start: Start? = null
-    val isActive: Boolean get() = start != null
+    val isActive: Boolean
+        get() = start != null
+
     var isDragging = false
         private set
 

@@ -57,10 +57,11 @@ class TTSSpeechSymbolsTest {
     fun pronunciationRulesCanReplacePreservedSymbolsWithoutChangingSourceOffsets() {
         val text = "The value was -3.5, or ~4 units."
         val line = TTSHelper.ttsParseText(text, 3).single()
-        val rules = listOf(
-            TTSWordOverride(find = "-", replacement = "minus "),
-            TTSWordOverride(find = "~", replacement = "about "),
-        )
+        val rules =
+            listOf(
+                TTSWordOverride(find = "-", replacement = "minus "),
+                TTSWordOverride(find = "~", replacement = "about "),
+            )
         val spoken = TTSOverrideEngine(rules).prepare(line)!!
         assertEquals("The value was minus 3.5, or about 4 units.", spoken.speakOutMsg)
         assertEquals(text, line.speakOutMsg)
@@ -69,7 +70,9 @@ class TTSSpeechSymbolsTest {
         val highlights = TTSReaderOverrideHighlights().apply { updateRules(rules) }
         val minus = text.indexOf('-')
         val tilde = text.indexOf('~')
-        assertEquals(listOf(TTSOverrideMatch(minus, minus + 1), TTSOverrideMatch(tilde, tilde + 1)),
-            highlights.forParagraph(listOf(line), 3, 0, text.length))
+        assertEquals(
+            listOf(TTSOverrideMatch(minus, minus + 1), TTSOverrideMatch(tilde, tilde + 1)),
+            highlights.forParagraph(listOf(line), 3, 0, text.length),
+        )
     }
 }

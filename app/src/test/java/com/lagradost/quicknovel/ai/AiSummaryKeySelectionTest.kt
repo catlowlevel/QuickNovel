@@ -10,27 +10,48 @@ class AiSummaryKeySelectionTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val chapter = AiChapter("harbor", "chapter-1", "Harbor", "First arrival", "A ship arrives before dawn.")
     private val primary = AiKeyProfile("primary", "Personal", AiProviderConfig("fixture-primary", "primary-model"))
-    private val alternate = AiKeyProfile("alternate", "Custom server",
-        AiProviderConfig("fixture-alternate", "alternate-model", "https://example.com/v1/"))
-    private fun settings() = AiSettings(profiles = mapOf(AiProvider.GEMINI to listOf(primary),
-        AiProvider.OPENAI to listOf(alternate)), selectedProfiles = mapOf(AiProvider.GEMINI to primary.id))
+    private val alternate =
+        AiKeyProfile(
+            "alternate",
+            "Custom server",
+            AiProviderConfig("fixture-alternate", "alternate-model", "https://example.com/v1/"),
+        )
+
+    private fun settings() =
+        AiSettings(
+            profiles = mapOf(AiProvider.GEMINI to listOf(primary), AiProvider.OPENAI to listOf(alternate)),
+            selectedProfiles = mapOf(AiProvider.GEMINI to primary.id),
+        )
+
     private class Store(var value: AiSettings) : AiSettingsPersistence {
         var loader: suspend () -> AiSettings = { value }
+
         override suspend fun load() = loader()
+
         override suspend fun save(settings: AiSettings) = error("Reader selection must not rewrite global settings")
     }
+
     private class Api : AiSummaryApi {
         val calls = mutableListOf<AiSummaryPlan>()
         var answer: suspend () -> AiSummaryOutput = { AiSummaryOutput("The ship reaches the harbor.") }
-        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput {
+
+        override suspend fun summarize(
+            provider: AiProvider,
+            config: AiProviderConfig,
+            chapter: AiChapter,
+            language: String,
+        ): AiSummaryOutput {
             calls += AiSummaryPlan(chapter, provider, "", config, language)
             return answer()
         }
     }
+
     private fun AiSummaryController.confirm() = state.value as AiSummaryState.Confirm
 
     @After
-    fun tearDown() { scope.cancel() }
+    fun tearDown() {
+        scope.cancel()
+    }
 
     @Test
     fun selectorListsSavedProfilesAcrossProvidersAndUsesTheChosenKeyModelAndEndpoint() {
@@ -61,11 +82,16 @@ class AiSummaryKeySelectionTest {
         val store = Store(settings())
         val api = Api()
         val controller = AiSummaryController(scope, store, api)
-        controller.attachChapterSource(object : AiSummaryChapterSource {
-            override val changes = MutableStateFlow(0L)
-            override suspend fun loadedAfter(after: AiChapter) = listOf(following)
-            override suspend fun next(after: AiChapter) = if (after == chapter) AiNextSummaryChapter.Loaded(following) else AiNextSummaryChapter.End
-        })
+        controller.attachChapterSource(
+            object : AiSummaryChapterSource {
+                override val changes = MutableStateFlow(0L)
+
+                override suspend fun loadedAfter(after: AiChapter) = listOf(following)
+
+                override suspend fun next(after: AiChapter) =
+                    if (after == chapter) AiNextSummaryChapter.Loaded(following) else AiNextSummaryChapter.End
+            }
+        )
         controller.open(chapter, "en")
         controller.setContinuous(true)
         val previous = controller.confirm()
@@ -134,8 +160,15 @@ class AiSummaryKeySelectionTest {
 
     @Test
     fun anotherSavedKeyCanRecoverAnInvalidDefaultWithoutOpeningSettingsOrSendingARequest() {
-        val store = Store(settings().copy(profiles = settings().profiles +
-            (AiProvider.GEMINI to listOf(primary.copy(config = AiProviderConfig())))))
+        val store =
+            Store(
+                settings()
+                    .copy(
+                        profiles =
+                            settings().profiles +
+                                (AiProvider.GEMINI to listOf(primary.copy(config = AiProviderConfig())))
+                    )
+            )
         val api = Api()
         val controller = AiSummaryController(scope, store, api)
         controller.open(chapter, "en")

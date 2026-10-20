@@ -1,76 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
-        xmlns:tools="http://schemas.android.com/tools"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clickable="true"
-        android:focusable="false"
-        android:visibility="gone"
-        app:cardBackgroundColor="@color/readerBackground"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="6dp"
-        app:cardUseCompatPadding="false"
-        app:strokeWidth="0dp"
-        tools:visibility="visible">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="false"
+    android:visibility="gone"
+    app:cardBackgroundColor="@color/readerBackground"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="6dp"
+    app:cardUseCompatPadding="false"
+    app:strokeWidth="0dp"
+    tools:visibility="visible">
 
     <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="64dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="4dp">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="4dp">
 
         <ProgressBar
-                android:id="@+id/progress"
-                style="?android:attr/progressBarStyleSmall"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="12dp"
-                android:importantForAccessibility="no"
-                android:indeterminate="true"
-                android:indeterminateTint="@color/readerTextColor" />
+            android:id="@+id/progress"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="12dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/readerTextColor" />
 
         <LinearLayout
-                android:layout_width="0dp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:orientation="vertical"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/chapter"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:orientation="vertical"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp">
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/readerTextColor"
+                android:textSize="13sp"
+                tools:text="Chapter 4: Mountain King" />
 
             <TextView
-                    android:id="@+id/chapter"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/readerTextColor"
-                    android:textSize="13sp"
-                    tools:text="Chapter 4: Mountain King" />
-
-            <TextView
-                    android:id="@+id/count"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:importantForAccessibility="yes"
-                    android:textColor="@color/readerTextColor"
-                    android:textSize="14sp"
-                    tools:text="~123 tokens generated" />
+                android:id="@+id/count"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:importantForAccessibility="yes"
+                android:textColor="@color/readerTextColor"
+                android:textSize="14sp"
+                tools:text="~123 tokens generated" />
         </LinearLayout>
 
         <androidx.appcompat.widget.AppCompatImageButton
-                android:id="@+id/stop"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/ai_summary_stop"
-                android:padding="12dp"
-                app:srcCompat="@drawable/ic_baseline_stop_24"
-                app:tint="@color/readerTextColor" />
+            android:id="@+id/stop"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/ai_summary_stop"
+            android:padding="12dp"
+            app:srcCompat="@drawable/ic_baseline_stop_24"
+            app:tint="@color/readerTextColor" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

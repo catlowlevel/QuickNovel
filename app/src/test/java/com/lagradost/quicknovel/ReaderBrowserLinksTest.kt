@@ -35,8 +35,14 @@ class ReaderBrowserLinksTest {
     @Test
     fun invalidOrUnsafeResolvedLinksAreNotExposedAsBrowserActions() {
         val chapters = listOf(chapter("/chapter"))
-        for (resolved in listOf("", "chapter.xhtml", "file:///private/chapter", "javascript:alert(1)",
-            "https://user:secret@example.com/chapter")) {
+        for (resolved in
+            listOf(
+                "",
+                "chapter.xhtml",
+                "file:///private/chapter",
+                "javascript:alert(1)",
+                "https://user:secret@example.com/chapter",
+            )) {
             assertNull(chapterBrowserUrlOrNull(chapters, 0) { resolved })
         }
     }

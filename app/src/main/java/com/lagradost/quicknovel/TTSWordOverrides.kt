@@ -11,15 +11,20 @@ internal data class TTSWordOverride(
     val caseSensitive: Boolean = false,
     val enabled: Boolean = true,
 ) {
-    enum class Error { EmptyFind, InvalidRegex, InvalidReplacement }
+    enum class Error {
+        EmptyFind,
+        InvalidRegex,
+        InvalidReplacement,
+    }
 
     fun validationError(): Error? {
         if (find.isEmpty()) return Error.EmptyFind
-        val pattern = try {
-            compile()
-        } catch (_: IllegalArgumentException) {
-            return Error.InvalidRegex
-        }
+        val pattern =
+            try {
+                compile()
+            } catch (_: IllegalArgumentException) {
+                return Error.InvalidRegex
+            }
         return try {
             if (isRegex) pattern.validateReplacement(replacement)
             null
@@ -52,32 +57,38 @@ private fun Regex.validateReplacement(replacement: String) {
 }
 
 internal data class TTSOverrideMatch(val start: Int, val end: Int)
+
 internal data class TTSOverridePreview(val text: String, val matches: List<TTSOverrideMatch>, val matchCount: Int)
 
 /** Compile once per rule edit; preserve original sentence positions and apply rules in list order. */
 internal class TTSOverrideEngine(rules: List<TTSWordOverride>) {
     private data class Replacement(val pattern: Regex, val text: String, val isRegex: Boolean)
 
-    private val replacements = rules.filter { it.enabled }.mapNotNull { rule ->
-        try {
-            val pattern = rule.compile()
-            if (rule.isRegex) pattern.validateReplacement(rule.replacement)
-            Replacement(pattern, rule.replacement, rule.isRegex)
-        } catch (_: IllegalArgumentException) {
-            // A damaged/older saved rule must not stop the rest of the narration.
-            null
-        } catch (_: IndexOutOfBoundsException) {
-            null
-        }
-    }
+    private val replacements =
+        rules
+            .filter { it.enabled }
+            .mapNotNull { rule ->
+                try {
+                    val pattern = rule.compile()
+                    if (rule.isRegex) pattern.validateReplacement(rule.replacement)
+                    Replacement(pattern, rule.replacement, rule.isRegex)
+                } catch (_: IllegalArgumentException) {
+                    // A damaged/older saved rule must not stop the rest of the narration.
+                    null
+                } catch (_: IndexOutOfBoundsException) {
+                    null
+                }
+            }
 
-    val hasRules: Boolean get() = replacements.isNotEmpty()
+    val hasRules: Boolean
+        get() = replacements.isNotEmpty()
 
-    fun replace(text: String): String = replacements.fold(text) { result, replacement ->
-        with(replacement) {
-            if (isRegex) pattern.replace(result, this.text) else pattern.replace(result) { this.text }
+    fun replace(text: String): String =
+        replacements.fold(text) { result, replacement ->
+            with(replacement) {
+                if (isRegex) pattern.replace(result, this.text) else pattern.replace(result) { this.text }
+            }
         }
-    }
 
     /** Trace actual ordered replacements back to the user's original test text. */
     fun preview(text: String): TTSOverridePreview {
@@ -97,9 +108,11 @@ internal class TTSOverrideEngine(rules: List<TTSWordOverride>) {
                 val start = matcher.start()
                 val end = matcher.end()
                 val original = sources.subList(start, end).filter { it.end > it.start }
-                val range = if (original.isEmpty()) TTSOverrideMatch(0, 0) else {
-                    TTSOverrideMatch(original.minOf { it.start }, original.maxOf { it.end })
-                }
+                val range =
+                    if (original.isEmpty()) TTSOverrideMatch(0, 0)
+                    else {
+                        TTSOverrideMatch(original.minOf { it.start }, original.maxOf { it.end })
+                    }
                 if (range.end > range.start) matched += range
                 val previousLength = result.length
                 matcher.appendReplacement(result, template)

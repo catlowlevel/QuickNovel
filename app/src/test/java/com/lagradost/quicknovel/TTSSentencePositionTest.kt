@@ -49,10 +49,11 @@ class TTSSentencePositionTest {
     @Test
     fun loadsOnlyChaptersNeededToFindTheTargetSentence() = runBlocking {
         val loaded = mutableListOf<Int>()
-        val result = TTSSentencePosition(0, 1).movedBy(1, 100) {
-            loaded.add(it)
-            2
-        }
+        val result =
+            TTSSentencePosition(0, 1).movedBy(1, 100) {
+                loaded.add(it)
+                2
+            }
         assertEquals(TTSSentencePosition(1, 0), result)
         assertEquals(listOf(0, 1), loaded)
     }

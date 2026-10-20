@@ -8,30 +8,88 @@ internal data class TTSSentenceRange(val start: Int, val end: Int)
 internal object TTSSentenceParser {
     private const val terminals = ".!?。！？؟…"
     private const val closers = "\"'”’»›」』)]}）】》"
-    private val titles = setOf("mr", "mrs", "ms", "dr", "prof", "capt", "cpt", "lt", "gen", "rev", "sgt", "st",
-        "col", "maj", "cmdr", "adm", "fr", "hon", "gov", "sen", "rep", "pres")
+    private val titles =
+        setOf(
+            "mr",
+            "mrs",
+            "ms",
+            "dr",
+            "prof",
+            "capt",
+            "cpt",
+            "lt",
+            "gen",
+            "rev",
+            "sgt",
+            "st",
+            "col",
+            "maj",
+            "cmdr",
+            "adm",
+            "fr",
+            "hon",
+            "gov",
+            "sen",
+            "rep",
+            "pres",
+        )
     private val continuations = setOf("e.g", "i.e", "vs", "cf", "esp")
     private val suffixes = setOf("jr", "sr", "etc")
     private val numbered = setOf("no", "ch", "chap", "vol", "fig", "pp", "p", "sec", "pt")
     private val months = setOf("jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec")
-    private val sentenceStarters = setOf("he", "she", "it", "they", "we", "you", "i", "this", "that", "these", "those",
-        "there", "here", "then", "the", "a", "an", "meanwhile", "afterward", "however", "nevertheless", "suddenly",
-        "finally", "today", "yesterday", "tomorrow", "next")
-    private val extensions = setOf("com", "org", "net", "edu", "gov", "io", "co", "uk", "txt", "epub", "pdf", "json", "html")
+    private val sentenceStarters =
+        setOf(
+            "he",
+            "she",
+            "it",
+            "they",
+            "we",
+            "you",
+            "i",
+            "this",
+            "that",
+            "these",
+            "those",
+            "there",
+            "here",
+            "then",
+            "the",
+            "a",
+            "an",
+            "meanwhile",
+            "afterward",
+            "however",
+            "nevertheless",
+            "suddenly",
+            "finally",
+            "today",
+            "yesterday",
+            "tomorrow",
+            "next",
+        )
+    private val extensions =
+        setOf("com", "org", "net", "edu", "gov", "io", "co", "uk", "txt", "epub", "pdf", "json", "html")
     private val dotted = Regex("(?<![\\p{L}\\p{N}])(?:\\p{L}\\.){2,}")
-    private val addresses = Regex("(?i)(?:https?://|www\\.)[^\\s<>\"“”]+|(?<![\\p{L}\\p{N}._%+\\-])[\\p{L}\\p{N}._%+\\-]+@[\\p{L}\\p{N}.\\-]+\\.[\\p{L}]{2,}")
-    private val namedAttribution = Regex(
-        "^(?:\\p{Lu}[\\p{L}’'\\-]*)(?:[ \\t]+\\p{Lu}[\\p{L}’'\\-]*){0,2}[ \\t]+" +
-            "(?:[\\p{L}]+ly[ \\t]+){0,2}" +
-            "(?:said|asked|replied|shouted|whispered|yelled|murmured|exclaimed|cried|answered|added|continued|muttered|called)\\b"
-    )
+    private val addresses =
+        Regex(
+            "(?i)(?:https?://|www\\.)[^\\s<>\"“”]+|(?<![\\p{L}\\p{N}._%+\\-])[\\p{L}\\p{N}._%+\\-]+@[\\p{L}\\p{N}.\\-]+\\.[\\p{L}]{2,}"
+        )
+    private val namedAttribution =
+        Regex(
+            "^(?:\\p{Lu}[\\p{L}’'\\-]*)(?:[ \\t]+\\p{Lu}[\\p{L}’'\\-]*){0,2}[ \\t]+" +
+                "(?:[\\p{L}]+ly[ \\t]+){0,2}" +
+                "(?:said|asked|replied|shouted|whispered|yelled|murmured|exclaimed|cried|answered|added|continued|muttered|called)\\b"
+        )
 
     fun split(text: String): List<TTSSentenceRange> {
         val protected = BooleanArray(text.length)
         val acronyms = HashMap<Int, String>()
         for (match in addresses.findAll(text)) {
             var end = match.range.last + 1
-            while (end > match.range.first && (text[end - 1] in terminals || text[end - 1] in closers || text[end - 1] in ",;:")) end--
+            while (
+                end > match.range.first &&
+                    (text[end - 1] in terminals || text[end - 1] in closers || text[end - 1] in ",;:")
+            ) end--
             for (index in match.range.first until end) protected[index] = true
         }
         for (match in dotted.findAll(text)) {
@@ -48,17 +106,29 @@ internal object TTSSentenceParser {
         return out
     }
 
-    private fun splitParagraph(text: String, from: Int, limit: Int, protected: BooleanArray,
-                               acronyms: Map<Int, String>, out: MutableList<TTSSentenceRange>) {
+    private fun splitParagraph(
+        text: String,
+        from: Int,
+        limit: Int,
+        protected: BooleanArray,
+        acronyms: Map<Int, String>,
+        out: MutableList<TTSSentenceRange>,
+    ) {
         var start = skipWhitespace(text, from, limit)
         var cursor = start
         val brackets = ArrayList<Int>()
         while (cursor < limit) {
             val character = text[cursor]
-            if (protected[cursor]) { cursor++; continue }
+            if (protected[cursor]) {
+                cursor++
+                continue
+            }
             if (character in "([{（【《") brackets += cursor
             if (character in ")]}）】》" && brackets.isNotEmpty()) brackets.removeAt(brackets.lastIndex)
-            if (character !in terminals) { cursor++; continue }
+            if (character !in terminals) {
+                cursor++
+                continue
+            }
 
             val ellipsis = character == '…' || (character == '.' && text.getOrNull(cursor + 1) == '.')
             if (character == '.' && !ellipsis && protectsPeriod(text, cursor, limit, acronyms[cursor])) {
@@ -66,16 +136,24 @@ internal object TTSSentenceParser {
                 continue
             }
             var punctuationEnd = cursor + 1
-            while (punctuationEnd < limit && text[punctuationEnd] in terminals && !protected[punctuationEnd]) punctuationEnd++
+            while (
+                punctuationEnd < limit && text[punctuationEnd] in terminals && !protected[punctuationEnd]
+            ) punctuationEnd++
             var end = punctuationEnd
             while (end < limit && text[end] in closers) end++
             val next = skipWhitespace(text, end, limit)
             val hasClosingQuote = (punctuationEnd until end).any { text[it] in "\"'”’»›」』" }
             val insideParenthesis = brackets.any { it > start }
-            val continuingEllipsis = ellipsis && (cursor until punctuationEnd).all { text[it] == '.' || text[it] == '…' } &&
-                next < limit && text[next].isLowerCase()
-            val attribution = hasClosingQuote && next < limit && (text[next].isLowerCase() ||
-                namedAttribution.containsMatchIn(text.substring(next, minOf(limit, next + 160))))
+            val continuingEllipsis =
+                ellipsis &&
+                    (cursor until punctuationEnd).all { text[it] == '.' || text[it] == '…' } &&
+                    next < limit &&
+                    text[next].isLowerCase()
+            val attribution =
+                hasClosingQuote &&
+                    next < limit &&
+                    (text[next].isLowerCase() ||
+                        namedAttribution.containsMatchIn(text.substring(next, minOf(limit, next + 160))))
             if (insideParenthesis || continuingEllipsis || attribution) {
                 cursor = punctuationEnd
                 continue
@@ -103,15 +181,19 @@ internal object TTSSentenceParser {
         while (wordEnd < limit && text[wordEnd].isLetter()) wordEnd++
         val nextWord = text.substring(next, wordEnd)
         val nextInitial = nextWord.length == 1 && text.getOrNull(wordEnd) == '.'
-        val startsSentence = nextWord.firstOrNull()?.isUpperCase() == true &&
-            nextWord.lowercase(Locale.ROOT) in sentenceStarters && !nextInitial
+        val startsSentence =
+            nextWord.firstOrNull()?.isUpperCase() == true &&
+                nextWord.lowercase(Locale.ROOT) in sentenceStarters &&
+                !nextInitial
         if (word in continuations) return true
         if ((word in numbered || word in months) && text[next].isDigit()) return true
         if (word in titles) {
             // A name can also look like a sentence starter ("Mr. He"). Only treat a title
             // as a standalone noun here when introduced by an indefinite article ("a Dr.").
             var previousEnd = wordStart
-            while (previousEnd > 0 && text[previousEnd - 1].isWhitespace() && text[previousEnd - 1] !in "\r\n") previousEnd--
+            while (
+                previousEnd > 0 && text[previousEnd - 1].isWhitespace() && text[previousEnd - 1] !in "\r\n"
+            ) previousEnd--
             var previousStart = previousEnd
             while (previousStart > 0 && text[previousStart - 1].isLetter()) previousStart--
             val standalone = text.substring(previousStart, previousEnd).lowercase(Locale.ROOT) in setOf("a", "an")

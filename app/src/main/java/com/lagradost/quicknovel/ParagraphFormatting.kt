@@ -4,9 +4,10 @@ package com.lagradost.quicknovel
 data class ParagraphJoin(val start: Int, val end: Int, val replacement: String)
 
 class ParagraphFormatPlan(val sourceLength: Int, val joins: List<ParagraphJoin>) {
-    fun apply(text: String): String = StringBuilder(text).apply {
-        for (join in joins.asReversed()) replace(join.start, join.end, join.replacement)
-    }.toString()
+    fun apply(text: String): String =
+        StringBuilder(text)
+            .apply { for (join in joins.asReversed()) replace(join.start, join.end, join.replacement) }
+            .toString()
 
     fun displayCharacter(sourceCharacter: Int): Int {
         val character = sourceCharacter.coerceIn(0, sourceLength)
@@ -39,7 +40,27 @@ object ParagraphFormatting {
     private val listStart = Regex("^(?:[-–—*•▪◦]|\\d+[.)]|[A-Za-z][.)])(?:\\s|$)")
     private val headingStart = Regex("(?i)^(?:chapter|volume|book|part|episode)\\s+(?:\\d+|[ivxlcdm]+)(?:\\b|$)")
     private val abbreviation = Regex("(?i)(?:\\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs)|e\\.g|i\\.e)\\.$")
-    private val continuation = setOf("a", "an", "the", "of", "to", "in", "on", "at", "for", "from", "with", "and", "or", "but", "as", "by", "into", "than")
+    private val continuation =
+        setOf(
+            "a",
+            "an",
+            "the",
+            "of",
+            "to",
+            "in",
+            "on",
+            "at",
+            "for",
+            "from",
+            "with",
+            "and",
+            "or",
+            "but",
+            "as",
+            "by",
+            "into",
+            "than",
+        )
     private val headingWords = setOf("a", "an", "the", "of", "to", "in", "on", "and", "or", "for")
 
     fun plan(text: String, protectedRanges: List<IntRange> = emptyList()): ParagraphFormatPlan {
@@ -55,8 +76,13 @@ object ParagraphFormatting {
             val left = text.substring(leftStart, start).trim()
             val right = text.substring(end, rightEnd).trim()
             if (!canJoin(left, right)) continue
-            val replacement = if ((left.endsWith('-') && right.first().isLowerCase()) ||
-                (isUnspacedScript(left.last()) && isUnspacedScript(right.first()))) "" else " "
+            val replacement =
+                if (
+                    (left.endsWith('-') && right.first().isLowerCase()) ||
+                        (isUnspacedScript(left.last()) && isUnspacedScript(right.first()))
+                )
+                    ""
+                else " "
             joins += ParagraphJoin(start, end, replacement)
         }
         return ParagraphFormatPlan(text.length, joins)
@@ -65,9 +91,9 @@ object ParagraphFormatting {
     private fun isHeading(text: String): Boolean {
         if (headingStart.containsMatchIn(text)) return true
         val words = text.split(' ').filter { it.isNotEmpty() }
-        return text.length < 80 && words.size in 2..8 && words.all { word ->
-            word.all { it.isLetter() } && (word.first().isUpperCase() || word in headingWords)
-        }
+        return text.length < 80 &&
+            words.size in 2..8 &&
+            words.all { word -> word.all { it.isLetter() } && (word.first().isUpperCase() || word in headingWords) }
     }
 
     private fun canJoin(left: String, right: String): Boolean {
@@ -83,10 +109,13 @@ object ParagraphFormatting {
         if (left.endsWith('-') && left.getOrNull(left.lastIndex - 1)?.isLetter() != true) return false
         val lastWord = left.takeLastWhile { it.isLetter() }.lowercase()
         val first = right.first()
-        return first.isLowerCase() || isUnspacedScript(first) || first.code in 0xAC00..0xD7AF ||
-            abbreviated || left.endsWith(',') || lastWord in continuation
+        return first.isLowerCase() ||
+            isUnspacedScript(first) ||
+            first.code in 0xAC00..0xD7AF ||
+            abbreviated ||
+            left.endsWith(',') ||
+            lastWord in continuation
     }
 
-    private fun isUnspacedScript(character: Char) = character.code in 0x3400..0x9FFF ||
-        character.code in 0x3040..0x30FF
+    private fun isUnspacedScript(character: Char) = character.code in 0x3400..0x9FFF || character.code in 0x3040..0x30FF
 }

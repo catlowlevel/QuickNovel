@@ -4,7 +4,8 @@ import com.lagradost.quicknovel.ui.TextVisualLine
 import kotlin.math.roundToInt
 
 internal data class TTSVerticalBounds(val top: Int, val bottom: Int) {
-    val height: Int get() = (bottom - top).coerceAtLeast(0)
+    val height: Int
+        get() = (bottom - top).coerceAtLeast(0)
 }
 
 internal data class TTSCenteringViewport(
@@ -17,17 +18,19 @@ internal data class TTSCenteringViewport(
         val blocked = obstruction
         if (blocked == null || blocked.bottom <= bounds.top || blocked.top >= bounds.bottom) return listOf(bounds)
         return listOf(
-            TTSVerticalBounds(bounds.top, blocked.top.coerceIn(bounds.top, bounds.bottom)),
-            TTSVerticalBounds(blocked.bottom.coerceIn(bounds.top, bounds.bottom), bounds.bottom),
-        ).filter { it.height > 0 }
+                TTSVerticalBounds(bounds.top, blocked.top.coerceIn(bounds.top, bounds.bottom)),
+                TTSVerticalBounds(blocked.bottom.coerceIn(bounds.top, bounds.bottom), bounds.bottom),
+            )
+            .filter { it.height > 0 }
     }
 
     /** Move only far enough to avoid an actual overlap at the desired position. */
     fun focusTop(height: Int, desiredTop: Double = screenCenter - height / 2.0): Double? {
         val regions = clearRegions()
-        val positions = regions.filter { it.height >= height }.map {
-            desiredTop.coerceIn(it.top.toDouble(), (it.bottom - height).toDouble())
-        }
+        val positions =
+            regions
+                .filter { it.height >= height }
+                .map { desiredTop.coerceIn(it.top.toDouble(), (it.bottom - height).toDouble()) }
         return positions.minByOrNull { kotlin.math.abs(it - desiredTop) }
             // An oversized sentence must keep its beginning visible.
             ?: regions.maxByOrNull { it.height }?.top?.toDouble()
@@ -37,8 +40,7 @@ internal data class TTSCenteringViewport(
     fun edgeSpaceWithin(reader: TTSVerticalBounds): Pair<Int, Int> {
         val centers = clearRegions().map { screenCenter.coerceIn(it.top, it.bottom) }
         if (centers.isEmpty()) return 0 to 0
-        return (centers.max() - reader.top).coerceAtLeast(0) to
-            (reader.bottom - centers.min()).coerceAtLeast(0)
+        return (centers.max() - reader.top).coerceAtLeast(0) to (reader.bottom - centers.min()).coerceAtLeast(0)
     }
 }
 
@@ -55,16 +57,15 @@ internal data class TTSCenteringTarget(val paragraph: TTSVerticalBounds, val sen
 }
 
 /** Select by chapter and overlapping character ranges, never by a visible row's position. */
-internal fun ttsCenteringTarget(
-    lines: List<TextVisualLine>,
-    sentence: TTSHelper.TTSLine,
-): TTSCenteringTarget? {
-    val spoken = lines.filter {
-        it.index == sentence.index && it.endChar > sentence.startChar && it.startChar < sentence.endChar
-    }
+internal fun ttsCenteringTarget(lines: List<TextVisualLine>, sentence: TTSHelper.TTSLine): TTSCenteringTarget? {
+    val spoken =
+        lines.filter {
+            it.index == sentence.index && it.endChar > sentence.startChar && it.startChar < sentence.endChar
+        }
     if (spoken.isEmpty()) return null
     // Wait for both ends to be laid out rather than centering a partial sentence.
-    if (spoken.minOf { it.startChar } > sentence.startChar || spoken.maxOf { it.endChar } < sentence.endChar) return null
+    if (spoken.minOf { it.startChar } > sentence.startChar || spoken.maxOf { it.endChar } < sentence.endChar)
+        return null
     val paragraphs = spoken.mapTo(hashSetOf()) { it.innerIndex }
     val paragraph = lines.filter { it.index == sentence.index && it.innerIndex in paragraphs }
     return TTSCenteringTarget(

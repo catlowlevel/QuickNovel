@@ -12,23 +12,26 @@ class JoinedSentenceHighlightsTest {
 
     @Test
     fun highlightsOnlyTheJoinedSentenceInsideAParagraphWithOtherSentences() {
-        assertEquals(listOf("He looked at her with surprise."), highlights(
-            "Before this happened. He looked at\n\nher with surprise. Then left."
-        ))
+        assertEquals(
+            listOf("He looked at her with surprise."),
+            highlights("Before this happened. He looked at\n\nher with surprise. Then left."),
+        )
     }
 
     @Test
     fun severalJoinsWithinOneSentenceProduceOneFullSentenceHighlight() {
-        assertEquals(listOf("He was walking through the forest and stopped at the gate."), highlights(
-            "He was walking\nthrough the forest\n\nand stopped at\n\nthe gate.\n\nAnother paragraph."
-        ))
+        assertEquals(
+            listOf("He was walking through the forest and stopped at the gate."),
+            highlights("He was walking\nthrough the forest\n\nand stopped at\n\nthe gate.\n\nAnother paragraph."),
+        )
     }
 
     @Test
     fun separateAffectedSentencesDoNotHighlightTheUnchangedSentenceBetweenThem() {
-        assertEquals(listOf("He looked at her.", "He walked into the forest."), highlights(
-            "Before. He looked at\n\nher. Ordinary middle. He walked into\n\nthe forest. After."
-        ))
+        assertEquals(
+            listOf("He looked at her.", "He walked into the forest."),
+            highlights("Before. He looked at\n\nher. Ordinary middle. He walked into\n\nthe forest. After."),
+        )
     }
 
     @Test
@@ -46,13 +49,14 @@ class JoinedSentenceHighlightsTest {
     @Test
     fun rowsClipTheHighlightAndOverlappingRuleMatchesKeepTheirOwnBackground() {
         val sentences = listOf(JoinedSentenceRange(100, 130))
-        assertEquals(listOf(JoinedSentenceRange(0, 5), JoinedSentenceRange(12, 20)),
-            joinedHighlightsForParagraph(sentences, 105, 125, listOf(
-                TTSOverrideMatch(8, 12), TTSOverrideMatch(5, 10)
-            )))
-        assertEquals(listOf(JoinedSentenceRange(5, 10)), joinedHighlightsForParagraph(sentences, 95, 110, listOf(
-            TTSOverrideMatch(10, 20)
-        )))
+        assertEquals(
+            listOf(JoinedSentenceRange(0, 5), JoinedSentenceRange(12, 20)),
+            joinedHighlightsForParagraph(sentences, 105, 125, listOf(TTSOverrideMatch(8, 12), TTSOverrideMatch(5, 10))),
+        )
+        assertEquals(
+            listOf(JoinedSentenceRange(5, 10)),
+            joinedHighlightsForParagraph(sentences, 95, 110, listOf(TTSOverrideMatch(10, 20))),
+        )
         assertTrue(joinedHighlightsForParagraph(sentences, 100, 130, listOf(TTSOverrideMatch(0, 30))).isEmpty())
         assertTrue(joinedHighlightsForParagraph(sentences, 130, 150, emptyList()).isEmpty())
         assertTrue(joinedHighlightsForParagraph(sentences, 100, 100, emptyList()).isEmpty())
@@ -63,9 +67,10 @@ class JoinedSentenceHighlightsTest {
         val source = "He looked at\n\nher with surprise.\n\nThen left."
         val plan = ParagraphFormatting.plan(source)
         val text = plan.apply(source)
-        val rules = TTSReaderOverrideHighlights().apply {
-            updateRules(listOf(TTSWordOverride(find = "her", replacement = "them")))
-        }
+        val rules =
+            TTSReaderOverrideHighlights().apply {
+                updateRules(listOf(TTSWordOverride(find = "her", replacement = "them")))
+            }
         val end = text.indexOf('\n')
         val matches = rules.forParagraph(TTSHelper.ttsParseText(text, 3), 3, 0, end)
         assertEquals(listOf(TTSOverrideMatch(13, 16)), matches)
@@ -76,7 +81,8 @@ class JoinedSentenceHighlightsTest {
 
     @Test
     fun unmodifiedTextAndProtectedStructuresNeverReceiveJoinedHighlights() {
-        for (source in listOf("", "One complete sentence.", "Chapter 4\n\nHe was there.", "He stopped.\n\nThen left.")) {
+        for (source in
+            listOf("", "One complete sentence.", "Chapter 4\n\nHe was there.", "He stopped.\n\nThen left.")) {
             assertTrue(highlights(source).isEmpty())
         }
     }

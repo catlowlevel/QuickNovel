@@ -35,7 +35,10 @@ class ReaderChapterSelectionTest {
     fun asymmetricToolbarsDoNotMoveTheTargetAwayFromThePhysicalScreenCenter() {
         val atScreenCenter = line(3, 480, 520)
         val atReaderMidpoint = line(4, 680, 720)
-        assertEquals(atScreenCenter, readerLineAtScreenCenter(listOf(atScreenCenter, atReaderMidpoint), 500, 300, 1_100))
+        assertEquals(
+            atScreenCenter,
+            readerLineAtScreenCenter(listOf(atScreenCenter, atReaderMidpoint), 500, 300, 1_100),
+        )
     }
 
     @Test

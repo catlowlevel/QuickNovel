@@ -54,9 +54,9 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.network.CloudflareKiller
-import com.lagradost.quicknovel.network.BrowserSessionInterceptor
 import com.lagradost.quicknovel.network.BrowserRequestOriginInterceptor
+import com.lagradost.quicknovel.network.BrowserSessionInterceptor
+import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.network.WebViewBrowserCookies
 import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.ReadType

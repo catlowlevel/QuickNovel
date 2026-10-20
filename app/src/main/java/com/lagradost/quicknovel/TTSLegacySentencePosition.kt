@@ -1,13 +1,16 @@
 package com.lagradost.quicknovel
 
-/** Read-only migration for bookmarks saved before source-character positions were introduced.
- * Never used for speech: reproducing the old boundaries lets the new parser find the same text.
+/**
+ * Read-only migration for bookmarks saved before source-character positions were introduced. Never used for speech:
+ * reproducing the old boundaries lets the new parser find the same text.
  */
 internal fun legacyTtsSentenceCharacter(text: String, sentence: Int): Int? {
     if (sentence < 0) return null
-    val boundaryText = text.replace(Regex("\\.([A-z])"), ",$1")
-        .replace(Regex("([.:])([0-9])"), ",$2")
-        .replace(Regex("(^|[ \"“‘'])(Dr|Mr|Mrs)\\. ([A-Z])"), "$1$2, $3")
+    val boundaryText =
+        text
+            .replace(Regex("\\.([A-z])"), ",$1")
+            .replace(Regex("([.:])([0-9])"), ",$2")
+            .replace(Regex("(^|[ \"“‘'])(Dr|Mr|Mrs)\\. ([A-Z])"), "$1$2, $3")
     var cursor = 0
     var ordinal = 0
     while (cursor < text.length) {

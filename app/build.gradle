@@ -47,7 +47,9 @@ android {
             release {
                 // Support paths relative to the app module or the repository root.
                 def keyFile = file(releaseSigningProperties.getProperty('STORE_FILE'))
-                if (!keyFile.isFile()) keyFile = rootProject.file(releaseSigningProperties.getProperty('STORE_FILE'))
+                if (!keyFile.isFile()) {
+                    keyFile = rootProject.file(releaseSigningProperties.getProperty('STORE_FILE'))
+                }
                 storeFile = keyFile
                 storePassword = releaseSigningProperties.getProperty('STORE_PASSWORD')
                 keyAlias = releaseSigningProperties.getProperty('KEY_ALIAS')
@@ -58,7 +60,9 @@ android {
 
     buildTypes {
         release {
-            if (releaseSigningFile.isFile()) signingConfig signingConfigs.release
+            if (releaseSigningFile.isFile()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

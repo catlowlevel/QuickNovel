@@ -3,14 +3,11 @@ package com.lagradost.quicknovel
 import kotlin.math.abs
 
 internal data class TTSSentencePosition(val chapter: Int, val sentence: Int) {
-    /** Move through speakable sentences, loading chapter lengths lazily and clamping at book ends.
-     * A null length represents a failed or cancelled load, not an empty chapter.
+    /**
+     * Move through speakable sentences, loading chapter lengths lazily and clamping at book ends. A null length
+     * represents a failed or cancelled load, not an empty chapter.
      */
-    suspend fun movedBy(
-        offset: Int,
-        chapterCount: Int,
-        sentenceCount: suspend (Int) -> Int?,
-    ): TTSSentencePosition? {
+    suspend fun movedBy(offset: Int, chapterCount: Int, sentenceCount: suspend (Int) -> Int?): TTSSentencePosition? {
         if (offset == 0) return this
         val direction = if (offset > 0) 1 else -1
         var remaining = abs(offset.toLong())

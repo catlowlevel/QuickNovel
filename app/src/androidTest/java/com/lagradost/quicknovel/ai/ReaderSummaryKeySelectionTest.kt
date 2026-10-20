@@ -5,8 +5,8 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ui.settings.AiSettingsActivity
@@ -32,28 +32,50 @@ class ReaderSummaryKeySelectionTest {
             var calls = 0
             var usedConfig: AiProviderConfig? = null
             val original = AiKeyProfile("first", "Personal", AiProviderConfig("fixture-first", "first-model"))
-            val selected = AiKeyProfile("second", "Alternate", AiProviderConfig("fixture-second", "second-model", "https://example.com/v1/"))
+            val selected =
+                AiKeyProfile(
+                    "second",
+                    "Alternate",
+                    AiProviderConfig("fixture-second", "second-model", "https://example.com/v1/"),
+                )
             try {
                 scenario.onActivity { activity ->
-                    val store = object : AiSettingsPersistence {
-                        override suspend fun load() = AiSettings(profiles = mapOf(
-                            AiProvider.GEMINI to listOf(original), AiProvider.OPENAI to listOf(selected)))
-                        override suspend fun save(settings: AiSettings) = error("No global settings write expected")
-                    }
-                    val api = object : AiSummaryApi {
-                        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput {
-                            calls++
-                            assertEquals(AiProvider.OPENAI, provider)
-                            usedConfig = config
-                            return AiSummaryOutput("Fixture summary")
+                    val store =
+                        object : AiSettingsPersistence {
+                            override suspend fun load() =
+                                AiSettings(
+                                    profiles =
+                                        mapOf(
+                                            AiProvider.GEMINI to listOf(original),
+                                            AiProvider.OPENAI to listOf(selected),
+                                        )
+                                )
+
+                            override suspend fun save(settings: AiSettings) = error("No global settings write expected")
                         }
-                    }
+                    val api =
+                        object : AiSummaryApi {
+                            override suspend fun summarize(
+                                provider: AiProvider,
+                                config: AiProviderConfig,
+                                chapter: AiChapter,
+                                language: String,
+                            ): AiSummaryOutput {
+                                calls++
+                                assertEquals(AiProvider.OPENAI, provider)
+                                usedConfig = config
+                                return AiSummaryOutput("Fixture summary")
+                            }
+                        }
                     controller = AiSummaryController(scope, store, api)
                     dialog = ReaderSummaryDialog(activity, controller)
                     scope.launch { controller.state.collect(dialog::render) }
                     originalLabel = activity.getString(R.string.ai_summary_profile_choice, "Personal · first-model")
                     selectedLabel = activity.getString(R.string.ai_summary_profile_choice, "Alternate · second-model")
-                    controller.open(AiChapter("harbor", "chapter-1", "Harbor", "Arrival", "A ship reaches the harbor."), "en")
+                    controller.open(
+                        AiChapter("harbor", "chapter-1", "Harbor", "Arrival", "A ship reaches the harbor."),
+                        "en",
+                    )
                 }
                 onView(withContentDescription(originalLabel)).perform(click())
                 onView(withText("Alternate · OpenAI\nsecond-model")).perform(click())
@@ -71,7 +93,10 @@ class ReaderSummaryKeySelectionTest {
                     assertEquals(selected.config, usedConfig)
                 }
             } finally {
-                scenario.onActivity { dialog.dismissForDestroy(); scope.cancel() }
+                scenario.onActivity {
+                    dialog.dismissForDestroy()
+                    scope.cancel()
+                }
             }
         }
     }

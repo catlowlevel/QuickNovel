@@ -11,12 +11,19 @@ class TTSPreviewPlaybackTest {
         lateinit var finished: (Boolean) -> Unit
         val spoken = mutableListOf<String>()
         var closes = 0
-        override fun prepare(ready: (Boolean) -> Unit) { this.ready = ready }
+
+        override fun prepare(ready: (Boolean) -> Unit) {
+            this.ready = ready
+        }
+
         override fun speak(text: String, finished: (Boolean) -> Unit) {
             spoken += text
             this.finished = finished
         }
-        override fun close() { closes++ }
+
+        override fun close() {
+            closes++
+        }
     }
 
     private class Fixture(val limit: Int = 20) {
@@ -24,12 +31,13 @@ class TTSPreviewPlaybackTest {
         var pauses = 0
         var failures = 0
         val states = mutableListOf<Boolean>()
-        val player = TTSPreviewPlayback(
-            createOutput = { Output(limit).also(outputs::add) },
-            beforeRead = { pauses++ },
-            changed = states::add,
-            failed = { failures++ },
-        )
+        val player =
+            TTSPreviewPlayback(
+                createOutput = { Output(limit).also(outputs::add) },
+                beforeRead = { pauses++ },
+                changed = states::add,
+                failed = { failures++ },
+            )
     }
 
     @Test

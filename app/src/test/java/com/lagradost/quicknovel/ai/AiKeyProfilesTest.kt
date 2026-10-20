@@ -26,8 +26,12 @@ class AiKeyProfilesTest {
         var settings = AiSettings()
         val selected = mutableMapOf<AiProvider, String>()
         for (provider in AiProvider.entries) {
-            settings = settings.copy(provider = provider).withConfig(AiProviderConfig("${provider.name}-first", "first-model"))
-                .addProfile().withConfig(AiProviderConfig("${provider.name}-second", "second-model"))
+            settings =
+                settings
+                    .copy(provider = provider)
+                    .withConfig(AiProviderConfig("${provider.name}-first", "first-model"))
+                    .addProfile()
+                    .withConfig(AiProviderConfig("${provider.name}-second", "second-model"))
             selected[provider] = settings.profile().id
         }
         for (provider in AiProvider.entries) {
@@ -59,8 +63,11 @@ class AiKeyProfilesTest {
     @Test
     fun renamingAndNormalizingNeverMergeIdenticallyNamedKeys() {
         val first = AiSettings().withConfig(AiProviderConfig(" first ", " models/first-model "))
-        val second = first.withProfile(first.profile().copy(name = " Same ")).addProfile()
-            .withConfig(AiProviderConfig(" second ", " second-model "))
+        val second =
+            first
+                .withProfile(first.profile().copy(name = " Same "))
+                .addProfile()
+                .withConfig(AiProviderConfig(" second ", " second-model "))
         val named = second.withProfile(second.profile().copy(name = " Same ")).normalized()
         assertEquals(listOf("Same", "Same"), named.keyProfiles().map { it.name })
         assertEquals(listOf("first", "second"), named.keyProfiles().map { it.config.apiKey })

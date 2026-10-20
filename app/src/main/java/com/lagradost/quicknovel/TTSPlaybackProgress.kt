@@ -1,12 +1,8 @@
 package com.lagradost.quicknovel
 
 /** A snapshot of narration, independent of the reader's visible chapter. */
-class TTSPlaybackProgress private constructor(
-    val chapter: Int,
-    val sentenceIndex: Int,
-    val sentenceCount: Int,
-    val sentenceFinished: Boolean,
-) {
+class TTSPlaybackProgress
+private constructor(val chapter: Int, val sentenceIndex: Int, val sentenceCount: Int, val sentenceFinished: Boolean) {
     // Count completed sentences, rather than showing 100% as the last sentence starts.
     val progress: Int
         get() = ((sentenceIndex.toLong() + if (sentenceFinished) 1 else 0) * MAX / sentenceCount).toInt()

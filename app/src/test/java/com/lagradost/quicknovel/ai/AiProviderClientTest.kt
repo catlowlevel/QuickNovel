@@ -17,7 +17,9 @@ class AiProviderClientTest {
     private lateinit var server: MockWebServer
     private lateinit var api: AiProviderClient
     private val key = "test-api-secret-do-not-display"
+
     private fun config(model: String = "model-a") = AiProviderConfig(key, model)
+
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 
     @Before
@@ -27,7 +29,9 @@ class AiProviderClientTest {
     }
 
     @After
-    fun tearDown() { server.shutdown() }
+    fun tearDown() {
+        server.shutdown()
+    }
 
     private suspend fun failure(expected: AiFailure, block: suspend () -> Unit) {
         try {
@@ -43,9 +47,13 @@ class AiProviderClientTest {
     @Test
     fun eachProviderUsesItsOwnHeadersAndRetrievesTheSelectedModelWithoutGeneration() = runBlocking {
         for (provider in AiProvider.entries) {
-            server.enqueue(json(if (provider == AiProvider.GEMINI)
-                """{"name":"models/model-a","displayName":"Model A","supportedGenerationMethods":["generateContent"]}"""
-                else """{"id":"model-a","display_name":"Model A"}"""))
+            server.enqueue(
+                json(
+                    if (provider == AiProvider.GEMINI)
+                        """{"name":"models/model-a","displayName":"Model A","supportedGenerationMethods":["generateContent"]}"""
+                    else """{"id":"model-a","display_name":"Model A"}"""
+                )
+            )
             assertEquals("model-a", api.testConnection(provider, config()).id)
             val request = server.takeRequest()
             assertEquals("GET", request.method)
@@ -55,20 +63,31 @@ class AiProviderClientTest {
             assertEquals(if (provider == AiProvider.OPENAI) "Bearer $key" else null, request.getHeader("Authorization"))
             assertEquals(if (provider == AiProvider.GEMINI) key else null, request.getHeader("x-goog-api-key"))
             assertEquals(if (provider == AiProvider.CLAUDE) key else null, request.getHeader("x-api-key"))
-            assertEquals(if (provider == AiProvider.CLAUDE) "2023-06-01" else null, request.getHeader("anthropic-version"))
+            assertEquals(
+                if (provider == AiProvider.CLAUDE) "2023-06-01" else null,
+                request.getHeader("anthropic-version"),
+            )
             assertFalse(request.path!!.contains(key))
         }
     }
 
     @Test
     fun geminiPaginationUsesOpaqueTokensFiltersNonGeneratingModelsAndDeduplicatesIds() = runBlocking {
-        server.enqueue(json("""{"models":[
+        server.enqueue(
+            json(
+                """{"models":[
             {"name":"models/gemini-b","supportedGenerationMethods":["generateContent"]},
             {"name":"models/embedding","supportedGenerationMethods":["embedContent"]}],
-            "nextPageToken":"a+/=&"}"""))
-        server.enqueue(json("""{"models":[
+            "nextPageToken":"a+/=&"}"""
+            )
+        )
+        server.enqueue(
+            json(
+                """{"models":[
             {"name":"models/gemini-a","displayName":"Gemini A","supportedGenerationMethods":["generateContent"]},
-            {"name":"models/gemini-b","supportedGenerationMethods":["generateContent"]}]}"""))
+            {"name":"models/gemini-b","supportedGenerationMethods":["generateContent"]}]}"""
+            )
+        )
         assertEquals(listOf("gemini-a", "gemini-b"), api.fetchModels(AiProvider.GEMINI, config()).map { it.id })
         val first = server.takeRequest()
         val second = server.takeRequest()
@@ -80,10 +99,14 @@ class AiProviderClientTest {
 
     @Test
     fun claudeFetchesAllPagesAndUsesDisplayNames() = runBlocking {
-        server.enqueue(json("""{"data":[{"id":"claude-b","display_name":"Claude B"}],"has_more":true,"last_id":"claude-b"}"""))
+        server.enqueue(
+            json("""{"data":[{"id":"claude-b","display_name":"Claude B"}],"has_more":true,"last_id":"claude-b"}""")
+        )
         server.enqueue(json("""{"data":[{"id":"claude-a","display_name":"Claude A"}],"has_more":false}"""))
-        assertEquals(listOf(AiModel("claude-a", "Claude A"), AiModel("claude-b", "Claude B")),
-            api.fetchModels(AiProvider.CLAUDE, config()))
+        assertEquals(
+            listOf(AiModel("claude-a", "Claude A"), AiModel("claude-b", "Claude B")),
+            api.fetchModels(AiProvider.CLAUDE, config()),
+        )
         server.takeRequest()
         assertEquals("claude-b", server.takeRequest().requestUrl!!.queryParameter("after_id"))
     }
@@ -108,8 +131,14 @@ class AiProviderClientTest {
 
     @Test
     fun errorsAreActionableWithoutEchoingProviderBodiesOrCredentials() = runBlocking {
-        for ((code, reason) in listOf(401 to AiFailure.AUTHENTICATION, 403 to AiFailure.FORBIDDEN,
-            404 to AiFailure.NOT_FOUND, 429 to AiFailure.RATE_LIMIT, 503 to AiFailure.SERVER)) {
+        for ((code, reason) in
+            listOf(
+                401 to AiFailure.AUTHENTICATION,
+                403 to AiFailure.FORBIDDEN,
+                404 to AiFailure.NOT_FOUND,
+                429 to AiFailure.RATE_LIMIT,
+                503 to AiFailure.SERVER,
+            )) {
             server.enqueue(MockResponse().setResponseCode(code).setBody("Key $key was rejected"))
             failure(reason) { api.testConnection(AiProvider.OPENAI, config()) }
         }
@@ -118,8 +147,9 @@ class AiProviderClientTest {
     @Test
     fun geminiInvalidAndExpiredKeyDetailsAreReportedWithoutEchoingSecretMessages() = runBlocking {
         for (reason in listOf("API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_NOT_FOUND")) {
-            server.enqueue(json("""{"error":{"message":"Rejected $key","details":[{"reason":"$reason"}]}}""")
-                .setResponseCode(400))
+            server.enqueue(
+                json("""{"error":{"message":"Rejected $key","details":[{"reason":"$reason"}]}}""").setResponseCode(400)
+            )
             failure(AiFailure.AUTHENTICATION) { api.fetchModels(AiProvider.GEMINI, config()) }
         }
         server.enqueue(json("""{"error":{"details":[{"reason":"INVALID_PARAMETER"}]}}""").setResponseCode(400))
@@ -155,7 +185,9 @@ class AiProviderClientTest {
             server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", other.url("/stolen")))
             failure(AiFailure.INVALID_RESPONSE) { api.testConnection(AiProvider.GEMINI, config()) }
             assertEquals(0, other.requestCount)
-        } finally { other.shutdown() }
+        } finally {
+            other.shutdown()
+        }
     }
 
     @Test

@@ -131,7 +131,8 @@ data class ImmutableChapterData(
     val randomUuid: Uuid = Uuid.random(),
     val index: Int,
 ) {
-    val displayName: String get() = chapterTitleText(name)
+    val displayName: String
+        get() = chapterTitleText(name)
 
     companion object {
         fun from(chapter: ChapterData, index: Int): ImmutableChapterData =

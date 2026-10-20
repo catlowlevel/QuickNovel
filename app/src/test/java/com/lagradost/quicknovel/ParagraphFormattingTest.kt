@@ -8,8 +8,12 @@ class ParagraphFormattingTest {
 
     @Test
     fun joinsSentenceFragmentsAcrossBothSoftAndParagraphBreaks() {
-        val source = "He was walking\nthrough the forest\n\nand stopped at\n\nthe old gate.\n\nA new paragraph starts here."
-        assertEquals("He was walking through the forest and stopped at the old gate.\n\nA new paragraph starts here.", formatted(source))
+        val source =
+            "He was walking\nthrough the forest\n\nand stopped at\n\nthe old gate.\n\nA new paragraph starts here."
+        assertEquals(
+            "He was walking through the forest and stopped at the old gate.\n\nA new paragraph starts here.",
+            formatted(source),
+        )
     }
 
     @Test
@@ -32,7 +36,20 @@ class ParagraphFormattingTest {
 
     @Test
     fun preservesHeadingsSceneBreaksListsAndImageRows() {
-        for (structure in listOf("Chapter 4", "The Next Day", "***", "---", "1. First item", "• First item", "- First item", "a) First item", "\uFFFC", "# heading", "> quoted text")) {
+        for (structure in
+            listOf(
+                "Chapter 4",
+                "The Next Day",
+                "***",
+                "---",
+                "1. First item",
+                "• First item",
+                "- First item",
+                "a) First item",
+                "\uFFFC",
+                "# heading",
+                "> quoted text",
+            )) {
             val source = "He was walking\n\n$structure\n\nthrough the forest."
             assertEquals(source, formatted(source))
         }
@@ -65,7 +82,10 @@ class ParagraphFormattingTest {
         val source = "An unfinished heading\n\nwith lower case\n\nHe was walking\n\nthrough the forest."
         val heading = 0 until "An unfinished heading".length
         val plan = ParagraphFormatting.plan(source, listOf(heading))
-        assertEquals("An unfinished heading\n\nwith lower case\n\nHe was walking through the forest.", plan.apply(source))
+        assertEquals(
+            "An unfinished heading\n\nwith lower case\n\nHe was walking through the forest.",
+            plan.apply(source),
+        )
     }
 
     @Test
@@ -88,7 +108,14 @@ class ParagraphFormattingTest {
 
     @Test
     fun formattingIsIdempotentAndLeavesAlreadyFormattedOrEmptyTextAlone() {
-        for (source in listOf("", "\n\n", "One complete paragraph.", "He looked at\n\nher.\n\nThen left.", "\n\nHe looked at\n\nher.\n")) {
+        for (source in
+            listOf(
+                "",
+                "\n\n",
+                "One complete paragraph.",
+                "He looked at\n\nher.\n\nThen left.",
+                "\n\nHe looked at\n\nher.\n",
+            )) {
             val once = formatted(source)
             assertEquals(once, formatted(once))
         }
@@ -101,9 +128,10 @@ class ParagraphFormattingTest {
         val lines = TTSHelper.ttsParseText(display, 7)
         assertEquals(listOf("He looked at her with surprise.", "Then left."), lines.map { it.speakOutMsg })
         for (line in lines) assertEquals(line.speakOutMsg, display.substring(line.startChar, line.endChar))
-        val highlights = TTSReaderOverrideHighlights().apply {
-            updateRules(listOf(TTSWordOverride(find = "her with", replacement = "them with")))
-        }
+        val highlights =
+            TTSReaderOverrideHighlights().apply {
+                updateRules(listOf(TTSWordOverride(find = "her with", replacement = "them with")))
+            }
         assertEquals(listOf(TTSOverrideMatch(13, 21)), highlights.forParagraph(lines, 7, 0, display.indexOf('\n')))
     }
 

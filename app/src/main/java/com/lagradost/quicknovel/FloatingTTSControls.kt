@@ -56,19 +56,19 @@ internal class FloatingTTSControls(
             if (status == TTSHelper.TTSStatus.IsRunning) R.drawable.ic_baseline_pause_24
             else R.drawable.ic_baseline_play_arrow_24
         )
-        binding.pausePlay.setContentDescription(panel.context.getString(
-            if (status == TTSHelper.TTSStatus.IsRunning) R.string.tts_pause_playback
-            else R.string.tts_resume_playback
-        ))
+        binding.pausePlay.setContentDescription(
+            panel.context.getString(
+                if (status == TTSHelper.TTSStatus.IsRunning) R.string.tts_pause_playback
+                else R.string.tts_resume_playback
+            )
+        )
         if (changed && visible) panel.post { reposition() }
     }
 
     fun setColors(background: Int, foreground: Int) {
         panel.setCardBackgroundColor(ColorUtils.blendARGB(background, foreground, 0.06f))
         val tint = ColorStateList.valueOf(foreground)
-        buttons.forEach {
-            it.imageTintList = tint
-        }
+        buttons.forEach { it.imageTintList = tint }
     }
 
     fun reposition() {
@@ -112,12 +112,13 @@ internal class FloatingTTSControls(
             // A second touch can replace the first; ignore the older touch stream.
             if (touchOwner !== view) return@setOnTouchListener true
             when (event.actionMasked) {
-                MotionEvent.ACTION_MOVE -> gesture.move(event.rawX, event.rawY)?.let { (desiredX, desiredY) ->
-                    buttons.forEach { it.isPressed = false }
-                    val (x, y) = bounds().constrain(desiredX, desiredY)
-                    panel.x = x
-                    panel.y = y
-                }
+                MotionEvent.ACTION_MOVE ->
+                    gesture.move(event.rawX, event.rawY)?.let { (desiredX, desiredY) ->
+                        buttons.forEach { it.isPressed = false }
+                        val (x, y) = bounds().constrain(desiredX, desiredY)
+                        panel.x = x
+                        panel.y = y
+                    }
                 MotionEvent.ACTION_UP -> {
                     if (gesture.isDragging) {
                         position = FloatingControlsPosition.fromOffset(panel.x, panel.y, bounds())
@@ -127,7 +128,8 @@ internal class FloatingTTSControls(
                     cancelGestures()
                     if (click && view !== panel) view.performClick()
                 }
-                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                MotionEvent.ACTION_CANCEL,
+                MotionEvent.ACTION_POINTER_DOWN -> {
                     cancelGestures()
                     reposition()
                 }

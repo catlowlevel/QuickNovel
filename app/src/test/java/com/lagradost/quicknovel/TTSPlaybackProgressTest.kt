@@ -5,9 +5,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TTSPlaybackProgressTest {
-    private fun lines(chapter: Int, count: Int) = List(count) {
-        TTSHelper.TTSLine("Sentence $it.", it * 20, it * 20 + 12, chapter)
-    }
+    private fun lines(chapter: Int, count: Int) =
+        List(count) { TTSHelper.TTSLine("Sentence $it.", it * 20, it * 20 + 12, chapter) }
 
     @Test
     fun progressCountsCompletedSentencesAndOnlyFinishesAfterTheLastSentence() {
@@ -15,11 +14,17 @@ class TTSPlaybackProgressTest {
         assertEquals(0, TTSPlaybackProgress.from(chapterLines, 0)?.progress)
         assertEquals(2_000, TTSPlaybackProgress.from(chapterLines, 0, sentenceFinished = true)?.progress)
         assertEquals(8_000, TTSPlaybackProgress.from(chapterLines, 4)?.progress)
-        assertEquals(TTSPlaybackProgress.MAX, TTSPlaybackProgress.from(chapterLines, 4, sentenceFinished = true)?.progress)
+        assertEquals(
+            TTSPlaybackProgress.MAX,
+            TTSPlaybackProgress.from(chapterLines, 4, sentenceFinished = true)?.progress,
+        )
 
         val singleSentence = lines(chapter = 4, count = 1)
         assertEquals(0, TTSPlaybackProgress.from(singleSentence, 0)?.progress)
-        assertEquals(TTSPlaybackProgress.MAX, TTSPlaybackProgress.from(singleSentence, 0, sentenceFinished = true)?.progress)
+        assertEquals(
+            TTSPlaybackProgress.MAX,
+            TTSPlaybackProgress.from(singleSentence, 0, sentenceFinished = true)?.progress,
+        )
     }
 
     @Test

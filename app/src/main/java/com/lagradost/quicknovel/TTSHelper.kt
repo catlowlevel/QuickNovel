@@ -52,7 +52,8 @@ class TTSSession(
             }
         }
     private var isRegistered = false
-    private val tts: TextToSpeech? get() = engineLoader.engine
+    private val tts: TextToSpeech?
+        get() = engineLoader.engine
     private var TTSQueue: Pair<TTSHelper.TTSLine, Int>? = null
 
     private var TTSQueueId = 0

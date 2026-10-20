@@ -8,29 +8,37 @@ import java.io.IOException
 
 class AiSettingsControllerTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
     private class Store(var value: AiSettings = AiSettings()) : AiSettingsPersistence {
         var writes = 0
         var failSave = false
         var failLoad = false
+
         override suspend fun load(): AiSettings {
             if (failLoad) throw IOException("unreadable")
             return value
         }
+
         override suspend fun save(settings: AiSettings) {
             if (failSave) throw IOException("unwritable")
             writes++
             value = settings
         }
     }
+
     private class Api : AiProviderApi {
         var models: suspend (AiProvider, AiProviderConfig) -> List<AiModel> = { _, _ -> listOf(AiModel("found-model")) }
         var check: suspend (AiProvider, AiProviderConfig) -> AiModel = { _, config -> AiModel(config.model) }
+
         override suspend fun fetchModels(provider: AiProvider, config: AiProviderConfig) = models(provider, config)
+
         override suspend fun testConnection(provider: AiProvider, config: AiProviderConfig) = check(provider, config)
     }
 
     @After
-    fun tearDown() { scope.cancel() }
+    fun tearDown() {
+        scope.cancel()
+    }
 
     @Test
     fun switchingProvidersKeepsDraftsAndSavingRestoresAllOfThemWithTheActiveProvider() {
@@ -74,10 +82,13 @@ class AiSettingsControllerTest {
     @Test
     fun delayedModelResultsCannotPopulateAnotherProviderAfterSwitching() {
         val oldResult = CompletableDeferred<List<AiModel>>()
-        val api = Api().apply { models = { provider, _ ->
-            if (provider == AiProvider.GEMINI) withContext(NonCancellable) { oldResult.await() }
-            else listOf(AiModel("openai-model"))
-        } }
+        val api =
+            Api().apply {
+                models = { provider, _ ->
+                    if (provider == AiProvider.GEMINI) withContext(NonCancellable) { oldResult.await() }
+                    else listOf(AiModel("openai-model"))
+                }
+            }
         val controller = AiSettingsController(scope, Store(), api)
         controller.setApiKey("gemini-key")
         controller.fetchModels()
@@ -160,10 +171,17 @@ class AiSettingsControllerTest {
     fun multipleNamedKeysKeepIndependentModelsAndRequestsUseTheSelectedKey() {
         val store = Store()
         val used = mutableListOf<AiProviderConfig>()
-        val api = Api().apply {
-            models = { _, config -> used += config; listOf(AiModel("fetched")) }
-            check = { _, config -> used += config; AiModel(config.model) }
-        }
+        val api =
+            Api().apply {
+                models = { _, config ->
+                    used += config
+                    listOf(AiModel("fetched"))
+                }
+                check = { _, config ->
+                    used += config
+                    AiModel(config.model)
+                }
+            }
         val controller = AiSettingsController(scope, store, api)
         controller.setApiKey("personal-key")
         controller.setModel("personal-model")
@@ -179,7 +197,10 @@ class AiSettingsControllerTest {
         controller.selectKey(personal)
         assertTrue(controller.state.value.models.isEmpty())
         controller.testConnection()
-        assertEquals(listOf(AiProviderConfig("work-key", "work-model"), AiProviderConfig("personal-key", "personal-model")), used)
+        assertEquals(
+            listOf(AiProviderConfig("work-key", "work-model"), AiProviderConfig("personal-key", "personal-model")),
+            used,
+        )
         controller.selectKey(work)
         controller.useConfiguration()
         controller.save()
@@ -237,7 +258,13 @@ class AiSettingsControllerTest {
     fun customUrlsAreSavedPerKeyAndRequestsUseTheSelectedEndpoints() {
         val store = Store()
         val used = mutableListOf<String>()
-        val api = Api().apply { models = { _, config -> used += config.baseUrl; emptyList() } }
+        val api =
+            Api().apply {
+                models = { _, config ->
+                    used += config.baseUrl
+                    emptyList()
+                }
+            }
         val controller = AiSettingsController(scope, store, api)
         controller.setApiKey("first")
         controller.setBaseUrl("https://first.example/v1")
@@ -265,8 +292,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun browsingProvidersAndKeysDoesNotEnableSaveOrChangeTheSelectedConfiguration() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first-key", "first-model"))
-            .addProfile().withConfig(AiProviderConfig("second-key", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first-key", "first-model"))
+                .addProfile()
+                .withConfig(AiProviderConfig("second-key", "second-model"))
         val store = Store(initial)
         val controller = AiSettingsController(scope, store, Api())
         val second = initial.profile().id
@@ -290,7 +320,13 @@ class AiSettingsControllerTest {
         val initial = AiSettings().withConfig(AiProviderConfig("active-key", "active-model"))
         val store = Store(initial)
         val requests = mutableListOf<Pair<AiProvider, AiProviderConfig>>()
-        val api = Api().apply { check = { provider, config -> requests += provider to config; AiModel(config.model) } }
+        val api =
+            Api().apply {
+                check = { provider, config ->
+                    requests += provider to config
+                    AiModel(config.model)
+                }
+            }
         val controller = AiSettingsController(scope, store, api)
         controller.selectProvider(AiProvider.OPENAI)
         controller.setApiKey("draft-key")
@@ -336,8 +372,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun selectingAnotherKeyRequiresExplicitUseAndCanBeRevertedBeforeSaving() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first", "first-model"))
-            .addProfile().withConfig(AiProviderConfig("second", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first", "first-model"))
+                .addProfile()
+                .withConfig(AiProviderConfig("second", "second-model"))
         val store = Store(initial)
         val controller = AiSettingsController(scope, store, Api())
         val first = initial.keyProfiles().first().id
@@ -384,8 +423,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun existingEditorOpensCleanAndCancelRestoresNameCredentialsModelAndSelection() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first", "first-model"))
-            .addProfile().withConfig(AiProviderConfig("second", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first", "first-model"))
+                .addProfile()
+                .withConfig(AiProviderConfig("second", "second-model"))
         val store = Store(initial)
         val controller = AiSettingsController(scope, store, Api())
         val first = initial.keyProfiles().first().id
@@ -437,8 +479,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun listActivationPersistsDirectlyAndRollsBackIfPersistenceFails() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first", "first-model"))
-            .copy(provider = AiProvider.OPENAI).withConfig(AiProviderConfig("second", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first", "first-model"))
+                .copy(provider = AiProvider.OPENAI)
+                .withConfig(AiProviderConfig("second", "second-model"))
         val store = Store(initial).apply { failSave = true }
         val controller = AiSettingsController(scope, store, Api())
         val first = initial.profile(AiProvider.GEMINI).id
@@ -459,8 +504,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun deletingActiveKeyFallsBackAcrossProvidersAndLastDeletionLeavesAnEmptyList() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first", "first-model"))
-            .copy(provider = AiProvider.OPENAI).withConfig(AiProviderConfig("second", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first", "first-model"))
+                .copy(provider = AiProvider.OPENAI)
+                .withConfig(AiProviderConfig("second", "second-model"))
         val store = Store(initial)
         val controller = AiSettingsController(scope, store, Api())
         controller.openEditor(AiProvider.OPENAI, initial.profile().id)
@@ -495,8 +543,11 @@ class AiSettingsControllerTest {
 
     @Test
     fun editorDeletionKeepsAnotherActiveKeyAndRejectsConcurrentListActions() {
-        val initial = AiSettings().withConfig(AiProviderConfig("first", "first-model"))
-            .addProfile().withConfig(AiProviderConfig("second", "second-model"))
+        val initial =
+            AiSettings()
+                .withConfig(AiProviderConfig("first", "first-model"))
+                .addProfile()
+                .withConfig(AiProviderConfig("second", "second-model"))
         val store = Store(initial)
         val controller = AiSettingsController(scope, store, Api())
         controller.openEditor(AiProvider.GEMINI, initial.keyProfiles().first().id)

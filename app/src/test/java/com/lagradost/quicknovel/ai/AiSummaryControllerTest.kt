@@ -8,23 +8,39 @@ import java.io.IOException
 
 class AiSummaryControllerTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    private val chapter = AiChapter("novel-a", "chapter-4", "Novel A", "Chapter 4", "The first event. Then the second event.")
+    private val chapter =
+        AiChapter("novel-a", "chapter-4", "Novel A", "Chapter 4", "The first event. Then the second event.")
+
     private class Store : AiSettingsPersistence {
         var value = AiSettings().withConfig(AiProviderConfig("selected-key", "selected-model"))
         var loader: suspend () -> AiSettings = { value }
+
         override suspend fun load() = loader()
-        override suspend fun save(settings: AiSettings) { error("Summaries never rewrite provider settings") }
+
+        override suspend fun save(settings: AiSettings) {
+            error("Summaries never rewrite provider settings")
+        }
     }
+
     private class Api : AiSummaryApi {
         val requests = mutableListOf<AiSummaryPlan>()
         var answer: suspend () -> AiSummaryOutput = { AiSummaryOutput("A concise recap.") }
-        override suspend fun summarize(provider: AiProvider, config: AiProviderConfig, chapter: AiChapter, language: String): AiSummaryOutput {
+
+        override suspend fun summarize(
+            provider: AiProvider,
+            config: AiProviderConfig,
+            chapter: AiChapter,
+            language: String,
+        ): AiSummaryOutput {
             requests += AiSummaryPlan(chapter, provider, "", config, language)
             return answer()
         }
     }
+
     @After
-    fun tearDown() { scope.cancel() }
+    fun tearDown() {
+        scope.cancel()
+    }
 
     @Test
     fun confirmationCapturesTheExactChapterProfileAndModelWithoutMakingAPaidCall() {
@@ -39,7 +55,8 @@ class AiSummaryControllerTest {
         assertTrue(plan.inputTokens > estimateSummaryTokens(chapter.text))
         assertTrue(api.requests.isEmpty())
         // A settings change while confirmation is open cannot silently change the approved request.
-        store.value = AiSettings(provider = AiProvider.OPENAI).withConfig(AiProviderConfig("different-key", "different-model"))
+        store.value =
+            AiSettings(provider = AiProvider.OPENAI).withConfig(AiProviderConfig("different-key", "different-model"))
         controller.generate()
         assertEquals("selected-key", api.requests.single().config.apiKey)
         assertEquals(AiProvider.GEMINI, api.requests.single().provider)
@@ -78,8 +95,13 @@ class AiSummaryControllerTest {
         controller.reuse()
         assertTrue(controller.state.value is AiSummaryState.Ready)
         assertEquals(1, api.requests.size)
-        for ((other, language) in listOf(chapter.copy(chapterId = "chapter-5") to "en",
-            chapter.copy(bookId = "other-novel") to "en", chapter.copy(text = "Reloaded text") to "en", chapter to "id")) {
+        for ((other, language) in
+            listOf(
+                chapter.copy(chapterId = "chapter-5") to "en",
+                chapter.copy(bookId = "other-novel") to "en",
+                chapter.copy(text = "Reloaded text") to "en",
+                chapter to "id",
+            )) {
             controller.open(other, language)
             assertTrue(controller.state.value is AiSummaryState.Confirm)
         }
@@ -137,9 +159,14 @@ class AiSummaryControllerTest {
         store.value = AiSettings().withConfig(AiProviderConfig("key", ""))
         controller.retry()
         assertEquals(AiFailure.MISSING_MODEL, (controller.state.value as AiSummaryState.Failed).reason)
-        store.value = AiSettings(provider = AiProvider.OPENAI).withConfig(AiProviderConfig("", "local-model", "http://localhost:8080/v1"))
+        store.value =
+            AiSettings(provider = AiProvider.OPENAI)
+                .withConfig(AiProviderConfig("", "local-model", "http://localhost:8080/v1"))
         controller.retry()
-        assertEquals("http://localhost:8080/v1/", (controller.state.value as AiSummaryState.Confirm).plan.config.baseUrl)
+        assertEquals(
+            "http://localhost:8080/v1/",
+            (controller.state.value as AiSummaryState.Confirm).plan.config.baseUrl,
+        )
         assertTrue(api.requests.isEmpty())
     }
 

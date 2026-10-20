@@ -13,11 +13,17 @@ class AiCustomEndpointsTest {
     private lateinit var server: MockWebServer
     private lateinit var api: AiProviderClient
     private val key = "custom-key-not-for-default-provider"
+
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+
     private fun config(model: String = "custom-model", apiKey: String = key, path: String = "/proxy/v1") =
         AiProviderConfig(apiKey, model, server.url(path).toString())
+
     private suspend fun failure(reason: AiFailure, block: suspend () -> Unit) {
-        try { block(); fail("Expected $reason") } catch (e: AiProviderException) {
+        try {
+            block()
+            fail("Expected $reason")
+        } catch (e: AiProviderException) {
             assertEquals(reason, e.failure)
             assertFalse(e.toString().contains(key))
         }
@@ -30,13 +36,16 @@ class AiCustomEndpointsTest {
     }
 
     @After
-    fun tearDown() { server.shutdown() }
+    fun tearDown() {
+        server.shutdown()
+    }
 
     @Test
     fun allThreeProtocolsUseTheConfiguredGatewayPathAndTheirOwnAuthentication() = runBlocking {
         for (provider in AiProvider.entries) {
-            val detail = if (provider == AiProvider.GEMINI)
-                """{"name":"models/custom-model","supportedGenerationMethods":["generateContent"]}"""
+            val detail =
+                if (provider == AiProvider.GEMINI)
+                    """{"name":"models/custom-model","supportedGenerationMethods":["generateContent"]}"""
                 else """{"id":"custom-model"}"""
             val array = if (provider == AiProvider.GEMINI) "models" else "data"
             server.enqueue(json("""{"$array":[$detail]}"""))
@@ -46,7 +55,10 @@ class AiCustomEndpointsTest {
             for (expected in listOf("/proxy/v1/models", "/proxy/v1/models/custom-model")) {
                 val request = server.takeRequest()
                 assertEquals(expected, request.requestUrl!!.encodedPath)
-                assertEquals(if (provider == AiProvider.OPENAI) "Bearer $key" else null, request.getHeader("Authorization"))
+                assertEquals(
+                    if (provider == AiProvider.OPENAI) "Bearer $key" else null,
+                    request.getHeader("Authorization"),
+                )
                 assertEquals(if (provider == AiProvider.GEMINI) key else null, request.getHeader("x-goog-api-key"))
                 assertEquals(if (provider == AiProvider.CLAUDE) key else null, request.getHeader("x-api-key"))
             }
@@ -57,9 +69,15 @@ class AiCustomEndpointsTest {
     fun deepseekStyleCatalogsCanVerifyASelectedModelWhenDetailRoutesAreUnsupported() = runBlocking {
         for (status in listOf(404, 405, 501)) {
             server.enqueue(MockResponse().setResponseCode(status))
-            server.enqueue(json("""{"object":"list","data":[{"id":"deepseek-custom","name":"DeepSeek model","owned_by":"deepseek"}]}"""))
-            assertEquals(AiModel("deepseek-custom", "DeepSeek model"), api.testConnection(AiProvider.OPENAI,
-                config(model = "deepseek-custom", path = "/")))
+            server.enqueue(
+                json(
+                    """{"object":"list","data":[{"id":"deepseek-custom","name":"DeepSeek model","owned_by":"deepseek"}]}"""
+                )
+            )
+            assertEquals(
+                AiModel("deepseek-custom", "DeepSeek model"),
+                api.testConnection(AiProvider.OPENAI, config(model = "deepseek-custom", path = "/")),
+            )
             assertEquals("/models/deepseek-custom", server.takeRequest().path)
             val list = server.takeRequest()
             assertEquals("/models", list.path)
@@ -73,7 +91,8 @@ class AiCustomEndpointsTest {
         server.enqueue(json("""{"data":[{"id":"another-model"}]}"""))
         failure(AiFailure.NOT_FOUND) { api.testConnection(AiProvider.OPENAI, config()) }
         assertEquals(2, server.requestCount)
-        for ((status, reason) in listOf(401 to AiFailure.AUTHENTICATION, 403 to AiFailure.FORBIDDEN, 503 to AiFailure.SERVER)) {
+        for ((status, reason) in
+            listOf(401 to AiFailure.AUTHENTICATION, 403 to AiFailure.FORBIDDEN, 503 to AiFailure.SERVER)) {
             val count = server.requestCount
             server.enqueue(MockResponse().setResponseCode(status))
             failure(reason) { api.testConnection(AiProvider.OPENAI, config()) }
@@ -92,9 +111,13 @@ class AiCustomEndpointsTest {
     @Test
     fun explicitlyConfiguredSelfHostedServersCanBeUsedWithoutSendingDummyKeys() = runBlocking {
         for (provider in AiProvider.entries) {
-            server.enqueue(json(if (provider == AiProvider.GEMINI)
-                """{"name":"models/custom-model","supportedGenerationMethods":["generateContent"]}"""
-                else """{"id":"custom-model"}"""))
+            server.enqueue(
+                json(
+                    if (provider == AiProvider.GEMINI)
+                        """{"name":"models/custom-model","supportedGenerationMethods":["generateContent"]}"""
+                    else """{"id":"custom-model"}"""
+                )
+            )
             api.testConnection(provider, config(apiKey = ""))
             val request = server.takeRequest()
             assertNull(request.getHeader("Authorization"))
@@ -105,7 +128,13 @@ class AiCustomEndpointsTest {
 
     @Test
     fun malformedCustomUrlsAreRejectedBeforeAnyKeyCanBeSent() = runBlocking {
-        for (url in listOf("not-a-url", "https://user:password@example.com/v1", "https://example.com/v1?key=secret", "https://example.com/#x")) {
+        for (url in
+            listOf(
+                "not-a-url",
+                "https://user:password@example.com/v1",
+                "https://example.com/v1?key=secret",
+                "https://example.com/#x",
+            )) {
             failure(AiFailure.INVALID_URL) { api.fetchModels(AiProvider.OPENAI, AiProviderConfig(key, "model", url)) }
         }
         assertEquals(0, server.requestCount)
@@ -130,6 +159,8 @@ class AiCustomEndpointsTest {
                 failure(AiFailure.INVALID_RESPONSE) { api.testConnection(provider, config()) }
             }
             assertEquals(0, other.requestCount)
-        } finally { other.shutdown() }
+        } finally {
+            other.shutdown()
+        }
     }
 }

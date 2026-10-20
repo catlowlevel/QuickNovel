@@ -686,7 +686,11 @@ object BookDownloader2Helper {
             outputFile.createNewFile()
             outputFile.writeText(mapper.writeValueAsString(data))
             if (!data.sourceUrl.isNullOrBlank()) {
-                try { quickStreamCache().save(data) } catch (error: Exception) { logError(error) }
+                try {
+                    quickStreamCache().save(data)
+                } catch (error: Exception) {
+                    logError(error)
+                }
             }
             return outputFile.toUri()
         } catch (e: Exception) {

@@ -11,25 +11,32 @@ internal const val EXTRA_REFRESH_CHAPTER_LIST = "refresh_saved_chapter_list"
 internal class FileQuickStreamCache(private val directory: File) {
     private fun file(meta: QuickStreamMetaData): File {
         val identity = DataStore.mapper.writeValueAsBytes(meta)
-        val key = MessageDigest.getInstance("SHA-256").digest(identity)
-            .joinToString("") { "%02x".format(it) }
+        val key = MessageDigest.getInstance("SHA-256").digest(identity).joinToString("") { "%02x".format(it) }
         return File(directory, "$key.json")
     }
 
     fun load(meta: QuickStreamMetaData, sourceUrl: String, legacyFile: File? = null): QuickStreamData? {
         if (sourceUrl.isBlank()) return null
         for (candidate in listOfNotNull(file(meta), legacyFile)) {
-            val saved = try {
-                DataStore.mapper.readValue<QuickStreamData>(candidate)
-            } catch (_: IOException) {
+            val saved =
+                try {
+                    DataStore.mapper.readValue<QuickStreamData>(candidate)
+                } catch (_: IOException) {
+                    continue
+                }
+            if (
+                saved.meta != meta ||
+                    saved.data.isEmpty() ||
+                    saved.data.any { it.url.isBlank() } ||
+                    (saved.sourceUrl != null && saved.sourceUrl != sourceUrl)
+            )
                 continue
-            }
-            if (saved.meta != meta || saved.data.isEmpty() || saved.data.any { it.url.isBlank() } ||
-                (saved.sourceUrl != null && saved.sourceUrl != sourceUrl)) continue
             val snapshot = saved.copy(sourceUrl = sourceUrl)
             if (candidate == legacyFile) {
                 // A failed migration must not prevent reading a valid existing snapshot.
-                try { save(snapshot) } catch (_: IOException) { }
+                try {
+                    save(snapshot)
+                } catch (_: IOException) {}
             }
             return snapshot
         }
@@ -64,15 +71,20 @@ internal suspend fun resumeHistoryStream(
 
 /** Existing indices address on-disk chapter bodies, reading progress and narration bookmarks. */
 internal fun appendRefreshedChapters(saved: QuickStreamData, fresh: QuickStreamData): QuickStreamData? {
-    if (saved.meta != fresh.meta || saved.sourceUrl.isNullOrBlank() || saved.sourceUrl != fresh.sourceUrl ||
-        fresh.data.size <= saved.data.size || fresh.data.any { it.url.isBlank() } ||
-        saved.data.indices.any { saved.data[it].url != fresh.data[it].url }) return null
+    if (
+        saved.meta != fresh.meta ||
+            saved.sourceUrl.isNullOrBlank() ||
+            saved.sourceUrl != fresh.sourceUrl ||
+            fresh.data.size <= saved.data.size ||
+            fresh.data.any { it.url.isBlank() } ||
+            saved.data.indices.any { saved.data[it].url != fresh.data[it].url }
+    )
+        return null
     return saved.copy(
         poster = fresh.poster ?: saved.poster,
         data = (saved.data + fresh.data.drop(saved.data.size)).toMutableList(),
     )
 }
 
-internal fun StreamResponse.quickStreamData(apiName: String): QuickStreamData = QuickStreamData(
-    QuickStreamMetaData(author, name, apiName), posterUrl, data.toMutableList(), sourceUrl = url,
-)
+internal fun StreamResponse.quickStreamData(apiName: String): QuickStreamData =
+    QuickStreamData(QuickStreamMetaData(author, name, apiName), posterUrl, data.toMutableList(), sourceUrl = url)

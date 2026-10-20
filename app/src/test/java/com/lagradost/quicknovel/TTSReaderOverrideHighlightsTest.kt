@@ -41,10 +41,7 @@ class TTSReaderOverrideHighlightsTest {
     @Test
     fun matchingUsesPlaybackSentenceBoundariesAndAnchorsInsteadOfTheWholeParagraph() {
         val highlights = TTSReaderOverrideHighlights()
-        val lines = listOf(
-            TTSHelper.TTSLine("Li.", 100, 103, 2),
-            TTSHelper.TTSLine("Wei.", 104, 108, 2),
-        )
+        val lines = listOf(TTSHelper.TTSLine("Li.", 100, 103, 2), TTSHelper.TTSLine("Wei.", 104, 108, 2))
         highlights.updateRules(listOf(TTSWordOverride(find = "Li. Wei.", replacement = "combined")))
         assertTrue(highlights.forParagraph(lines, 2, 100, 108).isEmpty())
         highlights.updateRules(listOf(TTSWordOverride(find = "^Wei", replacement = "Way", isRegex = true)))

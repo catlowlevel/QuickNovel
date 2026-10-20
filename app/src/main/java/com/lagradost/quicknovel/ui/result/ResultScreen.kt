@@ -93,6 +93,7 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.providers.RoyalRoadProvider
 import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.BrowserRecovery
 import com.lagradost.quicknovel.ui.common.DownloadStateAction
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
@@ -112,7 +113,6 @@ import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
 import com.lagradost.quicknovel.util.AppUtils.openInAppBrowser
-import com.lagradost.quicknovel.ui.common.BrowserRecovery
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI

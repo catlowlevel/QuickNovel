@@ -1,6 +1,10 @@
 package com.lagradost.quicknovel.ai
 
-internal fun validatedAiConfig(provider: AiProvider, config: AiProviderConfig, requireModel: Boolean): AiProviderConfig {
+internal fun validatedAiConfig(
+    provider: AiProvider,
+    config: AiProviderConfig,
+    requireModel: Boolean,
+): AiProviderConfig {
     val baseUrl = config.baseUrl.trim()
     if (baseUrl.isNotEmpty() && aiApiBaseUrlOrNull(baseUrl) == null) throw AiProviderException(AiFailure.INVALID_URL)
     val key = config.apiKey.trim()

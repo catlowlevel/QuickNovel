@@ -8,7 +8,8 @@ class TTSPlaybackControl {
     private val pendingSkip = AtomicInteger()
     private val changes = Channel<Unit>(Channel.CONFLATED)
 
-    val hasPendingSkip: Boolean get() = pendingSkip.get() != 0
+    val hasPendingSkip: Boolean
+        get() = pendingSkip.get() != 0
 
     fun skip(offset: Int) {
         pendingSkip.addAndGet(offset)

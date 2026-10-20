@@ -18,9 +18,10 @@ class ChapterTitlesTest {
 
     @Test
     fun decodesNamedPunctuationAndUnicodeWithoutLosingCharacters() {
-        assertEquals("“Winter’s End” & 火 🔥\u00a0", chapterTitleText(
-            "&ldquo;Winter&rsquo;s End&rdquo; &amp; &#28779; &#x1F525;&nbsp;"
-        ))
+        assertEquals(
+            "“Winter’s End” & 火 🔥\u00a0",
+            chapterTitleText("&ldquo;Winter&rsquo;s End&rdquo; &amp; &#28779; &#x1F525;&nbsp;"),
+        )
     }
 
     @Test
@@ -46,7 +47,8 @@ class ChapterTitlesTest {
 
     @Test
     fun previouslySavedChapterTitlesDisplayCorrectlyWithoutRewritingMetadata() {
-        val json = """{"name":"The Captain&#039;s Map","url":"https://example.com/chapter?x=1&y=2","dateOfRelease":"Today","views":42}"""
+        val json =
+            """{"name":"The Captain&#039;s Map","url":"https://example.com/chapter?x=1&y=2","dateOfRelease":"Today","views":42}"""
         val chapter = DataStore.mapper.readValue(json, ChapterData::class.java)
         assertEquals("The Captain's Map", chapter.displayName)
         assertEquals("The Captain&#039;s Map", chapter.name)

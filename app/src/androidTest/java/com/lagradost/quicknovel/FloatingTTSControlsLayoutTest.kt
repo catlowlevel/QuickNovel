@@ -22,7 +22,11 @@ class FloatingTTSControlsLayoutTest {
     private fun touch(view: View, action: Int, x: Float, y: Float) {
         val time = SystemClock.uptimeMillis()
         val event = MotionEvent.obtain(time, time, action, x, y, 0)
-        try { view.dispatchTouchEvent(event) } finally { event.recycle() }
+        try {
+            view.dispatchTouchEvent(event)
+        } finally {
+            event.recycle()
+        }
     }
 
     private inner class Fixture(activity: AiSettingsActivity) {
@@ -30,11 +34,27 @@ class FloatingTTSControlsLayoutTest {
         val binding = FloatingTtsControlsBinding.inflate(activity.layoutInflater, container, true)
         val saved = mutableListOf<FloatingControlsPosition>()
         var playbackClicks = 0
-        fun bounds() = FloatingControlsBounds.forArea(0f, 0f, container.width.toFloat(), container.height.toFloat(),
-            binding.root.width.toFloat(), binding.root.height.toFloat())
-        val controls = FloatingTTSControls(binding, FloatingControlsPosition(0f, 0f), ::bounds,
-            savePosition = { saved += it }, togglePlayback = { playbackClicks++ },
-            previousSentence = { error("Dragging must not navigate") }, nextSentence = { error("Dragging must not navigate") })
+
+        fun bounds() =
+            FloatingControlsBounds.forArea(
+                0f,
+                0f,
+                container.width.toFloat(),
+                container.height.toFloat(),
+                binding.root.width.toFloat(),
+                binding.root.height.toFloat(),
+            )
+
+        val controls =
+            FloatingTTSControls(
+                binding,
+                FloatingControlsPosition(0f, 0f),
+                ::bounds,
+                savePosition = { saved += it },
+                togglePlayback = { playbackClicks++ },
+                previousSentence = { error("Dragging must not navigate") },
+                nextSentence = { error("Dragging must not navigate") },
+            )
 
         init {
             controls.watchContainerLayout(container, controls::reposition)

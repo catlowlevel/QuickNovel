@@ -29,21 +29,38 @@ internal class ReaderAiProgressOverlay(
         binding.progress.visibility = if (waiting == null) View.VISIBLE else View.INVISIBLE
         when {
             running != null -> {
-                binding.chapter.text = if (running.continuous) resources.getString(R.string.ai_summary_continuous_progress,
-                    running.completedChapters, running.plan.chapter.title) else running.plan.chapter.title
-                binding.count.text = resources.getQuantityString(R.plurals.ai_generated_token_count,
-                    running.generatedTokens.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
-                    NumberFormat.getIntegerInstance().format(running.generatedTokens))
+                binding.chapter.text =
+                    if (running.continuous)
+                        resources.getString(
+                            R.string.ai_summary_continuous_progress,
+                            running.completedChapters,
+                            running.plan.chapter.title,
+                        )
+                    else running.plan.chapter.title
+                binding.count.text =
+                    resources.getQuantityString(
+                        R.plurals.ai_generated_token_count,
+                        running.generatedTokens.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
+                        NumberFormat.getIntegerInstance().format(running.generatedTokens),
+                    )
             }
             waiting != null -> {
-                binding.chapter.text = resources.getQuantityString(R.plurals.ai_summary_continuous_done,
-                    waiting.completedChapters, waiting.completedChapters)
+                binding.chapter.text =
+                    resources.getQuantityString(
+                        R.plurals.ai_summary_continuous_done,
+                        waiting.completedChapters,
+                        waiting.completedChapters,
+                    )
                 binding.count.text = resources.getString(R.string.ai_summary_continuous_waiting, waiting.nextTitle)
             }
             ready != null -> {
                 binding.chapter.text = ready.plan.chapter.title
-                binding.count.text = resources.getQuantityString(R.plurals.ai_summary_continuous_done,
-                    ready.completedChapters + 1, ready.completedChapters + 1)
+                binding.count.text =
+                    resources.getQuantityString(
+                        R.plurals.ai_summary_continuous_done,
+                        ready.completedChapters + 1,
+                        ready.completedChapters + 1,
+                    )
             }
         }
         if (changed) {

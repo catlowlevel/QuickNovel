@@ -10,9 +10,10 @@ class TTSSentenceParserIntegrationTest {
         val lines = TTSHelper.ttsParseText(text, 6)
         assertEquals(2, lines.size)
         for (line in lines) assertEquals(text.substring(line.startChar, line.endChar), line.speakOutMsg)
-        val highlights = TTSReaderOverrideHighlights().apply {
-            updateRules(listOf(TTSWordOverride(find = "Smith", replacement = "Smyth")))
-        }
+        val highlights =
+            TTSReaderOverrideHighlights().apply {
+                updateRules(listOf(TTSWordOverride(find = "Smith", replacement = "Smyth")))
+            }
         val start = text.indexOf("Smith")
         assertEquals(listOf(TTSOverrideMatch(start, start + 5)), highlights.forParagraph(lines, 6, 0, text.length))
         assertEquals(text.substring(0, text.indexOf(" Then")), text.substring(lines[0].startChar, lines[0].endChar))
@@ -22,26 +23,30 @@ class TTSSentenceParserIntegrationTest {
     fun pronunciationRulesCanHighlightEntirelyNonLatinSentences() {
         val text = "你好。再见！"
         val lines = TTSHelper.ttsParseText(text, 6)
-        val highlights = TTSReaderOverrideHighlights().apply {
-            updateRules(listOf(TTSWordOverride(find = "再见", replacement = "回头见")))
-        }
+        val highlights =
+            TTSReaderOverrideHighlights().apply {
+                updateRules(listOf(TTSWordOverride(find = "再见", replacement = "回头见")))
+            }
         assertEquals(listOf(TTSOverrideMatch(3, 5)), highlights.forParagraph(lines, 6, 0, text.length))
     }
 
     @Test
     fun oldOrdinalBookmarksResolveTheSameTextAfterNewSentenceBoundaries() {
-        val cases = listOf(
-            Triple("He met Ms. Smith. He left.", 1, "Smith"),
-            Triple("He said: wait here. Then left.", 1, "wait here"),
-            Triple("Stop! Run. He left.", 1, "He left"),
-        )
+        val cases =
+            listOf(
+                Triple("He met Ms. Smith. He left.", 1, "Smith"),
+                Triple("He said: wait here. Then left.", 1, "wait here"),
+                Triple("Stop! Run. He left.", 1, "He left"),
+            )
         for ((text, ordinal, word) in cases) {
             val character = legacyTtsSentenceCharacter(text, ordinal)
             assertEquals(text.indexOf(word), character)
             val current = TTSHelper.ttsParseText(text, 2)
             val migrated = TTSPlaybackBookmark(2, ordinal, "chapter", character)
-            assertEquals(current.sentenceAtCharacter(text.indexOf(word)),
-                migrated.resolveSentence(current, { it }, current))
+            assertEquals(
+                current.sentenceAtCharacter(text.indexOf(word)),
+                migrated.resolveSentence(current, { it }, current),
+            )
         }
     }
 

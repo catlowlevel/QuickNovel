@@ -11,13 +11,18 @@ import org.junit.rules.TemporaryFolder
 import java.io.IOException
 
 class QuickStreamResumeTest {
-    @get:Rule
-    val temp = TemporaryFolder()
+    @get:Rule val temp = TemporaryFolder()
 
     private val meta = QuickStreamMetaData("A. Writer", "The Glass Harbor", "Test Source")
     private val source = "https://example.com/novel/glass-harbor"
-    private fun snapshot(count: Int = 2) = QuickStreamData(meta, "https://example.com/cover.jpg",
-        (1..count).map { ChapterData("Chapter $it", "https://example.com/chapter/$it") }.toMutableList(), source)
+
+    private fun snapshot(count: Int = 2) =
+        QuickStreamData(
+            meta,
+            "https://example.com/cover.jpg",
+            (1..count).map { ChapterData("Chapter $it", "https://example.com/chapter/$it") }.toMutableList(),
+            source,
+        )
 
     @Test
     fun savedChapterListsSurviveNewCacheInstancesAndPreserveRawMetadata() {
@@ -50,8 +55,16 @@ class QuickStreamResumeTest {
         assertNull(cache.load(meta, source))
         cache.save(snapshot())
         val file = directory.listFiles()!!.single()
-        for (invalid in listOf("", "{", "{}", DataStore.mapper.writeValueAsString(snapshot(0)),
-            DataStore.mapper.writeValueAsString(snapshot().copy(data = mutableListOf(ChapterData("Missing link", "")))))) {
+        for (invalid in
+            listOf(
+                "",
+                "{",
+                "{}",
+                DataStore.mapper.writeValueAsString(snapshot(0)),
+                DataStore.mapper.writeValueAsString(
+                    snapshot().copy(data = mutableListOf(ChapterData("Missing link", "")))
+                ),
+            )) {
             file.writeText(invalid)
             assertNull(cache.load(meta, source))
         }
@@ -74,9 +87,16 @@ class QuickStreamResumeTest {
         val directory = temp.newFolder()
         val cache = FileQuickStreamCache(directory)
         cache.save(snapshot())
-        for (invalid in listOf(snapshot(0), snapshot().copy(sourceUrl = null),
-            snapshot().copy(data = mutableListOf(ChapterData("Missing link", " "))))) {
-            try { cache.save(invalid); fail("Invalid snapshot was saved") } catch (_: IllegalArgumentException) { }
+        for (invalid in
+            listOf(
+                snapshot(0),
+                snapshot().copy(sourceUrl = null),
+                snapshot().copy(data = mutableListOf(ChapterData("Missing link", " "))),
+            )) {
+            try {
+                cache.save(invalid)
+                fail("Invalid snapshot was saved")
+            } catch (_: IllegalArgumentException) {}
             assertEquals(snapshot(), cache.load(meta, source))
         }
         assertTrue(directory.listFiles()!!.none { it.name.endsWith(".tmp") })
@@ -84,29 +104,32 @@ class QuickStreamResumeTest {
 
     @Test
     fun migrationStorageFailureDoesNotPreventReadingValidLegacyMetadata() {
-        val legacy = temp.newFile().apply { writeText(DataStore.mapper.writeValueAsString(snapshot().copy(sourceUrl = null))) }
+        val legacy =
+            temp.newFile().apply { writeText(DataStore.mapper.writeValueAsString(snapshot().copy(sourceUrl = null))) }
         val blockedDirectory = temp.newFile()
         assertEquals(snapshot(), FileQuickStreamCache(blockedDirectory).load(meta, source, legacy))
         try {
             FileQuickStreamCache(blockedDirectory).save(snapshot())
             fail("Storage failure should be reported")
-        } catch (_: IOException) { }
+        } catch (_: IOException) {}
     }
 
     @Test
     fun replacingSnapshotFilesNeverExposesPartialJsonToOtherReaders() = runBlocking {
         val directory = temp.newFolder()
         FileQuickStreamCache(directory).save(snapshot())
-        val writer = async(kotlinx.coroutines.Dispatchers.IO) {
-            repeat(20) { FileQuickStreamCache(directory).save(snapshot(if (it % 2 == 0) 2 else 3)) }
-        }
-        val reader = async(kotlinx.coroutines.Dispatchers.IO) {
-            repeat(40) {
-                val loaded = FileQuickStreamCache(directory).load(meta, source)
-                assertNotNull(loaded)
-                assertTrue(loaded!!.data.size in 2..3)
+        val writer =
+            async(kotlinx.coroutines.Dispatchers.IO) {
+                repeat(20) { FileQuickStreamCache(directory).save(snapshot(if (it % 2 == 0) 2 else 3)) }
             }
-        }
+        val reader =
+            async(kotlinx.coroutines.Dispatchers.IO) {
+                repeat(40) {
+                    val loaded = FileQuickStreamCache(directory).load(meta, source)
+                    assertNotNull(loaded)
+                    assertTrue(loaded!!.data.size in 2..3)
+                }
+            }
         writer.await()
         reader.await()
         assertTrue(directory.listFiles()!!.none { it.name.endsWith(".tmp") })
@@ -119,7 +142,10 @@ class QuickStreamResumeTest {
         val opened = CompletableDeferred<QuickStreamData>()
         resumeHistoryStream(
             loadSaved = { FileQuickStreamCache(directory).load(meta, source) },
-            openSaved = { opened.complete(it); true },
+            openSaved = {
+                opened.complete(it)
+                true
+            },
             openOnline = { fail("Cached resume must not wait for a provider request") },
         )
         assertEquals(snapshot(), opened.await())
@@ -132,8 +158,14 @@ class QuickStreamResumeTest {
         val resume = async {
             resumeHistoryStream(
                 loadSaved = { null },
-                openSaved = { fail("There is no saved list to open"); false },
-                openOnline = { fetchStarted.complete(Unit); fetchFinished.await() },
+                openSaved = {
+                    fail("There is no saved list to open")
+                    false
+                },
+                openOnline = {
+                    fetchStarted.complete(Unit)
+                    fetchFinished.await()
+                },
             )
         }
         fetchStarted.await()
@@ -148,11 +180,17 @@ class QuickStreamResumeTest {
         try {
             resumeHistoryStream(
                 loadSaved = { snapshot() },
-                openSaved = { events += "local"; false },
-                openOnline = { events += "online"; throw IOException("Unavailable") },
+                openSaved = {
+                    events += "local"
+                    false
+                },
+                openOnline = {
+                    events += "online"
+                    throw IOException("Unavailable")
+                },
             )
             fail("Online failure should reach the caller")
-        } catch (_: IOException) { }
+        } catch (_: IOException) {}
         assertEquals(listOf("local", "online"), events)
     }
 
@@ -203,11 +241,14 @@ class QuickStreamResumeTest {
     fun anotherBookProviderOrInvalidExtensionCannotModifyTheCurrentReader() {
         val saved = snapshot()
         val fresh = snapshot(3)
-        for (other in listOf(fresh.copy(sourceUrl = "$source-other"),
-            fresh.copy(meta = meta.copy(apiName = "Other Source")),
-            fresh.copy(meta = meta.copy(name = "Different Book")),
-            fresh.copy(meta = meta.copy(author = "Different Author")),
-            fresh.copy(data = (fresh.data + ChapterData("Invalid", "")).toMutableList()))) {
+        for (other in
+            listOf(
+                fresh.copy(sourceUrl = "$source-other"),
+                fresh.copy(meta = meta.copy(apiName = "Other Source")),
+                fresh.copy(meta = meta.copy(name = "Different Book")),
+                fresh.copy(meta = meta.copy(author = "Different Author")),
+                fresh.copy(data = (fresh.data + ChapterData("Invalid", "")).toMutableList()),
+            )) {
             assertNull(appendRefreshedChapters(saved, other))
         }
     }

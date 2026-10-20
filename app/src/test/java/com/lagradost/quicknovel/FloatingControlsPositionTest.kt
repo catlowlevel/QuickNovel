@@ -9,9 +9,11 @@ class FloatingControlsPositionTest {
     @Test
     fun savedPositionSurvivesStorageAndFitsARotatedViewport() {
         val position = FloatingControlsPosition.fromOffset(104f, 350f, portrait)
-        val restored = DataStore.mapper.readValue(
-            DataStore.mapper.writeValueAsString(position), FloatingControlsPosition::class.java
-        )
+        val restored =
+            DataStore.mapper.readValue(
+                DataStore.mapper.writeValueAsString(position),
+                FloatingControlsPosition::class.java,
+            )
         assertEquals(position, restored)
         val landscape = FloatingControlsBounds.forArea(40f, 70f, 760f, 320f, 152f, 56f)
         val (x, y) = restored.place(landscape)

@@ -35,31 +35,28 @@ import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
-import com.lagradost.quicknovel.ai.AiChapter
-import com.lagradost.quicknovel.ai.AiChapterTextViews
-import com.lagradost.quicknovel.ai.AiOriginalPosition
-import com.lagradost.quicknovel.ai.AiSummaryOutput
-import com.lagradost.quicknovel.ai.AiSummaryChapterSource
-import com.lagradost.quicknovel.ai.AiNextSummaryChapter
-import com.lagradost.quicknovel.ai.AiProviderException
-import com.lagradost.quicknovel.ai.AiFailure
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeyClass
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKeyClass
-import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.BookDownloader2Helper.getQuickChapter
 import com.lagradost.quicknovel.BookDownloader2Helper.quickStreamCache
 import com.lagradost.quicknovel.CommonActivity.TAG
 import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.TTSHelper.parseTextToSpans
 import com.lagradost.quicknovel.TTSHelper.preParseHtml
 import com.lagradost.quicknovel.TTSHelper.ttsParseText
+import com.lagradost.quicknovel.ai.AiChapter
+import com.lagradost.quicknovel.ai.AiChapterTextViews
+import com.lagradost.quicknovel.ai.AiFailure
+import com.lagradost.quicknovel.ai.AiNextSummaryChapter
+import com.lagradost.quicknovel.ai.AiOriginalPosition
+import com.lagradost.quicknovel.ai.AiProviderException
+import com.lagradost.quicknovel.ai.AiSummaryChapterSource
+import com.lagradost.quicknovel.ai.AiSummaryOutput
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.letInner
 import com.lagradost.quicknovel.mvvm.logError
@@ -94,13 +91,16 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
 import io.noties.markwon.image.ImageSizeResolver
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -253,12 +253,10 @@ class QuickBook(data: QuickStreamData) : AbstractBook() {
         return updated
     }
 
-    override fun chapterBrowserUrl(index: Int): String? =
-        chapterBrowserUrlOrNull(data.data, index, ::resolveUrl)
+    override fun chapterBrowserUrl(index: Int): String? = chapterBrowserUrlOrNull(data.data, index, ::resolveUrl)
 
-    override fun playbackId(): String = ttsPlaybackBookKey(
-        "quick", data.meta.apiName, data.meta.author.orEmpty(), data.meta.name
-    )
+    override fun playbackId(): String =
+        ttsPlaybackBookKey("quick", data.meta.apiName, data.meta.author.orEmpty(), data.meta.name)
 
     override fun chapterId(index: Int): String = data.data[index].url
 
@@ -497,7 +495,8 @@ data class LiveChapterData(
 
     private val paragraphPlan by lazy { paragraphFormatPlan(rendered) }
     private val joinedParagraphs by lazy {
-        if (paragraphPlan.joins.isEmpty()) this else {
+        if (paragraphPlan.joins.isEmpty()) this
+        else {
             val formatted = paragraphPlan.apply(rendered)
             copy(rendered = formatted, spans = parseTextToSpans(formatted, index), paragraphSource = this)
         }
@@ -508,18 +507,18 @@ data class LiveChapterData(
         return if (join) source.joinedParagraphs else source
     }
 
-    internal fun sourceCharacter(character: Int): Int = paragraphSource?.paragraphPlan
-        ?.sourceCharacter(character) ?: character.coerceIn(0, rendered.length)
+    internal fun sourceCharacter(character: Int): Int =
+        paragraphSource?.paragraphPlan?.sourceCharacter(character) ?: character.coerceIn(0, rendered.length)
 
-    internal fun displayCharacter(character: Int): Int = paragraphSource?.paragraphPlan
-        ?.displayCharacter(character) ?: character.coerceIn(0, rendered.length)
+    internal fun displayCharacter(character: Int): Int =
+        paragraphSource?.paragraphPlan?.displayCharacter(character) ?: character.coerceIn(0, rendered.length)
 
     internal val joinedSentences by lazy {
         paragraphSource?.paragraphPlan?.let { joinedSentenceRanges(rendered.toString(), it) } ?: emptyList()
     }
 
-    internal fun scrollAt(character: Int) = ScrollIndex(index,
-        spans.lastOrNull { it.start <= character }?.innerIndex ?: 0, character)
+    internal fun scrollAt(character: Int) =
+        ScrollIndex(index, spans.lastOrNull { it.start <= character }?.innerIndex ?: 0, character)
 
     // tts lines are lazy because not everyone uses tts
     val ttsLines by lazy {
@@ -534,8 +533,14 @@ data class ChapterUpdate(
     val ttsChapters: Map<Int, LiveChapterData> = emptyMap(),
 )
 
-data class ReaderChapterInfo(val index: Int, val title: UiText, val wordCount: Int?,
-    val showingSummary: Boolean = false, val hasSummary: Boolean = false, val summaryTruncated: Boolean = false)
+data class ReaderChapterInfo(
+    val index: Int,
+    val title: UiText,
+    val wordCount: Int?,
+    val showingSummary: Boolean = false,
+    val hasSummary: Boolean = false,
+    val summaryTruncated: Boolean = false,
+)
 
 class ReadActivityViewModel : ViewModel() {
     lateinit var book: AbstractBook
@@ -555,17 +560,21 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun resumedApp() {
-        val (leftAt, resumeAt) = synchronized(this) {
-            isInApp = true
-            (leftAppAt to desiredIndex).also { leftAppAt = null }
-        }
+        val (leftAt, resumeAt) =
+            synchronized(this) {
+                isInApp = true
+                (leftAppAt to desiredIndex).also { leftAppAt = null }
+            }
         if (::ttsBookId.isInitialized) refreshPronunciationOverrides()
 
         // Retained speech starts restore normal centering after the chapter list is committed.
         // An ordinary bookmark seek would put the same sentence at the top and race that scroll.
         if (leftAt != null && resumeAt != null && leftAt != resumeAt) {
-            if (autoCenterTTS && currentTTSStatus == TTSHelper.TTSStatus.IsRunning &&
-                sentenceStarts.latest.value != null) {
+            if (
+                autoCenterTTS &&
+                    currentTTSStatus == TTSHelper.TTSStatus.IsRunning &&
+                    sentenceStarts.latest.value != null
+            ) {
                 updateReadArea()
             } else {
                 scrollToDesired(resumeAt)
@@ -636,11 +645,13 @@ class ReadActivityViewModel : ViewModel() {
     private fun displayedChapter(data: LiveChapterData): LiveChapterData =
         (summaryTextViews.displayed(summarySourceChapter(data))?.content ?: data).paragraphs(joinBrokenParagraphs)
 
-    private fun displayedWordCount(index: Int): Int? = (chapterData[index] as? Resource.Success)
-        ?.value?.let { displayedChapter(it).wordCount } ?: chapterWordCounts[index]
+    private fun displayedWordCount(index: Int): Int? =
+        (chapterData[index] as? Resource.Success)?.value?.let { displayedChapter(it).wordCount }
+            ?: chapterWordCounts[index]
 
-    private fun showingSummary(index: Int): Boolean = index in 0 until book.size() &&
-        summaryTextViews.originalPosition(book.playbackId(), book.chapterId(index)) != null
+    private fun showingSummary(index: Int): Boolean =
+        index in 0 until book.size() &&
+            summaryTextViews.originalPosition(book.playbackId(), book.chapterId(index)) != null
 
     private fun stopNarrationForTextSwitch(index: Int) {
         if (currentIndex == index || _ttsLine.value?.index == index) {
@@ -650,35 +661,41 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    suspend fun showSummary(source: AiChapter, output: AiSummaryOutput): Boolean = chapterMutex.withLock {
-        if (!::book.isInitialized || book.playbackId() != source.bookId) return@withLock false
-        val index = (0 until book.size()).firstOrNull { book.chapterId(it) == source.chapterId } ?: return@withLock false
-        val data = (chapterData[index] as? Resource.Success)?.value ?: return@withLock false
-        if (data.originalPlainText != source.text || output.text.isBlank()) return@withLock false
-        if (summaryTextViews.displayed(source)?.output == output) return@withLock true
-        val rendered = output.text.toSpanned()
-        val content = data.copy(rendered = rendered, spans = parseTextToSpans(rendered, index))
-        val position = desiredIndex?.takeIf { it.index == index }
-            ?.let { AiOriginalPosition(it.innerIndex, displayedChapter(data).sourceCharacter(it.char)) } ?: AiOriginalPosition()
-        summaryTextViews.show(source, output, content, position)
-        stopNarrationForTextSwitch(index)
-        if (currentIndex == index) {
-            desiredTTSIndex = ScrollIndex(index, 0, 0)
-            scrollToDesired(ScrollIndex(index, 0, 0))
-        } else notifyChapterUpdate(index)
-        true
-    }
+    suspend fun showSummary(source: AiChapter, output: AiSummaryOutput): Boolean =
+        chapterMutex.withLock {
+            if (!::book.isInitialized || book.playbackId() != source.bookId) return@withLock false
+            val index =
+                (0 until book.size()).firstOrNull { book.chapterId(it) == source.chapterId } ?: return@withLock false
+            val data = (chapterData[index] as? Resource.Success)?.value ?: return@withLock false
+            if (data.originalPlainText != source.text || output.text.isBlank()) return@withLock false
+            if (summaryTextViews.displayed(source)?.output == output) return@withLock true
+            val rendered = output.text.toSpanned()
+            val content = data.copy(rendered = rendered, spans = parseTextToSpans(rendered, index))
+            val position =
+                desiredIndex
+                    ?.takeIf { it.index == index }
+                    ?.let { AiOriginalPosition(it.innerIndex, displayedChapter(data).sourceCharacter(it.char)) }
+                    ?: AiOriginalPosition()
+            summaryTextViews.show(source, output, content, position)
+            stopNarrationForTextSwitch(index)
+            if (currentIndex == index) {
+                desiredTTSIndex = ScrollIndex(index, 0, 0)
+                scrollToDesired(ScrollIndex(index, 0, 0))
+            } else notifyChapterUpdate(index)
+            true
+        }
 
-    suspend fun restoreOriginalChapter(): Boolean = chapterMutex.withLock {
-        val data = (chapterData[currentIndex] as? Resource.Success)?.value ?: return@withLock false
-        val position = summaryTextViews.restore(summarySourceChapter(data)) ?: return@withLock false
-        stopNarrationForTextSwitch(data.index)
-        val displayed = displayedChapter(data)
-        val scroll = displayed.scrollAt(displayed.displayCharacter(position.character))
-        desiredTTSIndex = scroll
-        scrollToDesired(scroll)
-        true
-    }
+    suspend fun restoreOriginalChapter(): Boolean =
+        chapterMutex.withLock {
+            val data = (chapterData[currentIndex] as? Resource.Success)?.value ?: return@withLock false
+            val position = summaryTextViews.restore(summarySourceChapter(data)) ?: return@withLock false
+            stopNarrationForTextSwitch(data.index)
+            val displayed = displayedChapter(data)
+            val scroll = displayed.scrollAt(displayed.displayCharacter(position.character))
+            desiredTTSIndex = scroll
+            scrollToDesired(scroll)
+            true
+        }
 
     var mlSettings
         get() = getKey<MLSettings>(EPUB_CURRENT_ML, book.title()) ?: MLSettings("en", "en", TranslatorAgents.OFFLINE)
@@ -780,8 +797,15 @@ class ReadActivityViewModel : ViewModel() {
         val title = chaptersTitlesInternal.getOrNull(index) ?: return
         val source = (chapterData[index] as? Resource.Success)?.value?.let(::summarySourceChapter)
         val summary = source?.let { summaryTextViews.saved(it) }
-        val info = ReaderChapterInfo(index, title, displayedWordCount(index), summary?.showing == true,
-            summary != null, summary?.takeIf { it.showing }?.output?.truncated == true)
+        val info =
+            ReaderChapterInfo(
+                index,
+                title,
+                displayedWordCount(index),
+                summary?.showing == true,
+                summary != null,
+                summary?.takeIf { it.showing }?.output?.truncated == true,
+            )
         _chapterInfo.postValue(info)
     }
 
@@ -944,8 +968,15 @@ class ReadActivityViewModel : ViewModel() {
     private fun chapterHeader(index: Int, canReload: Boolean): ChapterStartSpanned {
         val source = (chapterData[index] as? Resource.Success)?.value?.let(::summarySourceChapter)
         val summary = source?.let { summaryTextViews.displayed(it) }
-        return ChapterStartSpanned(index, 0, chaptersTitlesInternal[index], canReload, displayedWordCount(index),
-            showingSummary = summary != null, summaryTruncated = summary?.output?.truncated == true)
+        return ChapterStartSpanned(
+            index,
+            0,
+            chaptersTitlesInternal[index],
+            canReload,
+            displayedWordCount(index),
+            showingSummary = summary != null,
+            summaryTruncated = summary?.output?.truncated == true,
+        )
     }
 
     private fun updateReadArea(seekToDesired: Boolean = false) {
@@ -996,10 +1027,16 @@ class ReadActivityViewModel : ViewModel() {
             }
         }
 
-        val ttsChapters = chapters.filterIsInstance<TextSpan>().map { it.index }.distinct().mapNotNull { index ->
-            val chapter = chapterData[index]
-            if (chapter is Resource.Success) index to displayedChapter(chapter.value) else null
-        }.toMap()
+        val ttsChapters =
+            chapters
+                .filterIsInstance<TextSpan>()
+                .map { it.index }
+                .distinct()
+                .mapNotNull { index ->
+                    val chapter = chapterData[index]
+                    if (chapter is Resource.Success) index to displayedChapter(chapter.value) else null
+                }
+                .toMap()
         _chapterData.postValue(ChapterUpdate(data = chapters, seekToDesired = seekToDesired, ttsChapters = ttsChapters))
     }
 
@@ -1060,10 +1097,7 @@ class ReadActivityViewModel : ViewModel() {
                     // only push one no more chapters
                     if (index == book.size()) {
                         chapterData[index] =
-                            Resource.Failure(
-                                null,
-                                context?.getString(R.string.no_more_chapters) ?: "ERROR"
-                            )
+                            Resource.Failure(null, context?.getString(R.string.no_more_chapters) ?: "ERROR")
                     } else {
                         chapterData.remove(index)
                     }
@@ -1354,8 +1388,7 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    @Volatile
-    private var readerBackgroundWorkPending = false
+    @Volatile private var readerBackgroundWorkPending = false
     private var refreshSavedChapterList = false
 
     /** Called after the first list has been committed and its saved scroll position restored. */
@@ -1378,23 +1411,30 @@ class ReadActivityViewModel : ViewModel() {
         try {
             val response = Apis.getApiFromName(saved.meta.apiName).load(sourceUrl, allowCache = false)
             currentCoroutineContext().ensureActive()
-            val fresh = ((response as? Resource.Success)?.value as? StreamResponse)
-                ?.quickStreamData(saved.meta.apiName)?.copy(sourceUrl = sourceUrl) ?: return
-            val updated = chapterExpandMutex.withLock {
-                val previousSize = quickBook.size()
-                val appended = quickBook.appendRefreshedChapters(fresh) ?: return@withLock null
-                chapterMutex.withLock {
-                    // Discard an old end-of-book failure so newly appended chapters can load.
-                    chapterData.keys.filter { it >= previousSize }.forEach { chapterData.remove(it) }
-                    requested.removeAll { it >= previousSize }
-                    hasExpanded.remove(previousSize)
-                }
-                updateChapters()
-                summaryChapterChanges.update { it + 1 }
-                updateReadArea()
-                appended
-            } ?: return
-            try { context?.quickStreamCache()?.save(updated) } catch (error: IOException) { logError(error) }
+            val fresh =
+                ((response as? Resource.Success)?.value as? StreamResponse)
+                    ?.quickStreamData(saved.meta.apiName)
+                    ?.copy(sourceUrl = sourceUrl) ?: return
+            val updated =
+                chapterExpandMutex.withLock {
+                    val previousSize = quickBook.size()
+                    val appended = quickBook.appendRefreshedChapters(fresh) ?: return@withLock null
+                    chapterMutex.withLock {
+                        // Discard an old end-of-book failure so newly appended chapters can load.
+                        chapterData.keys.filter { it >= previousSize }.forEach { chapterData.remove(it) }
+                        requested.removeAll { it >= previousSize }
+                        hasExpanded.remove(previousSize)
+                    }
+                    updateChapters()
+                    summaryChapterChanges.update { it + 1 }
+                    updateReadArea()
+                    appended
+                } ?: return
+            try {
+                context?.quickStreamCache()?.save(updated)
+            } catch (error: IOException) {
+                logError(error)
+            }
             if (currentIndex >= saved.data.lastIndex) updateIndex(currentIndex)
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -1572,23 +1612,32 @@ class ReadActivityViewModel : ViewModel() {
 
     var ttsSession: TTSSession? = null
 
-    @Volatile
-    private var speechOverrides = TTSOverrideEngine(emptyList())
+    @Volatile private var speechOverrides = TTSOverrideEngine(emptyList())
     internal val pronunciationOverridesLive = MutableLiveData<List<TTSWordOverride>>(emptyList())
 
-    internal fun pronunciationOverrideCollections(): TTSOverrideCollections = TTSOverrideCollections(
-        global = getKey<TTSWordOverrides>(EPUB_TTS_WORD_OVERRIDES)?.rules.orEmpty(),
-        local = if (::ttsBookId.isInitialized) getKey<TTSWordOverrides>(ttsLocalOverrideKey(ttsBookId))?.rules.orEmpty()
-            else emptyList(),
-    )
+    internal fun pronunciationOverrideCollections(): TTSOverrideCollections =
+        TTSOverrideCollections(
+            global = getKey<TTSWordOverrides>(EPUB_TTS_WORD_OVERRIDES)?.rules.orEmpty(),
+            local =
+                if (::ttsBookId.isInitialized) getKey<TTSWordOverrides>(ttsLocalOverrideKey(ttsBookId))?.rules.orEmpty()
+                else emptyList(),
+        )
 
     internal fun updatePronunciationOverrides(collections: TTSOverrideCollections) {
         if (!::ttsBookId.isInitialized) return
         val appContext = context ?: return
         // Persist both scopes together so a transfer cannot lose a rule between writes.
-        appContext.getSharedPrefs().edit()
-            .putString(EPUB_TTS_WORD_OVERRIDES, DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.global)))
-            .putString(ttsLocalOverrideKey(ttsBookId), DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.local)))
+        appContext
+            .getSharedPrefs()
+            .edit()
+            .putString(
+                EPUB_TTS_WORD_OVERRIDES,
+                DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.global)),
+            )
+            .putString(
+                ttsLocalOverrideKey(ttsBookId),
+                DataStore.mapper.writeValueAsString(TTSWordOverrides(collections.local)),
+            )
             .apply()
         val rules = collections.effectiveRules()
         speechOverrides = TTSOverrideEngine(rules)
@@ -1602,12 +1651,9 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     private lateinit var ttsBookId: String
-    @Volatile
-    private var ttsBookmark: TTSPlaybackBookmark? = null
-    @Volatile
-    private var resumeTTSPosition = true
-    @Volatile
-    private var ttsStartIndex: ScrollIndex? = null
+    @Volatile private var ttsBookmark: TTSPlaybackBookmark? = null
+    @Volatile private var resumeTTSPosition = true
+    @Volatile private var ttsStartIndex: ScrollIndex? = null
 
     private fun initTTSSession(context: Context) {
         refreshPronunciationOverrides()
@@ -1766,15 +1812,22 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 val visible = ttsStartIndex ?: desiredTTSIndex ?: desiredIndex
-                val bookmark = ttsBookmark?.takeIf { resumeTTSPosition && !showingSummary(visible?.index ?: currentIndex) &&
-                    summaryTextViews.originalPosition(book.playbackId(), it.chapterId) == null }
-                fun bookmarkedChapter(): Int? = bookmark?.resolveChapter(
-                    (0 until book.size()).map { book.chapterId(it) }
-                )
+                val bookmark =
+                    ttsBookmark?.takeIf {
+                        resumeTTSPosition &&
+                            !showingSummary(visible?.index ?: currentIndex) &&
+                            summaryTextViews.originalPosition(book.playbackId(), it.chapterId) == null
+                    }
+                fun bookmarkedChapter(): Int? =
+                    bookmark?.resolveChapter((0 until book.size()).map { book.chapterId(it) })
 
                 var resumeChapter = bookmarkedChapter()
-                if (bookmark != null && resumeChapter == null && bookmark.chapter >= book.size() &&
-                    bookmark.sentence >= 0 && bookmark.chapterId.isNotBlank()
+                if (
+                    bookmark != null &&
+                        resumeChapter == null &&
+                        bookmark.chapter >= book.size() &&
+                        bookmark.sentence >= 0 &&
+                        bookmark.chapterId.isNotBlank()
                 ) {
                     // Some providers discover their following chapters only as they are loaded.
                     loadIndividualChapter(bookmark.chapter, notify = false)
@@ -1920,9 +1973,10 @@ class ReadActivityViewModel : ViewModel() {
 
                         val skip = ttsPlaybackControl.takeSkip()
                         if (skip != 0) {
-                            val target = TTSSentencePosition(index, ttsInnerIndex).movedBy(skip, book.size()) {
-                                awaitLines(it)?.size
-                            } ?: return@withLock
+                            val target =
+                                TTSSentencePosition(index, ttsInnerIndex).movedBy(skip, book.size()) {
+                                    awaitLines(it)?.size
+                                } ?: return@withLock
                             index = target.chapter
                             ttsInnerIndex = target.sentence
                             navigated = true
@@ -1936,7 +1990,9 @@ class ReadActivityViewModel : ViewModel() {
                         val spokenLine = overrides.prepare(line)
                         if (spokenLine == null) {
                             ttsSession.interruptTTS()
-                            _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true))
+                            _ttsProgress.postValue(
+                                TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true)
+                            )
                             ttsInnerIndex++
                             continue
                         }
@@ -1962,7 +2018,11 @@ class ReadActivityViewModel : ViewModel() {
                         }
 
                         // Revisit this sentence after a pause/skip; only completed speech advances.
-                        if (interrupted || currentTTSStatus != TTSHelper.TTSStatus.IsRunning || ttsPlaybackControl.hasPendingSkip) {
+                        if (
+                            interrupted ||
+                                currentTTSStatus != TTSHelper.TTSStatus.IsRunning ||
+                                ttsPlaybackControl.hasPendingSkip
+                        ) {
                             continue
                         }
                         _ttsProgress.postValue(TTSPlaybackProgress.from(lines, ttsInnerIndex, sentenceFinished = true))
@@ -2153,7 +2213,10 @@ class ReadActivityViewModel : ViewModel() {
                 }
                 player.setOnPreparedListener { if (dummySound === player) player.start() }
                 player.setOnCompletionListener { finish() }
-                player.setOnErrorListener { _, _, _ -> finish(); true }
+                player.setOnErrorListener { _, _, _ ->
+                    finish()
+                    true
+                }
                 player.prepareAsync()
             } catch (error: Throwable) {
                 finish()
@@ -2193,7 +2256,8 @@ class ReadActivityViewModel : ViewModel() {
     var scrollWithVolume by PreferenceDelegate(EPUB_SCROLL_VOL, true, Boolean::class)
     var authorNotes by PreferenceDelegate(EPUB_AUTHOR_NOTES, true, Boolean::class)
     private var paragraphFormattingEnabled by PreferenceDelegate(EPUB_JOIN_BROKEN_PARAGRAPHS, false, Boolean::class)
-    val joinBrokenParagraphs: Boolean get() = paragraphFormattingEnabled
+    val joinBrokenParagraphs: Boolean
+        get() = paragraphFormattingEnabled
 
     fun setParagraphFormatting(enabled: Boolean) = viewModelScope.launch {
         chapterMutex.withLock {
@@ -2306,14 +2370,11 @@ class ReadActivityViewModel : ViewModel() {
     )
 
     val floatingTTSControlsLive = MutableLiveData<Boolean>()
-    var floatingTTSControls by PreferenceDelegateLiveView(
-        EPUB_TTS_FLOATING_CONTROLS, false, Boolean::class, floatingTTSControlsLive
-    )
+    var floatingTTSControls by
+        PreferenceDelegateLiveView(EPUB_TTS_FLOATING_CONTROLS, false, Boolean::class, floatingTTSControlsLive)
 
     val autoCenterTTSLive = MutableLiveData<Boolean>()
-    var autoCenterTTS by PreferenceDelegateLiveView(
-        EPUB_TTS_AUTO_CENTER, false, Boolean::class, autoCenterTTSLive
-    )
+    var autoCenterTTS by PreferenceDelegateLiveView(EPUB_TTS_AUTO_CENTER, false, Boolean::class, autoCenterTTSLive)
 
     val blurUpcomingTTSLive = MutableLiveData<Boolean>()
     var blurUpcomingTTS by PreferenceDelegateLiveView(

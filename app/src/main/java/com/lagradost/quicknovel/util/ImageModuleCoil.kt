@@ -25,9 +25,9 @@ import coil3.request.crossfade
 import coil3.util.DebugLogger
 import com.lagradost.nicehttp.ignoreAllSSLErrors
 import com.lagradost.quicknovel.BuildConfig
-import com.lagradost.quicknovel.network.CloudflareKiller
-import com.lagradost.quicknovel.network.BrowserSessionInterceptor
 import com.lagradost.quicknovel.network.BrowserRequestOriginInterceptor
+import com.lagradost.quicknovel.network.BrowserSessionInterceptor
+import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.network.WebViewBrowserCookies
 import com.lagradost.quicknovel.ui.UiImage
 import okhttp3.HttpUrl
