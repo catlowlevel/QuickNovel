@@ -21,21 +21,39 @@
         android:textSize="20sp"
         android:textStyle="bold" />
 
-    <androidx.appcompat.widget.SearchView
-        android:id="@+id/chapter_search"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="48dp"
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
         android:layout_marginTop="6dp"
         android:layout_marginBottom="6dp"
-        android:background="@drawable/search_background"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        app:iconifiedByDefault="false"
-        app:queryBackground="@color/transparent"
-        app:queryHint="@string/search_chapters"
-        app:searchIcon="@drawable/search_icon_white" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/chapter_search"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@drawable/search_background"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            app:iconifiedByDefault="false"
+            app:queryBackground="@color/transparent"
+            app:queryHint="@string/search_chapters"
+            app:searchIcon="@drawable/search_icon_white" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/chapter_sort"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/reverse_chapter_order"
+            app:srcCompat="@drawable/ic_sort_24dp"
+            app:tint="?attr/textColor" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/chapter_search_empty"

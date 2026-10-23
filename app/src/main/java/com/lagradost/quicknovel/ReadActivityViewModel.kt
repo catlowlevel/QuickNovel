@@ -769,6 +769,7 @@ class ReadActivityViewModel : ViewModel() {
 
     var desiredIndex: ScrollIndex? = null
     var desiredTTSIndex: ScrollIndex? = null
+    var chapterListReversed: Boolean = false
 
     private fun updateChapters() {
         for (idx in chaptersTitlesInternal.size until book.size()) {

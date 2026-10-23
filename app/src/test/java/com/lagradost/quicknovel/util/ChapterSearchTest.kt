@@ -57,4 +57,28 @@ class ChapterSearchTest {
         assertEquals(3, matches[1].index)
         assertEquals(3, filterChapterTitles(titles, "") { it.value }[3].index)
     }
+
+    @Test
+    fun reversingFilteredPickerResultsKeepsDuplicateChapterIdentityAndCanRestoreOriginalOrder() {
+        val titles = listOf("Prologue", "The Gate", "Interlude", "The Gate").withIndex().toList()
+        val reversed = filterChapterTitles(titles, "gate", reverse = true) { it.value }
+        assertEquals(listOf(3, 1), reversed.map { it.index })
+        assertEquals(0, reversed.indexOfFirst { it.index == 3 })
+        assertEquals(1, reversed[1].index) // Navigation still addresses the original chapter.
+        assertEquals(listOf(1, 3), filterChapterTitles(titles, "gate", reverse = false) { it.value }.map { it.index })
+        assertEquals(listOf(3, 2, 1, 0), filterChapterTitles(titles, "", reverse = true) { it.value }.map { it.index })
+        assertEquals(listOf(0, 1, 2, 3), titles.map { it.index })
+    }
+
+    @Test
+    fun reverseUsesChapterSequenceRatherThanLexicalTitleOrderAndPreservesSearchMatching() {
+        val earlier = ChapterData("Chapter 2: Arrival", "/chapter/2")
+        val later = ChapterData("Chapter 10: Arrival", "/chapter/10")
+        val chapters = listOf(earlier, later)
+        val reversed = filterChapterTitles(chapters, "  ARRIVAL  ", reverse = true) { it.name }
+        assertSame(later, reversed[0])
+        assertSame(earlier, reversed[1])
+        assertEquals(chapters, filterChapterTitles(chapters, "", reverse = false) { it.name })
+        assertTrue(filterChapterTitles(chapters, "missing", reverse = true) { it.name }.isEmpty())
+    }
 }

@@ -85,6 +85,9 @@ import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.divCeil
 import com.lagradost.quicknovel.util.filterChapterTitles
+import com.lagradost.quicknovel.ui.ChapterListScrollPosition
+import com.lagradost.quicknovel.ui.chapterScrollPosition
+import com.lagradost.quicknovel.ui.restoreChapterScrollPosition
 import com.lagradost.quicknovel.util.toPx
 import kotlinx.coroutines.launch
 import java.lang.Integer.max
@@ -1314,7 +1317,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
                 val chapterTitles = titles.map { it.asString(this) }.withIndex().toList()
                 var visibleChapters = chapterTitles
-                val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
+                val arrayAdapter = ArrayAdapter<String>(this, R.layout.reader_chapter_item)
                 arrayAdapter.addAll(visibleChapters.map { it.value })
 
                 builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
@@ -1336,8 +1339,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
                 dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
 
-                fun filterChapters(query: String) {
-                    visibleChapters = filterChapterTitles(chapterTitles, query) { it.value }
+                fun filterChapters(query: String, scroll: ChapterListScrollPosition? = null) {
+                    visibleChapters = filterChapterTitles(chapterTitles, query, viewModel.chapterListReversed) { it.value }
                     arrayAdapter.setNotifyOnChange(false)
                     arrayAdapter.clear()
                     arrayAdapter.addAll(visibleChapters.map { it.value })
@@ -1346,8 +1349,25 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     dialog.listView.clearChoices()
                     val selectedPosition = visibleChapters.indexOfFirst { it.index == currentChapter }
                     if (selectedPosition >= 0) dialog.listView.setItemChecked(selectedPosition, true)
-                    dialog.listView.setSelection(if (query.isBlank() && selectedPosition >= 0) selectedPosition else 0)
+                    if (scroll == null || !dialog.listView.restoreChapterScrollPosition(scroll)) {
+                        dialog.listView.setSelection(if (query.isBlank() && selectedPosition >= 0) selectedPosition else 0)
+                    }
                 }
+
+                fun updateSortButton() {
+                    header.chapterSort.scaleY = if (viewModel.chapterListReversed) -1f else 1f
+                    val order = getString(if (viewModel.chapterListReversed) R.string.chapter_order_last_to_first
+                        else R.string.chapter_order_first_to_last)
+                    ViewCompat.setStateDescription(header.chapterSort, order)
+                    androidx.appcompat.widget.TooltipCompat.setTooltipText(header.chapterSort, order)
+                }
+                header.chapterSort.setOnClickListener {
+                    val scroll = dialog.listView.chapterScrollPosition()
+                    viewModel.chapterListReversed = !viewModel.chapterListReversed
+                    updateSortButton()
+                    filterChapters(header.chapterSearch.query.toString(), scroll)
+                }
+                updateSortButton()
 
                 header.chapterSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                     override fun onQueryTextSubmit(query: String): Boolean {

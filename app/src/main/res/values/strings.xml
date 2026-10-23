@@ -70,6 +70,9 @@
     <string name="browser_verify">Open browser</string>
     <string name="browser_recovery_hint">If the site asks for verification, complete it in the browser, then return and retry.</string>
     <string name="select_chapter">Select Chapter</string>
+    <string name="reverse_chapter_order">Reverse chapter order</string>
+    <string name="chapter_order_first_to_last">First to last</string>
+    <string name="chapter_order_last_to_first">Last to first</string>
     <string name="select_location">Select location</string>
     <string name="poster_descript">Poster</string>
     <string name="sort_downloads_descript">Sort Downloads</string>
