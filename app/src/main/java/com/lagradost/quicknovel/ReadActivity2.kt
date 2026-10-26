@@ -313,12 +313,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.forwardsTTS()
                     return true
                 } else if (viewModel.scrollWithVolume) {
-                    val bottomY = getBottomY()
-                    val lines = getAllLines()
-                    val line = lines.firstOrNull {
-                        it.bottom >= bottomY
-                    } ?: lines.lastOrNull() ?: return true
-                    binding.realText.scrollBy(0, line.top - getTopY())
+                    binding.realText.smoothScrollBy(0, (getBottomY() - getTopY()).coerceAtLeast(0) / 2)
 
                     return true
                 }
@@ -329,15 +324,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.backwardsTTS()
                     return true
                 } else if (viewModel.scrollWithVolume) {
-                    binding.realText.scrollBy(0, getTopY() - getBottomY())
-                    binding.realText.post {
-                        val lines = getAllLines()
-                        val topY = getTopY()
-                        val line = lines.firstOrNull {
-                            it.top >= topY
-                        } ?: return@post
-                        binding.realText.scrollBy(0, line.top - getTopY())
-                    }
+                    binding.realText.smoothScrollBy(0, -(getBottomY() - getTopY()).coerceAtLeast(0) / 2)
 
                     return true
                 }
