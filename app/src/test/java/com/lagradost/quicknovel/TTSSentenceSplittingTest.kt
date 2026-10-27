@@ -476,6 +476,76 @@ class TTSSentenceSplittingTest(private val example: Example) {
                 "They listened.",
             )
 
+            // Original everyday dialogue, preserving brackets and exact source offsets.
+            example(
+                "bracketed warning with extended attribution and several sentences in the reply",
+                "[I warned you that leaving the window open would soak the floor.] " +
+                    "Alice said, looking at the puddles spreading under the table, " +
+                    "her coat still wet, [This is worse than I expected, Bob. " +
+                    "The carpet’s backing has started to peel. " +
+                    "It now needs the same repair as the one in the hallway. " +
+                    "Do you know how much that costs?]",
+                "[I warned you that leaving the window open would soak the floor.] " +
+                    "Alice said, looking at the puddles spreading under the table, " +
+                    "her coat still wet, [This is worse than I expected, Bob.",
+                "The carpet’s backing has started to peel.",
+                "It now needs the same repair as the one in the hallway.",
+                "Do you know how much that costs?]",
+            )
+            example(
+                "brackets do not turn several spoken sentences into one unit",
+                "[The main road is closed. The buses cannot reach the station! Can you call a taxi?]",
+                "[The main road is closed.",
+                "The buses cannot reach the station!",
+                "Can you call a taxi?]",
+            )
+            example(
+                "bracketed dialogue keeps a named speech attribution",
+                "[The power has gone out.] Alice said. Bob reached for the flashlight.",
+                "[The power has gone out.] Alice said.",
+                "Bob reached for the flashlight.",
+            )
+            example(
+                "a named action after bracketed speech is a separate sentence",
+                "[The power has gone out.] Alice closed the laptop. Bob switched on the flashlight.",
+                "[The power has gone out.]",
+                "Alice closed the laptop.",
+                "Bob switched on the flashlight.",
+            )
+            example(
+                "bracketed question with attribution and a comma-led continuation",
+                "[Can you hear the alarm?] she asked, [It has been ringing for several minutes. Someone should check it.]",
+                "[Can you hear the alarm?] she asked, [It has been ringing for several minutes.",
+                "Someone should check it.]",
+            )
+            example(
+                "adjacent bracketed passages retain their own opening and closing brackets",
+                "[The bus is full. We must wait here.] [No! We can take the train.]",
+                "[The bus is full.",
+                "We must wait here.]",
+                "[No!",
+                "We can take the train.]",
+            )
+            example(
+                "a paragraph break separates bracketed speech from a following attribution",
+                "[Keep the kitchen door closed.]\nAlice said nothing else.",
+                "[Keep the kitchen door closed.]",
+                "Alice said nothing else.",
+            )
+            example(
+                "bracketed dialogue introduced by narration still splits internally",
+                "Alice pointed outside, [The gate is locked. We need another entrance.] Bob nodded.",
+                "Alice pointed outside, [The gate is locked.",
+                "We need another entrance.]",
+                "Bob nodded.",
+            )
+            example(
+                "parenthetical interruptions inside bracketed dialogue stay together",
+                "[Keep the phone (even if it rings!) in your pocket. Do not take it out.] Alice said.",
+                "[Keep the phone (even if it rings!) in your pocket.",
+                "Do not take it out.] Alice said.",
+            )
+
             return examples.map { arrayOf<Any>(it) }
         }
     }

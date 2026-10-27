@@ -123,8 +123,9 @@ internal object TTSSentenceParser {
                 cursor++
                 continue
             }
-            if (character in "([{（【《") brackets += cursor
-            if (character in ")]}）】》" && brackets.isNotEmpty()) brackets.removeAt(brackets.lastIndex)
+            // Square brackets delimit dialogue, whose internal sentences must still split.
+            if (character in "({（【《") brackets += cursor
+            if (character in ")}）】》" && brackets.isNotEmpty()) brackets.removeAt(brackets.lastIndex)
             if (character !in terminals) {
                 cursor++
                 continue
@@ -142,7 +143,7 @@ internal object TTSSentenceParser {
             var end = punctuationEnd
             while (end < limit && text[end] in closers) end++
             val next = skipWhitespace(text, end, limit)
-            val hasClosingQuote = (punctuationEnd until end).any { text[it] in "\"'”’»›」』" }
+            val hasClosingQuote = (punctuationEnd until end).any { text[it] in "\"'”’»›」』]" }
             val insideParenthesis = brackets.any { it > start }
             val continuingEllipsis =
                 ellipsis &&
