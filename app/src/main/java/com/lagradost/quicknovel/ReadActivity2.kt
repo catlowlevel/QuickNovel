@@ -290,7 +290,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         if (!hasFocus) {
             ttsKeyboardShortcuts.clear()
             if (::floatingTTSControls.isInitialized) floatingTTSControls.cancelGestures()
-            if (::ttsAutoCentering.isInitialized) ttsAutoCentering.cancel(clearTouch = true)
+            if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onReaderTouchEnded()
         } else {
             updateFloatingTTSPosition()
             if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onWindowFocusRestored()
@@ -804,17 +804,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
-    override fun onResume() {
+    override fun onStart() {
         viewModel.resumedApp()
-        super.onResume()
+        super.onStart()
+        if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onReaderVisible()
     }
 
     override fun onPause() {
         ttsKeyboardShortcuts.clear()
         floatingTTSControls.cancelGestures()
-        if (::ttsAutoCentering.isInitialized) ttsAutoCentering.cancel(clearTouch = true)
-        viewModel.leftApp()
+        if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onReaderTouchEnded()
         super.onPause()
+    }
+
+    override fun onStop() {
+        if (::ttsAutoCentering.isInitialized) ttsAutoCentering.onReaderHidden()
+        viewModel.leftApp()
+        super.onStop()
     }
 
     /*private fun pendingPost() {
@@ -1187,7 +1193,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 enabled = { viewModel.autoCenterTTS && viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped },
             )
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.ttsSentenceStarting.collect { start ->
                     if (viewModel.currentTTSStatus == TTSHelper.TTSStatus.IsRunning) {
                         ttsAutoCentering.onSentenceStarted(start)

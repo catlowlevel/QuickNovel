@@ -19,14 +19,11 @@ internal class TTSAutoCentering(
     private val viewport: () -> TTSCenteringViewport,
     private val enabled: () -> Boolean,
 ) {
-    private var sentence: TTSHelper.TTSLine? = null
-    private val sentenceStarts = TTSSentenceStartCursor()
+    private val request = TTSCenteringRequest()
     private var generation = 0
-    private var pendingTarget = false
     private var scrolling = false
     private var scheduled: Runnable? = null
     private var edgeSpace = 0 to 0
-    private var touchingReader = false
 
     init {
         reader.addItemDecoration(
@@ -45,24 +42,45 @@ internal class TTSAutoCentering(
                 }
             }
         )
+        reader.viewTreeObserver.addOnGlobalLayoutListener {
+            // A return, chapter commit or text reflow can take more than a few animation frames.
+            retryPending()
+        }
+        reader.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (scrolling && newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    scrolling = false
+                    retryPending()
+                }
+            }
+        })
     }
 
     fun onSentenceStarted(start: TTSSentenceStart?) {
-        sentence = sentenceStarts.take(start) ?: return
-        request()
+        if (request.onSentenceStarted(start)) schedule()
+    }
+
+    fun onReaderVisible() {
+        request.onVisibilityChanged(true)
+        retryPending()
+    }
+
+    fun onReaderHidden() {
+        request.onVisibilityChanged(false)
+        stopAutomaticScroll()
     }
 
     fun onWindowFocusRestored() {
-        if (pendingTarget) request()
+        retryPending()
     }
 
     fun onReaderTouchStarted() {
-        touchingReader = true
-        cancel()
+        request.onTouchStarted()
+        stopAutomaticScroll()
     }
 
     fun onReaderTouchEnded() {
-        touchingReader = false
+        request.onTouchEnded()
     }
 
     fun onContentChanged() {
@@ -70,7 +88,7 @@ internal class TTSAutoCentering(
         if (edgeSpace != (0 to 0)) reader.invalidateItemDecorations()
         // Finish a request that began with speech but was waiting for its chapter to load.
         // Ordinary chapter updates must never start another centering attempt.
-        if (pendingTarget) request()
+        if (request.canRun) schedule()
     }
 
     private fun updateEdgeSpace() {
@@ -92,24 +110,35 @@ internal class TTSAutoCentering(
     }
 
     fun cancel(clearTouch: Boolean = false) {
-        if (clearTouch) touchingReader = false
-        generation++
-        scheduled?.let(reader::removeCallbacks)
-        scheduled = null
-        pendingTarget = false
-        // A native smooth seek can be queued before RecyclerView enters SETTLING.
-        if (scrolling && reader.scrollState != RecyclerView.SCROLL_STATE_DRAGGING) reader.stopScroll()
-        scrolling = false
+        request.cancel(clearTouch)
+        stopAutomaticScroll()
         if (!enabled()) updateEdgeSpace()
     }
 
-    private fun request() {
-        val line = sentence
-        cancel()
-        if (line == null || !enabled() || touchingReader) return
+    private fun stopAutomaticScroll() {
+        generation++
+        scheduled?.let(reader::removeCallbacks)
+        scheduled = null
+        // A native smooth seek can be queued before RecyclerView enters SETTLING.
+        val wasScrolling = scrolling
+        scrolling = false
+        if (wasScrolling && reader.scrollState != RecyclerView.SCROLL_STATE_DRAGGING) reader.stopScroll()
+    }
+
+    private fun retryPending() {
+        if (request.canRun && scheduled == null && !scrolling) schedule()
+    }
+
+    private fun schedule() {
+        stopAutomaticScroll()
+        if (!enabled()) {
+            request.cancel()
+            updateEdgeSpace()
+            return
+        }
+        val line = request.sentence ?: return
+        if (!request.canRun || !reader.isShown) return
         updateEdgeSpace()
-        pendingTarget = true
-        if (!reader.hasWindowFocus()) return
         val requestGeneration = generation
         val task =
             object : Runnable {
@@ -117,7 +146,7 @@ internal class TTSAutoCentering(
 
                 override fun run() {
                     scheduled = null
-                    if (requestGeneration != generation || !enabled() || touchingReader) return
+                    if (requestGeneration != generation || !enabled() || !request.canRun || !reader.isShown) return
                     if (reader.hasPendingAdapterUpdates() || reader.isLayoutRequested) {
                         if (layoutAttempts++ < 3) {
                             scheduled = this
@@ -136,8 +165,10 @@ internal class TTSAutoCentering(
                     val holder = reader.findViewHolderForAdapterPosition(position)
                     if (holder != null) {
                         val delta = scrollDelta(line, position) ?: return
-                        pendingTarget = false
-                        if (abs(delta) <= 2) return
+                        if (abs(delta) <= 2) {
+                            request.complete()
+                            return
+                        }
                         scrolling = true
                         reader.smoothScrollBy(0, delta, DecelerateInterpolator(), 250)
                     } else {
@@ -149,9 +180,8 @@ internal class TTSAutoCentering(
                                     state: RecyclerView.State,
                                     action: RecyclerView.SmoothScroller.Action,
                                 ) {
-                                    if (requestGeneration != generation || !enabled()) return
+                                    if (requestGeneration != generation || !enabled() || !request.canRun) return
                                     val delta = scrollDelta(line, targetPosition) ?: return
-                                    pendingTarget = false
                                     if (abs(delta) > 2) action.update(0, delta, 250, DecelerateInterpolator())
                                 }
                             }
