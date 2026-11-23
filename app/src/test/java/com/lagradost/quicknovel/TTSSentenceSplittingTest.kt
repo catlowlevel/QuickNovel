@@ -170,6 +170,67 @@ class TTSSentenceSplittingTest(private val example: Example) {
                 "He called for Dr.",
                 "Smith arrived.",
             )
+            for (number in listOf("1", "100")) {
+                example(
+                    "Mr. before numeric name $number",
+                    "Mr. $number waited by the door. The bus arrived.",
+                    "Mr. $number waited by the door.",
+                    "The bus arrived.",
+                )
+            }
+            example("numeric name at end of input", "Mr. 27", "Mr. 27")
+            example(
+                "several numeric names retain the actual sentence-ending period",
+                "Mr. 8 met Mr. 240. They left together.",
+                "Mr. 8 met Mr. 240.",
+                "They left together.",
+            )
+            example(
+                "uppercase title and tab before a numeric name",
+                "MR.\t205 checked in. The room was ready.",
+                "MR.\t205 checked in.",
+                "The room was ready.",
+            )
+            example(
+                "title before numeric name does not cross a paragraph break",
+                "He called for Mr.\n52 answered.",
+                "He called for Mr.",
+                "52 answered.",
+            )
+            for (apostrophe in listOf("'", "’")) {
+                val title = "Ma${apostrophe}am."
+                example(
+                    "$title before a name",
+                    "$title Morgan arrived. She waved.",
+                    "$title Morgan arrived.",
+                    "She waved.",
+                )
+                example(
+                    "$title before a name inside a sentence",
+                    "I spoke to $title Lee. She replied.",
+                    "I spoke to $title Lee.",
+                    "She replied.",
+                )
+                example(
+                    "$title inside single quotation marks",
+                    "She greeted '$title Morgan' at the door. They talked.",
+                    "She greeted '$title Morgan' at the door.",
+                    "They talked.",
+                )
+                example(
+                    "$title as a standalone address ends the sentence",
+                    "Thank you, ${title.lowercase()} She smiled.",
+                    "Thank you, ${title.lowercase()}",
+                    "She smiled.",
+                )
+                example(
+                    "$title does not swallow a paragraph break",
+                    "He called for $title\nMorgan arrived.",
+                    "He called for $title",
+                    "Morgan arrived.",
+                )
+                example("$title at end of input", title, title)
+            }
 
             example(
                 "A.I. before a lowercase continuation",

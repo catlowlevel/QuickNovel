@@ -13,6 +13,7 @@ internal object TTSSentenceParser {
             "mr",
             "mrs",
             "ms",
+            "ma'am",
             "dr",
             "prof",
             "capt",
@@ -172,14 +173,22 @@ internal object TTSSentenceParser {
         val following = text.getOrNull(period + 1)
         if (following?.isDigit() == true && (previous?.isLetterOrDigit() != true || previous.isDigit())) return true
         var wordStart = period
-        while (wordStart > 0 && text[wordStart - 1].isLetter()) wordStart--
-        val word = acronym ?: text.substring(wordStart, period).lowercase(Locale.ROOT)
+        while (wordStart > 0) {
+            val character = text[wordStart - 1]
+            // Keep apostrophes inside a title, without consuming surrounding quotation marks.
+            val internalApostrophe =
+                character in "'’" && wordStart > 1 &&
+                    text[wordStart - 2].isLetter() && text[wordStart].isLetter()
+            if (!character.isLetter() && !internalApostrophe) break
+            wordStart--
+        }
+        val word = acronym ?: text.substring(wordStart, period).replace('’', '\'').lowercase(Locale.ROOT)
         var afterClosers = period + 1
         while (afterClosers < limit && text[afterClosers] in closers) afterClosers++
         val next = skipWhitespace(text, afterClosers, limit)
         if (next >= limit) return false
         var wordEnd = next
-        while (wordEnd < limit && text[wordEnd].isLetter()) wordEnd++
+        while (wordEnd < limit && text[wordEnd].isLetterOrDigit()) wordEnd++
         val nextWord = text.substring(next, wordEnd)
         val nextInitial = nextWord.length == 1 && text.getOrNull(wordEnd) == '.'
         val startsSentence =
@@ -189,15 +198,16 @@ internal object TTSSentenceParser {
         if (word in continuations) return true
         if ((word in numbered || word in months) && text[next].isDigit()) return true
         if (word in titles) {
-            // A name can also look like a sentence starter ("Mr. He"). Only treat a title
-            // as a standalone noun here when introduced by an indefinite article ("a Dr.").
+            // A name can also look like a sentence starter ("Mr. He"). Ma'am can stand
+            // alone as an address; other titles can stand alone after an article ("a Dr.").
             var previousEnd = wordStart
             while (
                 previousEnd > 0 && text[previousEnd - 1].isWhitespace() && text[previousEnd - 1] !in "\r\n"
             ) previousEnd--
             var previousStart = previousEnd
             while (previousStart > 0 && text[previousStart - 1].isLetter()) previousStart--
-            val standalone = text.substring(previousStart, previousEnd).lowercase(Locale.ROOT) in setOf("a", "an")
+            val standalone = word == "ma'am" ||
+                text.substring(previousStart, previousEnd).lowercase(Locale.ROOT) in setOf("a", "an")
             return nextWord.isNotEmpty() && !(standalone && startsSentence)
         }
         if (word in suffixes || acronym != null) {
