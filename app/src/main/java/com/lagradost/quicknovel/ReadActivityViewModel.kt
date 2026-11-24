@@ -57,6 +57,7 @@ import com.lagradost.quicknovel.ai.AiOriginalPosition
 import com.lagradost.quicknovel.ai.AiProviderException
 import com.lagradost.quicknovel.ai.AiSummaryChapterSource
 import com.lagradost.quicknovel.ai.AiSummaryOutput
+import com.lagradost.quicknovel.ai.AiSummaryRenderer
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.letInner
 import com.lagradost.quicknovel.mvvm.logError
@@ -545,6 +546,7 @@ data class ReaderChapterInfo(
 class ReadActivityViewModel : ViewModel() {
     lateinit var book: AbstractBook
     private lateinit var markwon: Markwon
+    private lateinit var summaryRenderer: AiSummaryRenderer
     @Volatile
     private var isInApp: Boolean = true
     internal val followsBackgroundNarration: Boolean get() = !isInApp
@@ -669,8 +671,7 @@ class ReadActivityViewModel : ViewModel() {
             val data = (chapterData[index] as? Resource.Success)?.value ?: return@withLock false
             if (data.originalPlainText != source.text || output.text.isBlank()) return@withLock false
             if (summaryTextViews.displayed(source)?.output == output) return@withLock true
-            val rendered = output.text.toSpanned()
-            val content = data.copy(rendered = rendered, spans = parseTextToSpans(rendered, index))
+            val content = summaryRenderer.chapter(data, output)
             val position =
                 desiredIndex
                     ?.takeIf { it.index == index }
@@ -1560,6 +1561,7 @@ class ReadActivityViewModel : ViewModel() {
 
     fun init(book: AbstractBook, context: Context) {
         this.book = book
+        summaryRenderer = AiSummaryRenderer(context.applicationContext)
         summaryChapterChanges.update { it + 1 }
         ttsBookId = book.playbackId()
         refreshPronunciationOverrides()

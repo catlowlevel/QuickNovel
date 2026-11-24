@@ -25,6 +25,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
     private var dialog: AlertDialog? = null
     private var contentHost: FrameLayout? = null
     private var keyPicker: AlertDialog? = null
+    private val summaryRenderer by lazy { AiSummaryRenderer(activity) }
 
     private fun chooseKey() {
         val keys = controller.savedKeys
@@ -111,7 +112,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 orientation = LinearLayout.VERTICAL
                 setPadding(inset, (16 * density).toInt(), inset, (16 * density).toInt())
             }
-        fun text(value: String, prominent: Boolean = false, secondary: Boolean = false, lines: Int = Int.MAX_VALUE) {
+        fun text(value: CharSequence, prominent: Boolean = false, secondary: Boolean = false, lines: Int = Int.MAX_VALUE) {
             val label =
                 TextView(activity).apply {
                     this.text = value
@@ -127,7 +128,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                     .apply { if (content.childCount > 0) topMargin = (12 * density).toInt() },
             )
         }
-        fun words(value: String): String {
+        fun words(value: CharSequence): String {
             val count = countWords(value)
             return activity.resources.getQuantityString(R.plurals.word_count, count, count)
         }
@@ -159,6 +160,7 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
             is AiSummaryState.Preparing -> text(activity.getString(R.string.ai_summary_preparing))
             is AiSummaryState.Saved -> {
                 val saved = state.result
+                val rendered = summaryRenderer.render(saved.output.text)
                 val plan = saved.plan
                 val name = plan.profileName.trim().ifBlank { plan.provider.displayName }
                 text(plan.chapter.title, prominent = true, lines = 2)
@@ -170,14 +172,14 @@ class ReaderSummaryDialog(private val activity: AppCompatActivity, private val c
                 text(
                     activity.getString(
                         R.string.ai_summary_saved_length,
-                        words(saved.output.text),
+                        words(rendered),
                         words(plan.chapter.text),
                     ),
                     secondary = true,
                 )
                 if (saved.output.truncated) text(activity.getString(R.string.ai_summary_truncated), secondary = true)
                 text(activity.getString(R.string.ai_summary_preview), prominent = true, secondary = true)
-                text(saved.output.text, secondary = true, lines = 4)
+                text(rendered, secondary = true, lines = 4)
                 continuousToggle(state.continuous)
                 button(
                     AlertDialog.BUTTON_POSITIVE,
