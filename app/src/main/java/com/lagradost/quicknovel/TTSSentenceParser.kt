@@ -34,6 +34,7 @@ internal object TTSSentenceParser {
             "rep",
             "pres",
         )
+    private val placePrefixes = setOf("mt", "mts")
     private val continuations = setOf("e.g", "i.e", "vs", "cf", "esp")
     private val suffixes = setOf("jr", "sr", "etc")
     private val numbered = setOf("no", "ch", "chap", "vol", "fig", "pp", "p", "sec", "pt")
@@ -197,16 +198,17 @@ internal object TTSSentenceParser {
                 !nextInitial
         if (word in continuations) return true
         if ((word in numbered || word in months) && text[next].isDigit()) return true
-        if (word in titles) {
+        if (word in titles || word in placePrefixes) {
             // A name can also look like a sentence starter ("Mr. He"). Ma'am can stand
-            // alone as an address; other titles can stand alone after an article ("a Dr.").
+            // alone as an address, and geographic abbreviations can end a sentence.
+            // Other titles can stand alone after an article ("a Dr.").
             var previousEnd = wordStart
             while (
                 previousEnd > 0 && text[previousEnd - 1].isWhitespace() && text[previousEnd - 1] !in "\r\n"
             ) previousEnd--
             var previousStart = previousEnd
             while (previousStart > 0 && text[previousStart - 1].isLetter()) previousStart--
-            val standalone = word == "ma'am" ||
+            val standalone = word == "ma'am" || word in placePrefixes ||
                 text.substring(previousStart, previousEnd).lowercase(Locale.ROOT) in setOf("a", "an")
             return nextWord.isNotEmpty() && !(standalone && startsSentence)
         }

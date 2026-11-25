@@ -233,6 +233,76 @@ class TTSSentenceSplittingTest(private val example: Example) {
             }
 
             example(
+                "Mt. before a place name inside a sentence",
+                "We hiked up Mt. Willowridge. The weather stayed clear.",
+                "We hiked up Mt. Willowridge.",
+                "The weather stayed clear.",
+            )
+            example(
+                "Mt. before a place name at the beginning",
+                "Mt. Willowridge was covered in snow. We turned back.",
+                "Mt. Willowridge was covered in snow.",
+                "We turned back.",
+            )
+            example(
+                "Mt. before a lowercase place-name particle",
+                "They camped below Mt. de la Cruz. The tents stayed dry.",
+                "They camped below Mt. de la Cruz.",
+                "The tents stayed dry.",
+            )
+            example(
+                "uppercase geographic abbreviation separated by a tab",
+                "We reached MT.\tWILLOWRIDGE. The view was clear.",
+                "We reached MT.\tWILLOWRIDGE.",
+                "The view was clear.",
+            )
+            example(
+                "geographic abbreviation inside a quoted place name",
+                "The sign read “Mt. Willowridge”. We kept walking.",
+                "The sign read “Mt. Willowridge”.",
+                "We kept walking.",
+            )
+            example(
+                "geographic abbreviation inside parentheses",
+                "We visited the park (Mt. Willowridge). Then we left.",
+                "We visited the park (Mt. Willowridge).",
+                "Then we left.",
+            )
+            example("geographic name at end of input", "Mt. Willowridge", "Mt. Willowridge")
+            example(
+                "a geographic abbreviation can also end a sentence",
+                "The note only said Mt. It was unfinished.",
+                "The note only said Mt.",
+                "It was unfinished.",
+            )
+            example(
+                "geographic abbreviation does not join paragraphs",
+                "The label ended with Mt.\nThe name was missing.",
+                "The label ended with Mt.",
+                "The name was missing.",
+            )
+            example(
+                "plural geographic abbreviation before names",
+                "Mts. Pine and Cedar were visible. We took a photo.",
+                "Mts. Pine and Cedar were visible.",
+                "We took a photo.",
+            )
+            example(
+                "a plural geographic abbreviation can end a sentence",
+                "The note ended with Mts. We asked for the full names.",
+                "The note ended with Mts.",
+                "We asked for the full names.",
+            )
+            example(
+                "short ordinary words still end sentences",
+                "The guide sat. We waited. The sun set. They left.",
+                "The guide sat.",
+                "We waited.",
+                "The sun set.",
+                "They left.",
+            )
+
+            example(
                 "A.I. before a lowercase continuation",
                 "The A.I. watched him. He waved.",
                 "The A.I. watched him.",
