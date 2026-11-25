@@ -309,6 +309,18 @@ class TTSSentenceSplittingTest(private val example: Example) {
                 "He waved.",
             )
             example(
+                "an unlisted initialism is detected structurally",
+                "The Q.X.V. controller stopped. It was ready.",
+                "The Q.X.V. controller stopped.",
+                "It was ready.",
+            )
+            example(
+                "an unlisted initialism can also end a sentence",
+                "The label read Z.V.N. We copied it.",
+                "The label read Z.V.N.",
+                "We copied it.",
+            )
+            example(
                 "A.I. before a capitalized noun",
                 "The A.I. System started. He waited.",
                 "The A.I. System started.",
